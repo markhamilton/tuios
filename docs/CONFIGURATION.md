@@ -1103,7 +1103,7 @@ master_ratio = 50
 
 With `center`, the grid is off, so `master_grid` has no effect. The first pane
 of the workspace is the master. To make another pane the master, focus it and
-press `Ctrl+B L Enter`.
+press `Ctrl+B L M`.
 
 ## Start session and start pane
 

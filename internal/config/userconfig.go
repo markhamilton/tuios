@@ -1572,10 +1572,13 @@ func DefaultConfig() *UserConfig {
 				"resize_height_80": {"shift+8"},
 				"resize_height_90": {"shift+9"},
 				// The master-stack keys, after dwm and Hyprland's master
-				// layout: o for orientation, enter for dwm's zoom, i and d for
-				// dwm's incnmaster and decnmaster.
+				// layout: o for orientation, i and d for dwm's incnmaster and
+				// decnmaster. Swap is M, the shifted focus_master, the way
+				// swap_left is the shifted h. It used to be enter (dwm's
+				// zoom), which read as enter_terminal_mode's key and left
+				// people swapping panes when they meant to type into one.
 				"cycle_master_position": {"o"},
-				"swap_with_master":      {"enter"},
+				"swap_with_master":      {"M"},
 				"focus_master":          {"m"},
 				"add_master":            {"i"},
 				"remove_master":         {"d"},
@@ -3432,6 +3435,16 @@ func migrateSettingsComma(cfg *UserConfig) {
 	}
 }
 
+// migrateSwapWithMasterEnter drops swap_with_master = ["enter"] from a config
+// written while that was the default, so the fill gives it the new default.
+// Only the exact old default goes: a user who chose enter alongside another
+// key, or any other key, keeps it.
+func migrateSwapWithMasterEnter(cfg *UserConfig) {
+	if slices.Equal(cfg.Keybindings.LayoutPrefix["swap_with_master"], []string{"enter"}) {
+		delete(cfg.Keybindings.LayoutPrefix, "swap_with_master")
+	}
+}
+
 // migrateCornerSnapDigits takes the bare digits off snap_corner_1 through _4 in
 // a config written before corner snapping moved to the layout prefix.
 //
@@ -3643,6 +3656,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
 	migrateCornerSnapDigits(cfg)
+	migrateSwapWithMasterEnter(cfg)
 	migrateInboxKeys(cfg)
 
 	// Set default leader key if not specified

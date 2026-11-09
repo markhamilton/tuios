@@ -159,7 +159,7 @@ and the session keeps it after a detach.
 | Keys | Action | What it does |
 |---|---|---|
 | `Ctrl+B L o` | `cycle_master_position` | Move the masters to the next side: left, right, top, bottom, center |
-| `Ctrl+B L Enter` | `swap_with_master` | Swap the focused pane with the master. On the master, swap with the first stack pane |
+| `Ctrl+B L M` | `swap_with_master` | Swap the focused pane with the master. On the master, swap with the first stack pane |
 | `Ctrl+B L m` | `focus_master` | Focus the master |
 | `Ctrl+B L i` | `add_master` | Make one more pane a master |
 | `Ctrl+B L d` | `remove_master` | Make one pane fewer a master |
