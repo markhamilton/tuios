@@ -5,56 +5,42 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-// lookFetchTimeout bounds a look download, start to end.
-const lookFetchTimeout = 15 * time.Second
-
 // newLookCommand creates the look command.
 func newLookCommand() *cobra.Command {
 	lookCmd := &cobra.Command{
 		Use:   "look",
-		Short: "Apply, show, export, share and remove a look",
+		Short: "Apply, show, export and remove a look",
 		Long: `A look is a small TOML file that sets how tuios looks: theme, glyph set,
-borders, gaps, dock and rail style. The tuios.dev gallery shares looks.
+borders, gaps, dock and rail style.
 
 tuios writes a look to config.d/look.toml, its own file. config.toml wins over
 it, so a key you set in config.toml hides the look's value. A take-over lets
 the look set those keys. tuios saves your values, and "tuios look remove" puts
 them back. A look may set only look keys. "tuios look keys" lists them.
 
-"tuios look export" prints your look as a look file. "tuios look share" puts
-it in the setups discussion on GitHub, with a screenshot.
-
-"tuios look" with no command, in a terminal, shows the gallery looks to choose
-from, as "tuios look pick" does.`,
+"tuios look export" prints your look as a look file.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
-				return cmd.Help()
-			}
-			return runLookPick(cmd.OutOrStdout(), false)
+			return cmd.Help()
 		},
 	}
 
 	var applyYes, applyTakeOver bool
 	applyCmd := &cobra.Command{
-		Use:   "apply <source>",
-		Short: "Apply a look from the gallery, an https URL or a file",
-		Long: `Apply a look. The source is a gallery id (tuios.dev/r/ID or ID), an https URL,
-or a local file. Each look on tuios.dev/gallery shows the command with its id.
+		Use:   "apply <file>",
+		Short: "Apply a look from a file",
+		Long: `Apply a look from a local file.
 
 tuios shows the changes and asks first. Use --yes to skip the question. A run
 with no terminal needs --yes. tuios leaves out every key that a look cannot set
@@ -64,8 +50,7 @@ A key that config.toml or a later config.d file sets hides the look's value.
 tuios names these keys and asks a second question: let the look set them? A yes
 removes the keys from those files and saves your values. "tuios look remove"
 puts them back. Use --take-over to answer yes. --yes alone answers no.`,
-		Example: `  tuios look apply tuios.dev/r/<id>
-  tuios look apply https://example.com/my.look.toml
+		Example: `  tuios look apply ./my.look.toml
   tuios look apply ./my.look.toml --yes
   tuios look apply ./my.look.toml --yes --take-over`,
 		Args: cobra.ExactArgs(1),
@@ -124,53 +109,7 @@ take-over keeps your newer value, and tuios names it.`,
 	}
 	keysCmd.Flags().BoolVar(&keysJSON, "json", false, "Print the keys and their types as JSON")
 
-	var listJSON bool
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List the looks in the tuios.dev gallery",
-		Long: `List the looks in the tuios.dev gallery: the id, the name and the author of
-each look. Give the id to "tuios look apply".`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			looks, err := fetchLookList()
-			if err != nil {
-				return err
-			}
-			return printLookList(cmd.OutOrStdout(), looks, listJSON)
-		},
-	}
-	listCmd.Flags().BoolVar(&listJSON, "json", false, "Print the looks as JSON, with the colours of each theme")
-
-	var pickTakeOver, pickHold bool
-	pickCmd := &cobra.Command{
-		Use:   "pick",
-		Short: "Choose a look from the tuios.dev gallery and apply it",
-		Long: `Show the looks in the tuios.dev gallery, each with its name, its author and
-the colours of its theme. Up and down move. Enter applies the look, with the
-same questions as "tuios look apply". Esc closes the list.`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if !term.IsTerminal(int(os.Stdin.Fd())) {
-				return errors.New("tuios look pick needs a terminal. Use tuios look list and tuios look apply")
-			}
-			err := runLookPick(cmd.OutOrStdout(), pickTakeOver)
-			if pickHold {
-				// The pane the palette opens closes with the program, so the
-				// result stays until the person has read it.
-				if err != nil {
-					fmt.Fprintln(cmd.OutOrStdout(), "Error:", err)
-				}
-				fmt.Fprint(cmd.OutOrStdout(), "\nPress Enter to close.")
-				_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-			}
-			return err
-		},
-	}
-	pickCmd.Flags().BoolVar(&pickTakeOver, "take-over", false, "Let the look set the keys a later file sets, and save your values")
-	pickCmd.Flags().BoolVar(&pickHold, "hold", false, "Wait for Enter before the command ends")
-	_ = pickCmd.Flags().MarkHidden("hold")
-
-	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd, listCmd, pickCmd, newLookExportCommand(), newLookShareCommand())
+	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd, newLookExportCommand())
 	return lookCmd
 }
 
@@ -497,80 +436,21 @@ func homeShort(p string) string {
 	return p
 }
 
-// readLookSource returns the look at source and the source as the look file
-// records it.
+// readLookSource returns the look in the file at source and the file's
+// absolute path, which the look file records as its source.
 func readLookSource(source string) ([]byte, string, error) {
-	src, err := resolveLookSource(source, func(p string) bool {
-		_, err := os.Stat(p)
-		return err == nil
-	})
-	if err != nil {
-		return nil, "", err
+	where := strings.TrimSpace(source)
+	if where == "" {
+		return nil, "", errors.New("give a look file")
 	}
-	if !src.remote {
-		where := src.where
-		if abs, err := filepath.Abs(where); err == nil {
-			where = abs
-		}
-		data, err := readLookFile(where)
-		return data, where, err
+	if strings.Contains(where, "://") {
+		return nil, "", errors.New("tuios applies a look only from a local file")
 	}
-	data, err := fetchLook(src.where)
-	return data, src.where, err
-}
-
-// lookSource is where a look comes from.
-type lookSource struct {
-	remote bool
-	where  string // an https URL, or a file path
-}
-
-// resolveLookSource sorts a source into a URL or a file. exists reports
-// whether a local file is there.
-func resolveLookSource(source string, exists func(string) bool) (lookSource, error) {
-	s := strings.TrimSpace(source)
-	switch {
-	case s == "":
-		return lookSource{}, errors.New("give a look: a gallery id, an https URL or a file")
-	case strings.HasPrefix(s, "http://"):
-		return lookSource{}, errors.New("tuios downloads a look only over https. Use an https URL")
-	case strings.HasPrefix(s, "https://tuios.dev/r/"), strings.HasPrefix(s, "tuios.dev/r/"):
-		id := s[strings.Index(s, "/r/")+3:]
-		id = strings.TrimSuffix(id, ".toml")
-		if !validGalleryID(id) {
-			return lookSource{}, fmt.Errorf("%q is not a gallery id", id)
-		}
-		return lookSource{remote: true, where: lookGalleryURL(id)}, nil
-	case strings.HasPrefix(s, "https://"):
-		u, err := url.Parse(s)
-		if err != nil || u.Host == "" {
-			return lookSource{}, fmt.Errorf("%q is not a URL", s)
-		}
-		return lookSource{remote: true, where: u.String()}, nil
-	case strings.Contains(s, "://"):
-		return lookSource{}, errors.New("tuios downloads a look only over https. Use an https URL")
-	case exists(s):
-		return lookSource{where: s}, nil
-	case validGalleryID(s):
-		return lookSource{remote: true, where: lookGalleryURL(s)}, nil
+	if abs, err := filepath.Abs(where); err == nil {
+		where = abs
 	}
-	return lookSource{}, fmt.Errorf("%s is not a file, an https URL or a gallery id", s)
-}
-
-// validGalleryID reports whether id can be a gallery id: 1 to 64 of a-z, A-Z,
-// 0-9, '-' and '_'.
-func validGalleryID(id string) bool {
-	if id == "" || len(id) > 64 {
-		return false
-	}
-	for _, c := range id {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
-		default:
-			return false
-		}
-	}
-	return true
+	data, err := readLookFile(where)
+	return data, where, err
 }
 
 // readLookFile reads a local look, with the size cap.
@@ -580,12 +460,7 @@ func readLookFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	return readCapped(f)
-}
-
-// readCapped reads at most config.MaxLookBytes and fails past it.
-func readCapped(r io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(r, config.MaxLookBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, config.MaxLookBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the look: %w", err)
 	}
@@ -593,41 +468,4 @@ func readCapped(r io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("the look is larger than %d KiB", config.MaxLookBytes>>10)
 	}
 	return data, nil
-}
-
-// lookHTTP downloads looks: a timeout for the whole request, and a redirect
-// only to another https URL.
-var lookHTTP = &http.Client{
-	Timeout: lookFetchTimeout,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 5 {
-			return errors.New("too many redirects")
-		}
-		if req.URL.Scheme != "https" {
-			return errors.New("the look redirects to a URL that is not https")
-		}
-		return nil
-	},
-}
-
-// fetchLook downloads the look at an https URL.
-func fetchLook(u string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/toml, text/plain")
-	req.Header.Set("User-Agent", "tuios/"+version)
-	resp, err := lookHTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download the look: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("%s has no look", u)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download the look: %s", resp.Status)
-	}
-	return readCapped(resp.Body)
 }

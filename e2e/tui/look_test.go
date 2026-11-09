@@ -1,18 +1,12 @@
 package tuie2e
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
 )
 
@@ -351,202 +345,21 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 	})
 }
 
-// galleryFeedLook is one look the fake gallery serves: the feed entry and the
-// look file, which the real gallery serves from the same text.
-type galleryFeedLook struct{ id, title, login, text string }
-
-// fakeGallery serves a gallery feed and its looks on a loopback address, the
-// way tuios.dev serves /gallery/feed and /r/<id>.toml. It records each path
-// asked for.
-func fakeGallery(t *testing.T, looks []galleryFeedLook) (*httptest.Server, *sync.Map) {
-	t.Helper()
-	type file struct {
-		Label string `json:"label"`
-		Text  string `json:"text"`
-	}
-	type entry struct {
-		ID    string            `json:"id"`
-		Login string            `json:"login"`
-		Title string            `json:"title"`
-		Files []file            `json:"files"`
-		Look  map[string]string `json:"look"`
-	}
-	feed := struct {
-		Version int     `json:"version"`
-		Updated string  `json:"updated"`
-		Entries []entry `json:"entries"`
-	}{Version: 1, Updated: "2026-10-22T00:00:00Z"}
-	byPath := map[string]string{}
-	for _, l := range looks {
-		feed.Entries = append(feed.Entries, entry{ID: l.id, Login: l.login, Title: l.title,
-			Files: []file{{Label: "toml", Text: l.text}}, Look: map[string]string{"id": l.id}})
-		byPath["/r/"+l.id+".toml"] = l.text
-	}
-	// An entry with no look is a screenshot alone. The list leaves it out.
-	feed.Entries = append(feed.Entries, entry{ID: "999", Login: "someone", Title: "Just a picture"})
-	feedJSON, err := json.Marshal(feed)
-	if err != nil {
-		t.Fatalf("encode the feed: %v", err)
-	}
-	hits := &sync.Map{}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Store(r.URL.Path, true)
-		if r.URL.Path == "/gallery/feed" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(feedJSON)
-			return
-		}
-		if text, ok := byPath[r.URL.Path]; ok {
-			_, _ = w.Write([]byte(text))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	t.Cleanup(srv.Close)
-	return srv, hits
-}
-
-// TestLookPickAppliesAGalleryLook serves a fake gallery and drives the look
-// list: `tuios look list` names each look, a gallery that does not answer is
-// one sentence and a failed exit, and `tuios look pick` on a terminal applies
-// the look the person moves to, through the same questions as apply.
-//
-// How this could pass wrongly, written down first:
-//   - The pick could apply the first look whatever the cursor says. The test
-//     moves to the second look, and only the second sets a rounded border.
-//   - The look could come from somewhere other than the gallery. The test
-//     checks the server served the second look's file.
-func TestLookPickAppliesAGalleryLook(t *testing.T) {
-	base := t.TempDir()
-	useShippedLooks(base)
-	writeConfig(t, base, "[appearance]\nborder_style = \"double\"\n")
-	alpha := "look = 1\nname = \"Alpha\"\n\n[appearance]\ngap = 1\n"
-	beta := `look = 1
-name = "Beta"
-
-[appearance]
-border_style = "rounded"
-
-[theme]
-id = "beta"
-bg = "#101820"
-fg = "#f2aa4c"
-red = "#e05050"
-green = "#50e050"
-blue = "#5050e0"
-`
-	srv, hits := fakeGallery(t, []galleryFeedLook{
-		{id: "101", title: "Alpha", login: "ann", text: alpha},
-		{id: "202", title: "Beta", login: "bob", text: beta},
-	})
-	env := []string{"TUIOS_LOOK_GALLERY=" + srv.URL}
-
-	out, err := tuiosCLIEnv(t, base, env, "look", "list")
-	if err != nil {
-		t.Fatalf("tuios look list: %v\n%s", err, out)
-	}
-	for _, want := range []string{"101", "Alpha", "ann", "202", "Beta", "bob"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("ASSERTION: look list does not show %q:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "Just a picture") {
-		t.Fatalf("ASSERTION: look list shows an entry with no look:\n%s", out)
-	}
-	asJSON, err := tuiosCLIEnv(t, base, env, "look", "list", "--json")
-	var listed []struct {
-		ID, Name, Author string
-		Colors           []string
-	}
-	if err != nil || json.Unmarshal([]byte(asJSON), &listed) != nil || len(listed) != 2 ||
-		listed[1].Name != "Beta" || len(listed[1].Colors) != 5 || listed[1].Colors[0] != "#101820" {
-		t.Fatalf("ASSERTION: look list --json is not the two looks with Beta's colours: %v\n%s", err, asJSON)
-	}
-
-	offline, err := tuiosCLIEnv(t, base, []string{"TUIOS_LOOK_GALLERY=http://127.0.0.1:1"}, "look", "list")
-	if err == nil || strings.Count(strings.TrimSpace(offline), "\n") != 0 || !strings.Contains(offline, "cannot get the look list") {
-		t.Fatalf("ASSERTION: with no gallery, look list did not fail with one sentence: %v\n%s", err, offline)
-	}
-
-	cli := startIn(t, base, startOpts{cols: 100, rows: 30, shippedLooks: true, animations: true, env: env,
-		args: []string{"look", "pick"}})
-	if err := cli.WaitForText("Choose a look", uiTimeout); err != nil {
-		t.Fatalf("the look list is not on screen: %v\n%s", err, cli.Snapshot())
-	}
-	if err := cli.Type("j"); err != nil {
-		t.Fatalf("move down: %v", err)
-	}
-	if err := cli.WaitForText("2 of 2", uiTimeout); err != nil {
-		t.Fatalf("the cursor did not move to Beta: %v\n%s", err, cli.Snapshot())
-	}
-	saveArtifact(t, cli, artifactDir(t), "look-pick")
-	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick")
-	if err := cli.Type("\r"); err != nil {
-		t.Fatalf("choose Beta: %v", err)
-	}
-	for _, q := range []string{"Apply this look? [y/N]", "Let the look set these keys?"} {
-		if err := cli.WaitForText(q, uiTimeout); err != nil {
-			t.Fatalf("the question %q is not on screen: %v\n%s", q, err, cli.Snapshot())
-		}
-		if err := cli.Type("y\r"); err != nil {
-			t.Fatalf("answer %q: %v", q, err)
-		}
-	}
-	if err := cli.WaitForText("The look is applied", uiTimeout); err != nil {
-		t.Fatalf("the pick did not apply the look: %v\n%s", err, cli.Snapshot())
-	}
-	saveArtifact(t, cli, artifactDir(t), "look-pick-applied")
-	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick-applied")
-	if _, ok := hits.Load("/r/202.toml"); !ok {
-		t.Fatal("ASSERTION: tuios did not download Beta's look file from the gallery")
-	}
-	show, err := tuiosCLI(t, base, "look", "show")
-	if err != nil || !strings.Contains(show, "Beta") || !strings.Contains(show, "look-beta") {
-		t.Fatalf("ASSERTION: look show does not name Beta and its theme: %v\n%s", err, show)
-	}
-	origin, err := tuiosCLI(t, base, "config", "origin", "appearance.border_style")
-	if err != nil || !originLine(origin, "appearance.border_style", "look.toml") {
-		t.Fatalf("ASSERTION: border_style does not come from the look after the take-over: %v\n%s", err, origin)
-	}
-	saveSyncArtifact(t, "look-pick-transcript.txt", out+"\n"+asJSON+"\n"+offline+"\n--- the pick\n"+cli.Snapshot()+"\n--- look show\n"+show)
-}
-
-// TestLookShareRoundTrip covers export and share. It exports a look that
-// carries a theme of its own, applies the file in a fresh config and checks
-// that the second config exports the same file. Then it runs "Share my look"
-// from the palette of a running client and `tuios look share` from the CLI,
-// with gh and the browser stubbed.
+// TestLookExportRoundTrip exports a look that carries a theme of its own,
+// applies the file in a fresh config and checks that the second config
+// exports the same file.
 //
 // How this could pass wrongly, written down first:
 //   - The export could leave keys out, and the round trip would still match.
 //     The test checks the keys the config sets are in the file.
-//   - The clipboard write could be some other copy. The test reads the OSC 52
-//     write off the wire and checks it is the comment --print gives.
-//   - The screenshot line could name a file that is not there. The test
-//     checks the file is a PNG.
-//   - The browser could open nothing. The stub writes the address it got.
-func TestLookShareRoundTrip(t *testing.T) {
+func TestLookExportRoundTrip(t *testing.T) {
 	base := t.TempDir()
 	useShippedLooks(base)
 	home := filepath.Join(base, "home")
-	stubs := filepath.Join(base, "stubs")
-	opened := filepath.Join(base, "opened.txt")
-	for _, dir := range []string{home, stubs} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	writeStub := func(name, body string) {
-		if err := os.WriteFile(filepath.Join(stubs, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeStub("gh", `echo e2e-user`)
-	writeStub("browser", `echo "$1" >> `+opened)
-	env := []string{"HOME=" + home, "PATH=" + stubs + ":" + os.Getenv("PATH"), "BROWSER=" + filepath.Join(stubs, "browser"),
-		// No display, so no clipboard tool reaches the clipboard of the
-		// machine that runs the suite.
-		"WAYLAND_DISPLAY=", "DISPLAY="}
+	env := []string{"HOME=" + home}
 
 	writeConfigPart(t, base, filepath.Join("themes", "neon.json"),
 		`{"id":"neon","base":"dracula","bg":"#101020","chrome":{"accent":"#ff00aa"}}`)
@@ -565,7 +378,7 @@ func TestLookShareRoundTrip(t *testing.T) {
 
 	// Export, apply in a fresh config, export again.
 	file := filepath.Join(base, "neon.look.toml")
-	cli(base, "look", "export", "-o", file, "--name", "Neon 84")
+	cli(base, "look", "export", "-o", file, "--name", "Neon 84", "--author", "e2e-user")
 	exported := readFileString(t, file)
 	for _, want := range []string{"name = 'Neon 84'", "author = 'e2e-user'", "border_style = 'double'",
 		"theme = 'neon'", "[theme]", "accent = '#ff00aa'", "right = ['notifications', 'clock']"} {
@@ -576,7 +389,7 @@ func TestLookShareRoundTrip(t *testing.T) {
 	other := t.TempDir()
 	useShippedLooks(other)
 	cli(other, "look", "apply", file, "--yes")
-	again := cli(other, "look", "export", "--name", "Neon 84")
+	again := cli(other, "look", "export", "--name", "Neon 84", "--author", "e2e-user")
 	if again != exported {
 		t.Fatalf("ASSERTION: the applied look does not export the same file:\n--- first\n%s--- after apply\n%s", exported, again)
 	}
@@ -592,77 +405,5 @@ func TestLookShareRoundTrip(t *testing.T) {
 	if all1, all2 := noNotes(cli(base, "look", "export", "--all")), noNotes(cli(other, "look", "export", "--all")); all1 != all2 {
 		t.Fatalf("ASSERTION: the values of the look keys differ after the apply:\n--- first\n%s--- after apply\n%s", all1, all2)
 	}
-	printed := cli(base, "look", "share", "--print")
-
-	// Share from the palette of a running client.
-	out := &lockedBuffer{}
-	term := startIn(t, base, startOpts{cols: 120, rows: 36, shippedLooks: true, out: out, env: env, args: []string{"new", "share"}})
-	waitBoot(t, term)
-	newWindow(t, term)
-	from := len(clipboardWrites(out))
-	runPaletteRow(t, term, "share my look", "Share my look", "Share my look")
-	// The screenshot is rendered before the toast, which takes a few seconds
-	// on a loaded machine.
-	if err := term.WaitForText("Look copied. Paste it in the browser page.", 60*time.Second); err != nil {
-		t.Fatalf("the share did not finish: %v\n%s", err, term.Snapshot())
-	}
-	saveArtifact(t, term, artifactDir(t), "share-toast")
-	if strings.Contains(term.Snapshot(), "more") {
-		t.Fatalf("ASSERTION: the dock cuts the share message at 120 columns:\n%s", term.Snapshot())
-	}
-	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-120")
-	waitClipboardSequence(t, term, out, from, strings.TrimSpace(printed))
-
-	shots, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_CACHE_HOME"), "tuios", "share", "tuios-look-*.png"))
-	if len(shots) != 1 {
-		t.Fatalf("ASSERTION: want one screenshot in the cache folder, got %v", shots)
-	}
-	data, err := os.ReadFile(shots[0])
-	if err != nil || !strings.HasPrefix(string(data), "\x89PNG") {
-		t.Fatalf("ASSERTION: the screenshot is not a PNG: %v", err)
-	}
-	_ = os.WriteFile(filepath.Join(artifactDir(t), "share-screenshot.png"), data, 0o644)
-
-	// The dock cuts the toast. prefix+N shows all of it, the path too.
-	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitForText("into the discussion. Drag the", uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the full message does not name the screenshot: %v\n%s", err, term.Snapshot())
-	}
-	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-full")
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatal(err)
-	}
-
-	// The CLI asks the running client, and prints at most three lines.
-	shared := cli(base, "look", "share")
-	lines := strings.Split(strings.TrimSpace(shared), "\n")
-	if len(lines) > 3 || lines[0] != "The comment is on your clipboard. Paste it into the discussion." ||
-		!strings.HasPrefix(lines[1], "Drag the screenshot into the comment: ") {
-		t.Fatalf("ASSERTION: look share did not print the two lines:\n%s", shared)
-	}
-	path := strings.TrimSuffix(strings.TrimPrefix(lines[1], "Drag the screenshot into the comment: "), ".")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("ASSERTION: look share names a screenshot that is not there: %v", err)
-	}
-	if got := readFileString(t, opened); strings.Count(got, "https://github.com/Gaurav-Gosain/tuios/discussions/849") != 2 {
-		t.Fatalf("ASSERTION: the browser did not open the discussion twice:\n%s", got)
-	}
-	// At 80 columns the dock line is shorter, and the message still fits.
-	if err := term.Resize(80, 24); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		c, _ := s.Size()
-		return c == 80 && strings.Contains(s.Text(), "Look copied. Paste it in the browser page.")
-	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the share message is cut or gone at 80 columns: %v\n%s", err, term.Snapshot())
-	}
-	if strings.Contains(term.Snapshot(), "more") {
-		t.Fatalf("ASSERTION: the dock cuts the share message at 80 columns:\n%s", term.Snapshot())
-	}
-	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-80")
-	saveSyncArtifact(t, "look-share-transcript.txt", transcript.String()+"--- comment\n"+printed)
-	alive(t, term, "after the share")
+	saveSyncArtifact(t, "look-export-transcript.txt", transcript.String())
 }

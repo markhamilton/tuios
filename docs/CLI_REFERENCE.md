@@ -306,23 +306,12 @@ exec tuios --theme dracula "$@"
 ### Looks: `tuios look`
 
 A look is a small TOML file that sets how tuios looks: theme, glyph set,
-borders, gaps, dock and rail style. The [gallery](https://tuios.dev/gallery)
-shares looks. [docs/THEMES.md](THEMES.md#looks) describes the file.
+borders, gaps, dock and rail style. [docs/THEMES.md](THEMES.md#looks)
+describes the file.
 
 ```bash
-# Apply a look from the gallery. Each look there shows this command with its id.
-tuios look apply tuios.dev/r/<id>
-
-# Apply a look from an https URL or from a file
-tuios look apply https://example.com/my.look.toml
+# Apply a look from a file
 tuios look apply ./my.look.toml
-
-# Choose a look from the gallery list, and apply it
-tuios look pick
-
-# List the gallery looks: id, name and author
-tuios look list
-tuios look list --json
 
 # Show the look in use
 tuios look show
@@ -337,16 +326,11 @@ tuios look keys --json
 # Print your look as a look file, or write it to a file
 tuios look export
 tuios look export -o my.look.toml --name "Neon 84"
-
-# Share your look in the setups discussion on GitHub
-tuios look share
-tuios look share --print
 ```
 
-`tuios look apply <source>`:
+`tuios look apply <file>`:
 
-- The source is a gallery id (`tuios.dev/r/ID` or `ID`), an https URL, or a
-  local file. tuios downloads only over https.
+- The source is a local file. tuios does not download looks.
 - tuios shows the changes and asks before it writes. Use `--yes` to skip the
   question. A run with no terminal needs `--yes`.
 - tuios writes the look to `config.d/look.toml`. Without a take-over, it
@@ -367,19 +351,6 @@ tuios look share --print
   another file includes. tuios names the file and the keys.
 - A new look replaces the look in use.
 - A config folder that tuios cannot write stops the command.
-
-`tuios look pick` shows the looks of the gallery, each with its name, its
-author and the colours of its theme. `tuios look` with no command does the
-same in a terminal. The command palette has it as "Choose a look", which
-opens it in a new pane.
-
-- Up and down move. Enter applies the look. Esc closes the list.
-- Enter asks the same questions as `tuios look apply`, the take-over question
-  too. `--take-over` answers that question yes.
-- `tuios look list` prints the id, the name and the author of each look.
-  `--json` adds the colours of each theme.
-- The list comes from `tuios.dev/gallery/feed`. When tuios cannot get it, the
-  command says so and exits with an error.
 
 `tuios look remove` deletes `config.d/look.toml` and the theme and glyph set
 that the look installed. Use `--yes` to skip the question. After a take-over,
@@ -408,33 +379,11 @@ changed while tuios asked its questions, tuios stops and changes nothing.
 `tuios look apply` takes the file unchanged.
 
 - `-o FILE` writes the file instead of stdout.
-- `--name` sets the name. `--author` sets the author. The author is your
-  GitHub login when `gh` is signed in.
+- `--name` sets the name. `--author` sets the author.
 - The file sets the keys that differ from the defaults. `--all` sets every
   look key.
 - A theme or glyph set from your own folder goes into the file. A built-in
   one goes in by name. tuios names on stderr each key or item it leaves out.
-
-`tuios look share` shares your look in
-[discussion #849](https://github.com/Gaurav-Gosain/tuios/discussions/849).
-The command palette has it as "Share my look". The Appearance page of the
-settings has it too. There the dock says "Look copied. Paste it in the browser
-page." Press prefix+N to read the full message with the path of the
-screenshot.
-
-- tuios exports the look and takes a screenshot of the screen. The running
-  tuios takes it, and the screenshot goes to Downloads or the cache folder.
-- tuios puts the comment on the clipboard through the terminal (OSC 52), also
-  over ssh. Where a clipboard tool is on this machine, tuios uses it too.
-- tuios opens the discussion in the browser: `appearance.link_opener`, then
-  `$BROWSER`, then the system opener. Over ssh, or with no browser, it prints
-  the address.
-- The command prints at most three lines: what is on the clipboard, where the
-  screenshot is, and the address when no browser opened.
-- `--print` writes the comment to stdout and opens nothing.
-- `--name` and `--author` work as they do for `tuios look export`.
-- With no tuios attached, the command writes the clipboard through its own
-  terminal. The daemon then captures the focused pane, if there is one.
 
 ---
 

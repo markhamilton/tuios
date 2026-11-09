@@ -392,7 +392,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("", m.themeEditItem()),
 			opt("appearance.theme_light"),
 			custom("appearance.glyphs", m.glyphItem()),
-			custom("", m.shareLookItem()),
 			opt("appearance.border_style"),
 			opt("appearance.frame_panels"),
 			opt("appearance.pane_overlays"),
@@ -900,21 +899,6 @@ func (m *OS) themeEditItem() settingItem {
 	}
 }
 
-// shareLookItem shares the look in the setups discussion: the comment goes
-// on the clipboard and the discussion opens. The page closes first, so the
-// screenshot shows the screen and not the page.
-func (m *OS) shareLookItem() settingItem {
-	return settingItem{
-		Label:   "Share my look",
-		Desc:    "Put your look and a screenshot in the setups discussion on GitHub. Press enter to start.",
-		Control: controlEnum,
-		value:   func(*OS) string { return "GitHub" },
-		activate: func(m *OS) tea.Cmd {
-			m.CloseSettings()
-			return m.ShareLook("", "", "")
-		},
-	}
-}
 
 func (m *OS) dockComponentsItem() settingItem {
 	return settingItem{

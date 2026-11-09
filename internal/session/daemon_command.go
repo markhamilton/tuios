@@ -41,14 +41,12 @@ var daemonOwnedCommands = map[string]bool{
 const tapeResultTTL = 6 * time.Hour
 
 // clientQueryCommands are the names the attached client answers itself,
-// beside the tape commands. They are commands a caller can name too. All but
-// ShareLook only read. ShareLook writes a screenshot and the clipboard of the
-// person at the client, which is why it needs one attached.
+// beside the tape commands. They are commands a caller can name too. They
+// only read.
 var clientQueryCommands = map[string]bool{
 	"ListWindows":    true,
 	"GetSessionInfo": true,
 	"GetWindow":      true,
-	"ShareLook":      true,
 }
 
 // resolveCommandName turns the name a caller gave run-command into the one
