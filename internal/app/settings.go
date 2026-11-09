@@ -899,7 +899,6 @@ func (m *OS) themeEditItem() settingItem {
 	}
 }
 
-
 func (m *OS) dockComponentsItem() settingItem {
 	return settingItem{
 		Label:   "Components",

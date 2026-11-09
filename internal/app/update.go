@@ -2921,7 +2921,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.MarkAllDirty()
 		return m, cmd
 
-
 	case screenshotCopiedMsg:
 		// The clipboard helper answered. Nothing waited for it, which is the
 		// point: this only decides where to say what it said.
