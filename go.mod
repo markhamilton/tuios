@@ -90,3 +90,16 @@ require (
 	tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a
 	tuios.dev/vt v0.3.3-0.20261030005101-f3383d2005bd
 )
+
+// Fork: the tuios.dev modules live in this repo. Resolve every version of them
+// from the working tree, so a GOWORK=off build never fetches through tuios.dev.
+replace (
+	tuios.dev/loom => ./loom
+	tuios.dev/plot => ./plot
+	tuios.dev/progstatus => ./progstatus
+	tuios.dev/shot => ./shot
+	tuios.dev/sketch => ./sketch
+	tuios.dev/swatch => ./swatch
+	tuios.dev/tml => ./tml
+	tuios.dev/vt => ./vt
+)
