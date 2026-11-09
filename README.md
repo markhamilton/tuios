@@ -14,6 +14,30 @@
   <a title="This tool is Tool of The Week on Terminal Trove, The $HOME of all things in the terminal" href="https://terminaltrove.com/"><img src="https://cdn.terminaltrove.com/media/badges/tool_of_the_week/png/terminal_trove_tool_of_the_week_green_on_dark_grey_bg.png" alt="Terminal Trove Tool of The Week" style="width: 250px;" /></a>
 </div>
 
+## About this fork
+
+This is my opinionated version of tuios. It shows how I think a terminal multiplexer should work. Gaurav Gosain made tuios, and the original project is at [Gaurav-Gosain/tuios](https://github.com/Gaurav-Gosain/tuios). This fork does not replace it, and the upstream project does not support this fork.
+
+How this fork is different:
+
+- **Local only.** The fork does not connect to tuios.dev. It has no links to other hosts, no SSH server, no web server and no self-update. To use tuios from another device, connect with SSH and run `tuios attach`.
+- **tmux keys.** The default keys are the tmux keys. The leader key is `ctrl+b`.
+- **One client.** When you attach to a session, tuios detaches the other clients, as `tmux attach -d` does.
+- **No data in your repositories.** The fork does not write agent checkpoints into `.git`.
+- **Small screens.** On a phone, a session shows tiled panes and no sidebar. The layout on your desktop does not change.
+- **Fewer surprises.** A window snaps to an edge only when you release it at that edge. A new workspace does not get the name of an old workspace. You can have more than 9 workspaces.
+
+Some of these changes are not complete yet.
+
+To build the fork, use Docker. You do not install Go on your computer.
+
+```sh
+fork/build.sh        # builds dist/tuios for macOS on Apple silicon
+fork/build.sh test   # runs the tests
+```
+
+The MIT license and the upstream copyright stay. See [LICENSE](LICENSE).
+
 <picture>
   <source srcset="./assets/demo.avif" type="image/avif">
   <img alt="TUIOS" src="./assets/demo.gif">
