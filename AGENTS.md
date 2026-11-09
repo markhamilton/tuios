@@ -25,15 +25,12 @@ TUIOS (Terminal UI Operating System) is a terminal-based window manager built in
 ```bash
 # Build from source
 go build -o tuios ./cmd/tuios
-go build -o tuios-web ./cmd/tuios-web
 
 # Run directly
 go run ./cmd/tuios
-go run ./cmd/tuios-web
 
 # Run with debug logging
 go run ./cmd/tuios --debug
-go run ./cmd/tuios-web --debug
 
 # Run tests
 go test ./... ./progstatus/... ./vt/...
@@ -104,7 +101,7 @@ packages the change can affect. A package is affected when it changed, or when
 its test binary builds a package that changed. A job that the changes job does
 not name shows as skipped. A change to a module file beyond the library pins,
 to a CI file, or to a path no rule names runs everything. A push to main runs
-every job, except ghostty-vt, learn-web, clienttests, the image build and the
+every job, except ghostty-vt, the image build and the
 Nix vendor hash. Those run on main only when the push changed their inputs.
 The e2e suite selects its own tests (see Testing Approach). See what a branch
 runs:
@@ -113,33 +110,21 @@ runs:
 CHANGES_BASE=origin/main scripts/ci-changes.sh
 ```
 
-### Browser build (Learn tuios)
+### Lessons (tuios tutor)
 
-`cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at
-tuios.dev/learn: the real app in Learn mode, with a fake shell
+`tuios tutor` runs the real app in Learn mode, with a fake shell
 (`internal/webshell`) in every pane and an event stream for lessons
-(`internal/learn`). Browser-only code is behind `js` build tags or in those
-three directories, so the native build is unchanged. The page API and event
-contract are in [cmd/tuios-wasm/README.md](cmd/tuios-wasm/README.md).
-
-The lessons are data in `internal/learn/lessons`: `tracks.json` and one
-`tracks/<id>.json` per track, with a rule per step that says when it is done.
-The lesson engine there is the only one, and the page draws its `lesson.*`
-events. Edit a track there, never in tuios-docs, then run `go generate
+(`internal/learn`). The lessons are data in `internal/learn/lessons`:
+`tracks.json` and one `tracks/<id>.json` per track, with a rule per step that
+says when it is done. Edit a track there, then run `go generate
 ./internal/learn/lessons`, which packs the files into the archive the binary
-embeds. The `tuioslint` gate checks every action, overlay, event and key a lesson names, so a rename that breaks
-a lesson fails the change that renames it.
+embeds. The `tuioslint` gate checks every action, overlay, event and key a
+lesson names, so a rename that breaks a lesson fails the change that renames
+it.
 
 ```bash
-cmd/tuios-wasm/build.sh out/                  # the files the docs site needs
-node cmd/tuios-wasm/serve.mjs out/ 8765       # try it at http://127.0.0.1:8765
-go test ./internal/webshell/ ./internal/learn/...  # native tests of the Go side
-node cmd/tuios-wasm/smoke-lessons.mjs out/ frames/ basics  # a track by show me
+go test ./internal/webshell/ ./internal/learn/...
 ```
-
-A change to `internal/app` or `internal/input` can break the js build without
-breaking any native one. The learn-web workflow builds it on every pull
-request.
 
 ### Development with Nix
 
@@ -198,8 +183,6 @@ that points the go command at the folder in this repository. They are
 ```
 tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
-├── cmd/tuios-web/          # Web terminal server binary (separate for security)
-├── cmd/tuios-wasm/         # Browser build for the Learn tuios tour (js/wasm)
 ├── cmd/sketch-wasm/        # tuios.dev/sketch for the browser: the Mermaid playground at tuios.dev/sketch
 ├── cmd/tuios-fuzz/         # The property fuzzer, drawn while it runs; kept out of the shipped binary
 ├── internal/
@@ -340,7 +323,6 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 - **Cobra** (`github.com/spf13/cobra`): CLI commands
 - **xpty** (`github.com/charmbracelet/x/xpty`): Cross-platform PTY
 - **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`): Alternative VT emulation backend; `scripts/install.sh ghostty` builds it (see `docs/ghostty-vt.md`)
-- **sip** (`github.com/Gaurav-Gosain/sip`): WebGL terminal serving for `tuios-web`
 
 > **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
 
@@ -643,4 +625,3 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **VT Backends**: `docs/ghostty-vt.md`. The pure Go and libghostty-vt emulators, and how to build each
 - **Rehydration**: `docs/REHYDRATION.md`. The snapshot-vs-stream contract for pane content on attach
 - **Performance**: `docs/perf.md`. Measured baselines and the "measured and not changed" ledger
-- **Sip**: https://github.com/Gaurav-Gosain/sip. The library serving Bubble Tea apps as web apps (used by `cmd/tuios-web`)

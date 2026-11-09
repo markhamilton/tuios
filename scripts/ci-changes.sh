@@ -37,9 +37,9 @@ set -uo pipefail
 
 ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...)
 LIBS=(progstatus vt swatch shot tml plot loom sketch)
-WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/ ./internal/transcriptview/ ./internal/winacl/ ./internal/ptyspawn/)
+WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./internal/transcriptview/ ./internal/winacl/ ./internal/ptyspawn/)
 MACOS=(./internal/transcriptview/ ./internal/herdrplugin/ ./internal/session/)
-WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
+WASM=(./internal/webshell/ ./internal/learn/)
 SELF=$(dirname "$0")
 
 declare -A out=()
@@ -108,17 +108,17 @@ while IFS= read -r p; do
 	pkg=must
 	case $p in
 	# Files no job reads.
-	.github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/contributors-exclude | .github/dependabot.yml | .github/flaky-tests.txt) pkg=no ;;
+	.github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/flaky-tests.txt) pkg=no ;;
 	# Workflows no job of ci.yml runs: e2e-tui.yml selects its own tests, and
 	# the rest never run on a pull request.
-	.github/workflows/e2e-tui.yml | .github/workflows/e2e-tui-map.yml | .github/workflows/fuzz.yml | .github/workflows/release.yml | .github/workflows/docker-publish.yml | .github/workflows/update-nix.yml | .github/workflows/contributors.yml | .github/workflows/star-history.yml | .github/workflows/issue-labeler.yml) pkg=no ;;
+	.github/workflows/e2e-tui.yml | .github/workflows/e2e-tui-map.yml | .github/workflows/fuzz.yml) pkg=no ;;
 	.github/*) everything "$p changed" ;;
 	scripts/ci-changes.sh | scripts/go-test-affected.sh | scripts/go-test-lanes.sh | scripts/go-test-lanes-test.sh | scripts/retry-flaky.sh) everything "$p changed" ;;
 	scripts/library-pins.sh) f[pins]=1 f[go]=1 pkg=no ;;
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
 	scripts/check.sh) f[go]=1 pkg=no ;;
 	scripts/ghostty-lib.sh) f[ghostty]=1 pkg=no ;;
-	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/contributors*.sh | scripts/contributors-mosaic.go | scripts/star-history.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
+	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
 	scripts/*) everything "$p is a script no rule names" ;;
 	Dockerfile | .dockerignore) f[docker]=1 pkg=no ;;
 	flake.nix | flake.lock | tuios.nix | nix/*) f[nix]=1 pkg=no ;;
@@ -140,7 +140,7 @@ while IFS= read -r p; do
 	# Files no Go build reads. A test that reads one by a path up the tree
 	# still runs: go-test-affected.sh finds it. In a Go package such a file
 	# may be embedded, so it counts as the package.
-	*.md | docs/* | assets/* | examples/* | integrations/* | LICENSE | CITATION.cff | FUNDING.yml | .markdownlint.json | .gitignore | .gitattributes | .envrc | justfile | install.sh | install-web.sh | .goreleaser.yml | demo.gif | demo.avif) pkg=may ;;
+	*.md | docs/* | assets/* | examples/* | integrations/* | LICENSE | CITATION.cff | FUNDING.yml | .markdownlint.json | .gitignore | .gitattributes | .envrc | justfile | .goreleaser.yml | demo.gif | demo.avif) pkg=may ;;
 	esac
 	case $pkg in
 	no) continue ;;
@@ -159,7 +159,7 @@ while IFS= read -r p; do
 		[ "$top" != "$l" ] || f[lib_$l]=1
 	done
 	[ "$top" != cmd ] || f[docker]=1
-	case $p in cmd/tuios-web/* | internal/app/* | internal/input/* | internal/config/*) f[clienttests]=1 ;; esac
+	case $p in internal/app/* | internal/input/* | internal/config/*) f[clienttests]=1 ;; esac
 	[ "$top" != vt ] || f[ghostty]=1
 	# Test files and test data never reach the binary.
 	case $p in *_test.go | */testdata/*) ;; *) f[bin_src]=1 ;; esac
