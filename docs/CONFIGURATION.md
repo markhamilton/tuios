@@ -2452,7 +2452,7 @@ allow_insecure = false
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `subject` | `https://tuios.dev/push` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. The push service reads it, so the default names no machine. |
+| `subject` | `mailto:tuios@localhost` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. The push service reads it, so the default names no machine. Apple's push service is strict about this value. If it refuses the push, set a `mailto:` address on a real domain. |
 | `allow_insecure` | `false` | Lets tuios send to a push service on a loopback or private address, by `https` or `http`, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
 
 When `allow_insecure` is `false`, tuios does not send to a loopback or

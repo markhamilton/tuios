@@ -592,8 +592,8 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Errorf("JWT exp is %v from now, want within 24 h", left)
 	}
 	// The JWT goes to the push service in clear: it names no machine.
-	if sub, _ := claims["sub"].(string); sub != "https://tuios.dev/push" || (machine != "" && strings.Contains(strings.ToLower(sub), strings.ToLower(machine))) {
-		t.Errorf("ASSERTION: JWT sub %q, want https://tuios.dev/push, with no machine name (%s) in it", sub, machine)
+	if sub, _ := claims["sub"].(string); sub != "mailto:tuios@localhost" || (machine != "" && strings.Contains(strings.ToLower(sub), strings.ToLower(machine))) {
+		t.Errorf("ASSERTION: JWT sub %q, want mailto:tuios@localhost, with no machine name (%s) in it", sub, machine)
 	}
 
 	// The flaky service got it on the retry. The gone one lost its phone.

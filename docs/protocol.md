@@ -3516,7 +3516,7 @@ Each push is one HTTP `POST` to `endpoint` with these headers:
 
 The JWT is ES256, with the claims `aud` (the endpoint's origin), `exp` (12
 hours from the send) and `sub` (`[notify.webpush] subject`, by default
-`https://tuios.dev/push`). The push service reads the JWT, so the default
+`mailto:tuios@localhost`). The push service reads the JWT, so the default
 `sub` names no machine.
 
 The TTL of an item that waits for the person is one hour. The item stays

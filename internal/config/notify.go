@@ -80,7 +80,12 @@ type WebPushConfig struct {
 // service in clear, and a host name in it would tell the push service which
 // machine sends. The VAPID public key already tells it which install sends,
 // so a per-install subject would add nothing.
-const DefaultWebPushSubject = "https://tuios.dev/push"
+//
+// RFC 8292 asks for a contact URI (mailto: or https:) and push services check
+// only its form, so the default names no third party. Apple's push service is
+// stricter than the others about the subject; when it refuses the JWT, set
+// subject to a mailto: address on a real domain.
+const DefaultWebPushSubject = "mailto:tuios@localhost"
 
 // WebPushSubject is the VAPID subject in force: Subject when it is valid,
 // else DefaultWebPushSubject.
