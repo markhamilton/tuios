@@ -41,17 +41,25 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 // sidebar the right zone sat underneath the rail. A pane dragged to the visible
 // right edge snapped nothing, and reaching the zone at all meant dragging into
 // the sidebar. Keeping them adjacent is what stops that drifting again.
+//
+// The zones are appearance.snap_edge cells deep, counted inward from the
+// region's edge: 1 is the outermost row or column only. Zero turns edge
+// snapping off. A pointer past the edge (over a rail or the dock) is still in
+// the zone.
 func (m *OS) SnapZoneAt(x, y int) SnapQuarter {
-	const edge = 5
+	edge := min(m.Settings.SnapEdge, config.SnapEdgeMax)
+	if edge <= 0 {
+		return NoSnap
+	}
 
 	topMargin := m.GetTopMargin()
-	bottomEdge := topMargin + m.GetUsableHeight()
+	bottomEdge := topMargin + m.GetUsableHeight() // first row past the region
 	leftEdge := m.GetLeftMargin()
-	rightEdge := m.GetLayoutWidth() - m.GetRightMargin()
+	rightEdge := m.GetLayoutWidth() - m.GetRightMargin() // first column past it
 
-	atLeft := x <= leftEdge+edge
+	atLeft := x < leftEdge+edge
 	atRight := x >= rightEdge-edge
-	atTop := y <= topMargin+edge
+	atTop := y < topMargin+edge
 	atBottom := y >= bottomEdge-edge
 
 	switch {

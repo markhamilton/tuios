@@ -1155,6 +1155,25 @@ scroll_column_presets = [50, 67, 100]
 A change to the list applies when tuios reloads the config. The settings page
 does not show this option. Edit it in `config.toml`.
 
+## Edge snapping
+
+With tiling off, you can drag a floating pane to an edge of the pane area.
+When you release the pane there, tuios snaps it. The top edge fills the
+screen. The left or right edge fills that half. A corner fills that quarter.
+
+`appearance.snap_edge` sets the depth of these edge zones, in cells. The
+default is `1`, so the pointer must be on the outermost row or column. A
+larger value makes the zones easier to hit. `0` turns edge snapping off. The
+maximum is `20`.
+
+```toml
+[appearance]
+snap_edge = 0   # release a dragged pane anywhere and it stays there
+```
+
+The option is on the settings page, in the Appearance section.
+`tuios set-config appearance.snap_edge 3` applies it at once.
+
 ## Drop preview
 
 While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:

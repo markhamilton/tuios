@@ -815,6 +815,16 @@ const (
 	NiriScrollCellsDefault = 8
 )
 
+// SnapEdge is how many cells deep the zones along the pane region's edges
+// are, where releasing a dragged floating pane snaps it (the top edge to full
+// screen, a side to half, a corner to a quarter). It was five, which made a
+// pane dropped near the top maximize when that was not meant. One cell means
+// the pointer has to reach the edge. Zero turns edge snapping off.
+const (
+	SnapEdgeDefault = 1
+	SnapEdgeMax     = 20
+)
+
 // DimUnfocusedMax caps it. The cap is not a legibility floor (content is the
 // user's own text and they may quiet it as far as they like). It only stops a
 // pane from being erased outright, where there is nothing left to show the

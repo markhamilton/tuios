@@ -159,6 +159,7 @@ var settingLabels = map[string]string{
 	"appearance.window_button_zoom":             "Tiled zoom button",
 	"appearance.zoom_max_width":                 "Zoom width",
 	"appearance.alt_drag":                       "Alt-drag to move",
+	"appearance.snap_edge":                      "Edge snap zone (cells)",
 	"appearance.focus_wrap":                     "Focus wraps at the edge",
 	"appearance.auto_enter_terminal_on_focus":   "Type in a pane when focus moves to it",
 	"appearance.focus_follows_mouse_pause":      "Key that pauses focus follows mouse",

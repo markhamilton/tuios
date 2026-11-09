@@ -278,6 +278,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.snap_edge", Type: OptionInt, Section: "appearance",
+		Description: "Cells from the edge where a dragged floating pane snaps when you release it. 0 is off.",
+		Default:     strconv.Itoa(SnapEdgeDefault), Min: 0, Max: SnapEdgeMax,
+	},
+	{
 		Path: "appearance.right_click_opens_menu", Type: OptionBool, Section: "appearance",
 		Description: "A plain right-click on a pane in terminal mode opens the pane menu, for pasting without selecting first",
 		Default:     "false",

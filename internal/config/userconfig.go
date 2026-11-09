@@ -384,6 +384,7 @@ type AppearanceConfig struct {
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMousePause   string                  `toml:"focus_follows_mouse_pause"`    // The key that pauses focus_follows_mouse while held: ctrl, alt, off (default: off)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
+	SnapEdge                 *int                    `toml:"snap_edge"`                    // Cells deep the edge zones are where a dragged floating pane snaps on release; 0 is off (default: 1, max: 20)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
 	ImageSymbols             string                  `toml:"image_symbols"`                // Draw pane images as block glyphs on a terminal without graphics: auto, octant, sextant, quadrant, half, off (default: auto)
@@ -1142,7 +1143,8 @@ func DefaultConfig() *UserConfig {
 			Motion:                   MotionFull,
 			ModalDim:                 new(ModalDimDefault),
 			PopupDim:                 new(PopupDimDefault),
-			PanelPadding:             overlay.DefaultPanelPadding,
+			SnapEdge:                 new(SnapEdgeDefault),
+			PanelPadding:            overlay.DefaultPanelPadding,
 			ClockFormat:              DefaultClockFormat,
 			TilingScheme:             TilingSchemeSpiral,
 			MasterRatio:              MasterRatioDefault,
@@ -2401,6 +2403,12 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.PopupDim = new(min(max(d, 0), PopupDimMax))
 	}
 
+	if cfg.Appearance.SnapEdge == nil {
+		cfg.Appearance.SnapEdge = new(*defaultCfg.Appearance.SnapEdge)
+	} else if d := *cfg.Appearance.SnapEdge; d < 0 || d > SnapEdgeMax {
+		cfg.Appearance.SnapEdge = new(min(max(d, 0), SnapEdgeMax))
+	}
+
 	if cfg.Appearance.BorderStyle == "" {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
 	}
@@ -3061,6 +3069,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
 		s.AltDrag = *cfg.Appearance.AltDrag
+	}
+
+	// SnapEdge is a pointer so an explicit 0 (edge snapping off) survives
+	// the default being 1.
+	if cfg.Appearance.SnapEdge != nil {
+		s.SnapEdge = min(max(*cfg.Appearance.SnapEdge, 0), SnapEdgeMax)
 	}
 
 	// RightClickOpensMenu defaults to false. A pointer so an explicit true in

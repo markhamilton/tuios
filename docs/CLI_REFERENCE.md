@@ -2002,6 +2002,7 @@ name alone. Some of them:
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn. On the left, the pill order is close, zoom, minimize, so close sits at the outer corner |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
+| `snap_edge` | `0` to `20` | Depth in cells of the edge zones where a dragged floating pane snaps when you release it (default `1`, `0` is off) |
 | `background` | `off`, `theme`, a colour | Background painted on every surface not set on its own: panes, desktop, window chrome, dock and rail (default `off`) |
 | `pane_background` | `off`, `theme`, a colour, or empty | Background behind pane content where the program left the default; empty follows `background` |
 | `desktop_background` | `off`, `theme`, a colour, or empty | Background behind and between panes; empty follows `background` |
