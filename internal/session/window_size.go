@@ -246,6 +246,23 @@ func (d *Daemon) latestLeft(sessionID, clientID string, input time.Time) {
 	}
 }
 
+// latestDisplaced forgets the latest client of a session that an exclusive
+// attach (tuios attach without -k, or single_client) has just taken off it.
+// The size that client kept for itself is not kept for it: it did not leave,
+// it was replaced, and the client that replaced it is now the only one there.
+// Without this the session kept the departed client's size until the new
+// client's first key, and a floating client restored its panes into that
+// size: a desktop attaching after a phone drew every floating pane clamped to
+// the phone's screen, and pushed the clamped rectangles.
+func (d *Daemon) latestDisplaced(sessionID string) {
+	d.latest.mu.Lock()
+	defer d.latest.mu.Unlock()
+	if st := d.latest.sessions[sessionID]; st != nil {
+		st.left = time.Time{}
+		st.client = ""
+	}
+}
+
 // latestReturnInput is the last input a client had when it left a session it
 // was the latest client of, while the session has kept its size for it since,
 // and zero otherwise. A client that comes back takes it again. See

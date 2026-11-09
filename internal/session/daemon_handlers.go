@@ -260,6 +260,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if d.exclusiveAttach(&payload) {
 		storeMax(&session.exclusiveSeq, cs.attachSeq)
 		victims = d.markOthers(session, cs, cs.attachSeq)
+		if len(victims) > 0 {
+			d.latestDisplaced(session.ID)
+		}
 	}
 	// The newest client's agent socket, when ssh_agent is follow. A client
 	// that moved here without a detach no longer counts where it was.
