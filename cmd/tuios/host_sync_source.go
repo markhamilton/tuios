@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -242,4 +243,146 @@ func binaryPlatform(data []byte) (goos, goarch string, err error) {
 		return "", "", errors.New("the binary is for an architecture sync does not install")
 	}
 	return goos, goarch, nil
+}
+
+// networkTimeout bounds one release lookup or download.
+const networkTimeout = 3 * time.Minute
+
+// releasePage is where to send someone who has to do this by hand.
+func releasePage(rel release.Release) string {
+	if rel.URL != "" {
+		return rel.URL
+	}
+	return "https://github.com/" + release.Repo + "/releases"
+}
+
+// fetchChecksums reads the release's digest list.
+//
+// A release with no checksums.txt is refused rather than installed unverified.
+// The check is the only thing standing between a redirected download and a
+// binary this command puts on PATH, and a check that is skipped whenever it is
+// inconvenient is not a check.
+func fetchChecksums(ctx context.Context, src release.Source, rel release.Release) (release.Checksums, error) {
+	asset, ok := rel.AssetNamed(release.ChecksumFile)
+	if !ok {
+		return nil, &diagnosticError{
+			What:  fmt.Sprintf("%s publishes no %s.", rel.Tag, release.ChecksumFile),
+			Cause: "Without it there is nothing to check a download against, and this will not install an unverified binary.",
+			Fix:   "download and verify the archive by hand from " + releasePage(rel),
+		}
+	}
+	data, err := readAsset(ctx, src, asset)
+	if err != nil {
+		return nil, err
+	}
+	sums, err := release.ParseChecksums(bytes.NewReader(data))
+	if err != nil {
+		return nil, &diagnosticError{
+			What:  "The release's checksum list could not be read.",
+			Cause: err.Error(),
+			Fix:   "download and verify the archive by hand from " + releasePage(rel),
+		}
+	}
+	return sums, nil
+}
+
+// maxAssetSize bounds a single download, so a redirect to something enormous
+// cannot be read into memory.
+const maxAssetSize = 512 << 20
+
+func readAsset(ctx context.Context, src release.Source, asset release.Asset) ([]byte, error) {
+	body, err := src.Fetch(ctx, asset.URL)
+	if err != nil {
+		return nil, explainLookupError(err, false)
+	}
+	defer func() { _ = body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(body, maxAssetSize+1))
+	if err != nil {
+		return nil, &diagnosticError{
+			What:  "The download did not finish.",
+			Cause: err.Error(),
+			Fix:   "check the network and try again.",
+		}
+	}
+	if int64(len(data)) > maxAssetSize {
+		return nil, &diagnosticError{
+			What:  asset.Name + " is larger than this command will read.",
+			Cause: "A release archive is tens of megabytes. Something answered with far more than that.",
+			Fix:   "download it by hand and check what you are being served.",
+		}
+	}
+	return data, nil
+}
+
+// explainChecksumError turns a failed verification into a message that says
+// what it means. A mismatch is not a hiccup to retry past.
+func explainChecksumError(err error, rel release.Release) error {
+	if mismatch, ok := errors.AsType[*release.ChecksumMismatch](err); ok {
+		return &diagnosticError{
+			What:  "The downloaded archive is not the one the release published.",
+			Cause: "Its checksum does not match. The download was corrupted, or something between here and GitHub changed it.",
+			Extra: []string{
+				"Expected: " + mismatch.Want,
+				"Got:      " + mismatch.Got,
+				"Nothing was installed and the old binary is untouched.",
+			},
+			Fix: "try again. If it fails the same way, download the archive by hand from " +
+				releasePage(rel) + " and check it yourself.",
+		}
+	}
+	return &diagnosticError{
+		What:  "The download could not be verified.",
+		Cause: err.Error(),
+		Extra: []string{"Nothing was installed and the old binary is untouched."},
+		Fix:   "download and verify the archive by hand from " + releasePage(rel),
+	}
+}
+
+// explainLookupError turns a network or API failure into an instruction.
+func explainLookupError(err error, prerelease bool) error {
+	if limit, ok := errors.AsType[*release.RateLimitError](err); ok {
+		e := &diagnosticError{
+			What:  "GitHub is rate limiting this address.",
+			Cause: "Sixty release lookups an hour are allowed without a token, shared by everyone on this address.",
+			Fix:   "wait and run it again, or set GITHUB_TOKEN to a token with no scopes to raise the limit.",
+		}
+		if !limit.Reset.IsZero() {
+			e.Extra = []string{"The limit resets at " + limit.Reset.Local().Format(time.Kitchen) + "."}
+		}
+		return e
+	}
+	if errors.Is(err, release.ErrNoRelease) {
+		what := "This repository has published no release."
+		if prerelease {
+			what = "This repository has published no release or prerelease."
+		}
+		return &diagnosticError{
+			What:  what,
+			Cause: "There is nothing to update to.",
+			Fix:   "see https://github.com/" + release.Repo + "/releases",
+		}
+	}
+	if httpErr, ok := errors.AsType[*release.HTTPError](err); ok {
+		return &diagnosticError{
+			What:  "GitHub refused the release lookup.",
+			Cause: httpErr.Error(),
+			Fix:   "try again shortly. If it keeps failing, check https://www.githubstatus.com.",
+		}
+	}
+	// Anything that reaches here is a transport failure: no route, DNS that
+	// answers nothing, a proxy that hung up. They read the same to a user, so
+	// they get one message.
+	var netErr net.Error
+	if errors.As(err, &netErr) || errors.Is(err, context.DeadlineExceeded) {
+		return &diagnosticError{
+			What:  "GitHub could not be reached.",
+			Cause: err.Error(),
+			Fix:   "check the network, or set HTTPS_PROXY if this machine goes out through a proxy.",
+		}
+	}
+	return &diagnosticError{
+		What:  "The release lookup failed.",
+		Cause: err.Error(),
+		Fix:   "check the network and try again.",
+	}
 }

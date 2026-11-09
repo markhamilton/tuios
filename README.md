@@ -133,12 +133,6 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 **Building from source** needs Go 1.26.8 or newer.
 
-**Updating.** If you installed with the quick install script or a release
-binary, `tuios update` fetches the newest release and puts it in place
-(`tuios update --check` just reports). Everything else has a package manager
-that owns the binary, so use that instead; `tuios update` detects which you have
-and prints the right command rather than overwriting it.
-
 **Images on Windows.** The console host built into Windows drops sixel images
 before tuios sees them. To let them through, take `conpty.dll` and
 `OpenConsole.exe` for the architecture of your `tuios.exe` (x64, x86 or arm64)

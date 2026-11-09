@@ -234,8 +234,7 @@ tuios/
 │   ├── diffview/           # Drawing diff lines: chroma highlighting, split layout, changed words
 │   ├── markdown/           # Reads the Markdown agents write into blocks and styled runs; draws nothing
 │   ├── capture/            # Turns a screenshot request and config into what shot renders
-│   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
-│   ├── netutil/            # Small network helpers the servers share
+│   ├── release/            # Version stamps, and the release lookup and checks hosts sync uses
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
 │   ├── dnd/                # The kitty drag and drop protocol (OSC 72) on the wire: parse, join chunks, write
 │   ├── harness/            # Agent harness manifests and detection
