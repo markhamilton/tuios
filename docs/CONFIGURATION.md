@@ -930,8 +930,10 @@ keep_open = true
 A workspace's number is its position. Moving a workspace with
 `move_workspace_left` or `move_workspace_right`, or dragging its tab in the
 dock, renumbers it. A workspace exists while it holds a pane or is on screen.
-When a workspace that held a pane stops existing, because its last pane
-closed or moved away and it is not on screen, it loses its name.
+When the last pane of a workspace closes, exits or moves away, the workspace
+loses its name. This is also true for the workspace on screen. A new pane
+there starts an unnamed workspace. A name that you give to an empty
+workspace stays when you open its first pane.
 
 The numbers close up only when you change something: close a pane, move a
 pane to another workspace, close a workspace or move one. Then every

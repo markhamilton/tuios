@@ -287,11 +287,52 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 	}
 }
 
+// dropEmptiedNamesLocked takes the name off each workspace that held a pane at
+// the last change and holds none now, so a workspace made later at that number
+// starts unnamed. It covers every way the last pane leaves: closed, killed,
+// moved to another workspace or session, or its process exiting. The workspace
+// on screen is no exception, though it still exists while it is shown.
+//
+// It goes by the transition, not by emptiness, so a name given to an empty
+// workspace (rename, then open the first pane) is kept. The caller holds
+// stateMu.
+func (s *Session) dropEmptiedNamesLocked(heldBefore map[int]bool, now map[string]paneAt) {
+	st := s.state
+	s.namesDropped = false
+	if len(st.WorkspaceNames) == 0 || len(heldBefore) == 0 {
+		return
+	}
+	held := make(map[int]bool, len(now))
+	for _, at := range now {
+		held[at.ws] = true
+	}
+	var names map[int]string
+	for ws := range heldBefore {
+		if held[ws] || st.WorkspaceNames[ws] == "" {
+			continue
+		}
+		if names == nil {
+			// Cloned: a state's maps are never written in place.
+			names = maps.Clone(st.WorkspaceNames)
+		}
+		delete(names, ws)
+	}
+	if names == nil {
+		return
+	}
+	if len(names) == 0 {
+		names = nil
+	}
+	st.WorkspaceNames = names
+	s.namesDropped = true
+}
+
 // noteWorkspacesLocked runs after every change to the state, a client's push
 // included, and keeps a workspace's number its position:
 //
 //   - A workspace exists while it holds a pane or is the one shown. When one
-//     that has held a pane stops existing it loses its name.
+//     that has held a pane stops existing it loses its name. So does one
+//     whose last pane leaves while it is shown (dropEmptiedNamesLocked).
 //   - Its place closes up, every workspace above it moving down one, only
 //     when a person made the change: closed a pane (by key, menu, verb or
 //     herdr, or by typing exit in its shell), moved one off the workspace,
@@ -328,10 +369,15 @@ func (s *Session) noteWorkspacesLocked() bool {
 	}
 	person := s.closeUpPending
 	s.closeUpPending = false
+	heldBefore := make(map[int]bool, len(s.panesAt))
+	for _, at := range s.panesAt {
+		heldBefore[at.ws] = true
+	}
 	now, byPerson := s.notePaneMovesLocked()
 	if byPerson {
 		person = true
 	}
+	s.dropEmptiedNamesLocked(heldBefore, now)
 
 	var gone []int
 	for ws := range s.existed {

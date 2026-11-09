@@ -1428,6 +1428,10 @@ type Session struct {
 	selfEmptied    map[int]bool
 	gaps           map[int]bool
 	closeUpPending bool
+	// namesDropped says the last noteWorkspacesLocked took a name off a
+	// workspace that emptied, a daemon-side change a pushing client has not
+	// seen. See dropEmptiedNamesLocked.
+	namesDropped bool
 	// exitedAlone is the PTYs whose process exited without being closed,
 	// each true when it was the pane's own shell, guarded by exitedAloneMu
 	// rather than stateMu, because the exit is heard on the PTY's goroutine.
@@ -3484,6 +3488,11 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// seen, so it is answered with the state.
 		s.state.Version++
 		s.noteRenumberLocked()
+		accepted = false
+	} else if s.namesDropped {
+		// The push emptied a named workspace and the name went: answered
+		// with the state the same way, so the sender stops showing it.
+		s.state.Version++
 		accepted = false
 	}
 	s.noteStateChangeLocked()
