@@ -256,6 +256,11 @@ type startOpts struct {
 	// tuios command line. The host colour tests put a stand-in host terminal
 	// there (testdata/hostterm).
 	wrap []string
+	// detachOthers runs an attach the way it ships: it takes the session's
+	// other clients off. Every other test runs with
+	// TUIOS_ATTACH_KEEP_OTHERS=1, because the multi-client tests here were
+	// written when an attach left the others attached; see startIn.
+	detachOthers bool
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -354,6 +359,12 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// the test of the shipped default is the one caller that sets it.
 	if !o.daemonDefault {
 		env = append(env, "TUIOS_NO_DAEMON=1")
+	}
+	// The same for an attach detaching the other clients, the default since
+	// the fork made it one: the tests that run two clients of a session were
+	// written against both staying. detachOthers opts back in.
+	if !o.detachOthers {
+		env = append(env, "TUIOS_ATTACH_KEEP_OTHERS=1")
 	}
 	// The same reasoning for the looks v0.8.0 changed: the tests were written
 	// against the dock at the bottom, no rail, full-screen zoom and a click

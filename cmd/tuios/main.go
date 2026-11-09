@@ -238,9 +238,10 @@ then opens one of those. With nothing saved and no
 name given, a new session is opened instead. A name that matches no session
 is an error unless -c is given.
 
-With -d every other client of the session detaches as this one attaches,
-as tmux attach -d does. Each of them exits with a message. To do this on
-every attach, set single_client = true in [daemon].`,
+When you attach, every other client of the session detaches, as with
+tmux attach -d. Each of them exits with a message. The session continues
+to run. To keep the other clients attached, use -k. The old -d flag
+still works. It does nothing, because -d is now the default.`,
 		Example: `  # Attach to the most recent session
   tuios attach
 
@@ -250,8 +251,8 @@ every attach, set single_client = true in [daemon].`,
   # Attach and create if session doesn't exist
   tuios attach mysession -c
 
-  # Attach and detach every other client of the session
-  tuios attach -d mysession`,
+  # Attach and keep the other clients of the session attached
+  tuios attach -k mysession`,
 		Aliases: []string{"a"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
@@ -267,7 +268,11 @@ every attach, set single_client = true in [daemon].`,
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
 	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
 	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
-	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session, as tmux attach -d does")
+	attachCmd.Flags().BoolVarP(&attachKeepOthers, "keep-others", "k", false, "Keep the other clients of the session attached")
+	// The default now. Kept, hidden, so scripts that pass -d still run.
+	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session (the default)")
+	_ = attachCmd.Flags().MarkHidden("detach-others")
+	attachCmd.MarkFlagsMutuallyExclusive("detach-others", "keep-others")
 	attachCmd.Flags().BoolVar(&attachTerminalMode, "terminal-mode", false, "Start in terminal mode, whatever startup.start_in_terminal_mode says")
 	attachCommand = attachCmd
 	// Set by the client a restart from the app starts. See restart_reattach.go.

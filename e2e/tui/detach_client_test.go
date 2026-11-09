@@ -68,9 +68,17 @@ func clientIDOf(t *testing.T, base string, pid int, session string) string {
 // for it to show the session's one window.
 func attachedClient(t *testing.T, base, session string, extra ...string) (*tuitest.Terminal, string) {
 	t.Helper()
+	return attachedClientWith(t, base, session, startOpts{}, extra...)
+}
+
+// attachedClientWith is attachedClient with the start options given, for an
+// attach that runs as it ships (detachOthers).
+func attachedClientWith(t *testing.T, base, session string, o startOpts, extra ...string) (*tuitest.Terminal, string) {
+	t.Helper()
 	args := append([]string{"attach"}, extra...)
 	args = append(args, session)
-	term, logPath := startInLogged(t, base, startOpts{args: args})
+	o.args = args
+	term, logPath := startInLogged(t, base, o)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client %v never attached: %v\n%s", args, err, term.Snapshot())
 	}
@@ -100,10 +108,11 @@ func exitedDetached(t *testing.T, term *tuitest.Terminal, logPath, session, reas
 	}
 }
 
-// TestAttachDetachOthersEndsTheOtherClients attaches two clients the plain
-// way, which must leave both attached, and then a third with -d, which must
-// take the first two off. Each of them exits 0 with the message, the session
-// keeps running, and the third is the only client left.
+// TestAttachDetachOthersEndsTheOtherClients attaches two clients with -k,
+// which must leave both attached, and then a third the plain way, which must
+// take the first two off: detaching the others is the default. Each of them
+// exits 0 with the message, the session keeps running, and the third is the
+// only client left.
 //
 // Negative control: with the DetachOthers check cut from handleAttach, the
 // first two clients stay attached and the test fails waiting for them to exit.
@@ -115,18 +124,18 @@ func TestAttachDetachOthersEndsTheOtherClients(t *testing.T) {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
 
-	first, firstLog := attachedClient(t, base, sess)
-	second, secondLog := attachedClient(t, base, sess)
-	// The positive half: a plain attach detaches nobody.
+	first, firstLog := attachedClient(t, base, sess, "-k")
+	second, secondLog := attachedClient(t, base, sess, "-k")
+	// The positive half: an attach with -k detaches nobody.
 	time.Sleep(500 * time.Millisecond)
 	if _, exited := first.ExitCode(); exited {
-		t.Fatalf("a plain attach ended the first client\n%s", first.Snapshot())
+		t.Fatalf("an attach with -k ended the first client\n%s", first.Snapshot())
 	}
 	if n := len(clientRows(t, base)); n != 2 {
-		t.Fatalf("after two plain attaches %d clients are attached, want 2", n)
+		t.Fatalf("after two attaches with -k %d clients are attached, want 2", n)
 	}
 
-	third, _ := attachedClient(t, base, sess, "-d")
+	third, _ := attachedClientWith(t, base, sess, startOpts{detachOthers: true})
 	exitedDetached(t, first, firstLog, sess, detachedByAttach, "first client after attach -d")
 	exitedDetached(t, second, secondLog, sess, detachedByAttach, "second client after attach -d")
 

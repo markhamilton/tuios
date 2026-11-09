@@ -478,14 +478,15 @@ tuios attach [session-name] [flags]
 - `-c, --create`: Create session if it doesn't exist
 - `--hold`: After a failure, wait for enter before the command exits
 - `--terminal-mode`: Start in terminal mode, whatever `startup.start_in_terminal_mode` says
-- `-d, --detach-others`: Detach every other client of the session, as `tmux attach -d` does
+- `-k, --keep-others`: Keep the other clients of the session attached. Without it, every other client of the session detaches, as with `tmux attach -d`
+- `-d, --detach-others`: Hidden. This is the default now. Scripts that use it continue to work. It also overrides `TUIOS_ATTACH_KEEP_OTHERS`. You cannot use it with `-k`
 - Same as `tuios new` (theme, ascii-only, etc.)
 
 **Examples:**
 ```bash
 tuios attach                   # Attach to most recent session (or only session)
 tuios attach mysession         # Attach to session named "mysession"
-tuios attach -d mysession      # Attach and detach the other clients of mysession
+tuios attach -k mysession      # Attach and keep the other clients of mysession attached
 tuios attach mysession -c      # Attach or create if doesn't exist
 tuios attach mysession --theme nord  # Attach with different theme
 ```
@@ -495,7 +496,11 @@ When the session already has a client, `tuios attach` says so and names the
 the client that last had input (window_size latest)." See
 [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).
 
-With `-d`, each other client of the session detaches as this client attaches.
+When you attach, each other client of the session detaches. Use `-k` to
+keep them attached. A bare `tuios` and `tuios new` on a session that exists
+also detach the other clients. Set `TUIOS_ATTACH_KEEP_OTHERS=1` to keep the
+other clients attached on every attach. A switch to another session in the
+app and the attach after a daemon restart keep the other clients attached.
 The session continues to run. Each detached client exits with status 0 and
 prints this message:
 

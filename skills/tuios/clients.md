@@ -62,8 +62,8 @@ tuios detach-client -s work --all-other
 
 `--client` names one client from `list-clients`. `-s` names a session, and
 every client of it detaches. `--all-other` keeps the client used last and
-detaches the rest. `tuios attach -d NAME` attaches and detaches the other
-clients of NAME. `[daemon] single_client = true` does that on every attach.
+detaches the rest. `tuios attach NAME` attaches and detaches the other
+clients of NAME. `tuios attach -k NAME` keeps them attached. `[daemon] single_client = true` does that on every attach.
 Detaching takes the screen away from the person, so it needs the `admin`
 grant. Do not detach the person's client unless they asked for it.
 

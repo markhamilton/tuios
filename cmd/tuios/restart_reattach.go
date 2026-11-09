@@ -45,7 +45,7 @@ func restartAttachArgs(session string) []string {
 
 // attachOwnFlags are the attach flags that are not carried: they say which
 // session to attach to and how, and the restart names the session itself.
-var attachOwnFlags = map[string]bool{"create": true, "host": true, "ssh": true, "hold": true, "force": true, "detach-others": true, "terminal-mode": true, "after-restart": true}
+var attachOwnFlags = map[string]bool{"create": true, "host": true, "ssh": true, "hold": true, "force": true, "detach-others": true, "keep-others": true, "terminal-mode": true, "after-restart": true}
 
 // carriedFlags is the flags this process was given that attach takes too, as
 // --name=value: the interface flags, and the root's --debug and --server.

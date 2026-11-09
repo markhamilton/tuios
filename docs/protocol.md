@@ -1902,7 +1902,7 @@ Params: `client`, `session`, `all_other`.
 
 Each detached client gets `MsgSessionEnded` with `detached` set and a
 `reason`, and exits with status 0. An attach with `detach_others` set
-(`tuios attach -d`), or any attach while `[daemon] single_client` is on,
+(`tuios attach` without `-k`), or any attach while `[daemon] single_client` is on,
 detaches the other clients of the session in the same way.
 
 Request:

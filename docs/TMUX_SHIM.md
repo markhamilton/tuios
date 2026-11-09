@@ -254,7 +254,8 @@ above. A read-only control client cannot detach tuios clients.
 `attach-session -d` in control mode attaches the control client and
 detaches no tuios client. A control client is not a tuios client, and an
 app that attaches with `-d` must not take the screen from the person. To
-detach the other clients when you attach, use `tuios attach -d`.
+detach the other clients when you attach, use `tuios attach`. It does this
+by default.
 
 ### display-popup
 

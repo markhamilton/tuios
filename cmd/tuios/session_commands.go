@@ -416,7 +416,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	clientLogf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
 	client.AllowNested = nestedAllowed()
-	client.DetachOthers = attachDetachOthers
+	client.DetachOthers = attachDetachesOthers()
 	client.SetNestProbe(probe)
 	// This process runs where the person is, so its agent socket is theirs.
 	// The daemon decides whether to follow it: see
@@ -456,10 +456,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	}
 	clientLogf("[CLIENT] Connected to daemon")
 
-	// An older daemon reads no -d and attaches beside the other clients.
-	// Said before the TUI takes the screen, so the person knows why.
+	// An older daemon reads no DetachOthers and attaches beside the other
+	// clients. Said before the TUI takes the screen, so the person knows why.
 	if client.DetachOthers && !client.DaemonDetachesOthers() {
-		fmt.Fprintln(os.Stderr, "Warning: the daemon is older than this tuios and ignores -d. The other clients stay attached. Run 'tuios restart-server' and attach again to use -d.")
+		fmt.Fprintln(os.Stderr, olderDaemonKeepsOthers)
 	}
 
 	clientLogf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
