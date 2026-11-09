@@ -1,22 +1,16 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
-	"github.com/Gaurav-Gosain/tuios/internal/server"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -183,110 +177,6 @@ func runLocal() error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
-	return nil
-}
-
-// sshServerFlags is the `tuios ssh` command line, gathered so the runner reads
-// as one thing rather than as seven positional arguments.
-type sshServerFlags struct {
-	host           string
-	port           string
-	keyPath        string
-	defaultSession string
-	authorizedKeys string
-	ephemeral      bool
-	noAuth         bool
-	// The limit flags. Nil means the flag was not given, and the [ssh]
-	// section of the config file decides.
-	handshakeTimeout *time.Duration
-	idleTimeout      *time.Duration
-	maxHandshakes    *int
-	maxSessions      *int
-}
-
-// checkLimits refuses a negative limit flag. 0 turns a limit off, so a
-// negative value is a mistake and not a way to say "no limit".
-func (f sshServerFlags) checkLimits() error {
-	for _, d := range []struct {
-		name string
-		v    *time.Duration
-	}{{"--handshake-timeout", f.handshakeTimeout}, {"--idle-timeout", f.idleTimeout}} {
-		if d.v != nil && *d.v < 0 {
-			return fmt.Errorf("%s is negative. Give a duration such as 2m, or 0 to turn the limit off", d.name)
-		}
-	}
-	for _, c := range []struct {
-		name string
-		v    *int
-	}{{"--max-handshakes", f.maxHandshakes}, {"--max-sessions", f.maxSessions}} {
-		if c.v != nil && *c.v < 0 {
-			return fmt.Errorf("%s is negative. Give a count, or 0 to turn the limit off", c.name)
-		}
-	}
-	return nil
-}
-
-func runSSHServer(f sshServerFlags) error {
-	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
-		fmt.Println("Debug mode enabled")
-	}
-
-	// Decided before anything starts, and before the daemon is touched.
-	// StartSSHServer makes the same call and refuses the same binds; this one
-	// exists so the refusal can be answered with the flags this command has,
-	// which is the same reason cmd/tuios-web decides TLS in the command rather
-	// than leaving it to sip.
-	if err := checkSSHAuth(os.Stderr, f); err != nil {
-		return err
-	}
-
-	app.SetInputHandler(input.HandleInput)
-
-	log.Printf("Starting TUIOS SSH server on %s:%s", f.host, f.port)
-	if f.defaultSession != "" {
-		log.Printf("Default session: %s", f.defaultSession)
-	}
-	if f.ephemeral {
-		log.Printf("Running in ephemeral mode (no daemon)")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Shutting down SSH server...")
-		cancel()
-		// Stop in-process daemon if we started one
-		session.StopInProcessDaemon()
-	}()
-
-	cfg := &server.SSHServerConfig{
-		Host:               f.host,
-		Port:               f.port,
-		KeyPath:            f.keyPath,
-		DefaultSession:     f.defaultSession,
-		AuthorizedKeysPath: f.authorizedKeys,
-		NoAuth:             f.noAuth,
-		HandshakeTimeout:   f.handshakeTimeout,
-		IdleTimeout:        f.idleTimeout,
-		MaxHandshakes:      f.maxHandshakes,
-		MaxSessions:        f.maxSessions,
-		Version:            version,
-		Ephemeral:          f.ephemeral,
-		ShowKeys:           interfaceFlags.ShowKeys,
-		// The full flag set, not a subset: `tuios ssh` registers the same
-		// interface flags as every other run command, and the server applies
-		// them over the appearance baseline it loads. Applying them here
-		// instead would run before that baseline, which would clobber them.
-		Overrides: flagOverrides(),
-	}
-	if err := server.StartSSHServer(ctx, cfg); err != nil {
-		return fmt.Errorf("SSH server error: %w", err)
-	}
 	return nil
 }
 

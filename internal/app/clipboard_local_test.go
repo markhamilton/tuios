@@ -54,24 +54,20 @@ func TestShouldUseNativeClipboard(t *testing.T) {
 	wayland := map[string]string{"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-0"}
 
 	cases := []struct {
-		name     string
-		env      detectClipboardToolEnv
-		hostVTE  bool
-		loopback bool
-		want     bool
+		name    string
+		env     detectClipboardToolEnv
+		hostVTE bool
+		want    bool
 	}{
-		{"a VTE host on a box with a tool uses the native path", detectEnv(wayland, "wl-copy", "wl-paste"), true, false, true},
-		{"a loopback SSH session counts even without VTE detection", detectEnv(wayland, "wl-copy", "wl-paste"), false, true, true},
-		{"a plain local non-VTE terminal keeps OSC 52", detectEnv(wayland, "wl-copy", "wl-paste"), false, false, false},
-		{"VTE but no tool falls back to OSC 52", detectEnv(wayland), true, false, false},
-		{"loopback but no tool falls back to OSC 52", detectEnv(wayland), false, true, false},
-		{"neither VTE nor loopback, even with a tool, is refused", detectEnv(wayland, "wl-copy", "wl-paste"), false, false, false},
+		{"a VTE host on a box with a tool uses the native path", detectEnv(wayland, "wl-copy", "wl-paste"), true, true},
+		{"a plain local non-VTE terminal keeps OSC 52", detectEnv(wayland, "wl-copy", "wl-paste"), false, false},
+		{"VTE but no tool falls back to OSC 52", detectEnv(wayland), true, false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := shouldUseNativeClipboard(tc.env, tc.hostVTE, tc.loopback); got != tc.want {
-				t.Fatalf("shouldUseNativeClipboard(vte=%v, loopback=%v) = %v, want %v", tc.hostVTE, tc.loopback, got, tc.want)
+			if got := shouldUseNativeClipboard(tc.env, tc.hostVTE); got != tc.want {
+				t.Fatalf("shouldUseNativeClipboard(vte=%v) = %v, want %v", tc.hostVTE, got, tc.want)
 			}
 		})
 	}

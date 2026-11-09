@@ -22,10 +22,6 @@ type NotifyConfig struct {
 	// the default is on. Default: true.
 	Enabled *bool `toml:"enabled,omitempty"`
 
-	// WebURL is the public address of tuios-web. When it is set, every
-	// notification links to the Inbox item there. Default: empty (no link).
-	WebURL string `toml:"web_url,omitempty"`
-
 	// Content is how much a notification says: "summary" (the title and the
 	// one line the Inbox shows) or "title" (only what kind of item it is and
 	// the session). Default: "summary".
@@ -308,9 +304,6 @@ func (n *NotifyConfig) Destinations() []string {
 	if n.Webhook != nil {
 		out = append(out, "webhook\x00"+n.Webhook.URL+"\x00"+secretOrigin(n.Webhook.Token, n.Webhook.TokenEnv, n.Webhook.TokenFile))
 	}
-	if n.WebURL != "" {
-		out = append(out, "web\x00"+n.WebURL)
-	}
 	// Plain http lets the Inbox's text go to a push service in clear.
 	if n.WebPushInsecure() {
 		out = append(out, "webpush\x00insecure")
@@ -404,11 +397,6 @@ func validateNotify(cfg *UserConfig, result *ValidationResult) {
 	}
 	if c := strings.TrimSpace(n.Content); c != "" && c != NotifyContentSummary && c != NotifyContentTitle {
 		warn("content", fmt.Sprintf("%q is not one of %s. The summary is sent", c, strings.Join(NotifyContentNames, ", ")))
-	}
-	if n.WebURL != "" {
-		if u, err := url.Parse(n.WebURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			warn("web_url", "web_url is not an http or https address. Notifications are sent with no link")
-		}
 	}
 	sources := func(key string, inline Secret, env, file string) {
 		set := 0

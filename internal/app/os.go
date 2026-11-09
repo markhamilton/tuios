@@ -688,8 +688,6 @@ type OS struct {
 	// Terminal.Write drives the kitty and sixel callbacks, which take
 	// kp.mu/sp.mu, so reading ioMu under kp.mu/sp.mu closes a lock cycle.
 	placementScrollbackLen map[string]int
-	// SSH mode fields
-	SSHSession SSHConn // SSH session reference (nil in local mode)
 	// configReloads is this session's subscription to the config file, and
 	// stopConfigWatch ends it. See config_watch.go.
 	configReloads   <-chan tea.Msg
@@ -704,10 +702,6 @@ type OS struct {
 	// code reads and what the tests set. See ClientKind.
 	Client    ClientKind
 	IsSSHMode bool // True when running over SSH
-	// SSHIsLoopback is true when an SSH session arrived over loopback (the
-	// same machine). The human is at this box, so the native clipboard is
-	// theirs and the local fallback is safe; a remote SSH peer is not.
-	SSHIsLoopback bool
 	// Daemon mode fields
 	IsDaemonSession bool               // True when running as part of a persistent daemon session
 	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)

@@ -261,8 +261,6 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Customizable Keybindings**: TOML configuration with Kitty protocol support
 - **Hooks**: Run shell commands on ten events, including window, workspace, attach and agent state changes ([docs](docs/HOOKS.md))
 - **Mouse Support**: Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
-- **SSH Server Mode**: Remote terminal multiplexing
-- **Web Terminal Mode**: Browser-based access (separate `tuios-web` binary)
 - **Themes**: Bundled themes plus custom themes from JSON, with chrome designed for truecolor, 256 and 16 colours and for light themes ([docs](docs/THEMES.md))
 - **Host Colours**: tuios asks your terminal for its colours, passes them to programs that ask, and follows its light and dark switch
 - **Backgrounds**: `appearance.background` paints empty cells with the theme's background or a colour of your own, per surface if you like

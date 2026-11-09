@@ -375,5 +375,3 @@ func (m *MyApp) View() string {
 - [Architecture](ARCHITECTURE.md): Technical architecture
 - [Keybindings](KEYBINDINGS.md): Keyboard shortcuts
 - [Configuration](CONFIGURATION.md): Config file options
-- [Web Terminal](WEB.md): Browser-based access
-- [sip](https://github.com/Gaurav-Gosain/sip): the web serving library behind `tuios-web`

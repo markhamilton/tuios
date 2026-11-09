@@ -254,7 +254,7 @@ func (n *pushNotifier) considerLocked(it pushnotify.Item) {
 	}
 	n.last[key] = now
 	n.hour = append(n.hour, now)
-	msg := pushnotify.Build(it, cfg.ContentLevel(), cfg.WebURL)
+	msg := pushnotify.Build(it, cfg.ContentLevel())
 	select {
 	case n.queue <- msg:
 	default:

@@ -63,7 +63,7 @@ func (m *OS) scrollbackEditorReason() string {
 	switch {
 	case m.BrowserClient:
 		return "The browser cannot open an editor. Use tuios in a terminal to edit the scrollback."
-	case m.RemoteClient && !m.SSHIsLoopback:
+	case m.RemoteClient:
 		return "tuios runs on another machine. It cannot open an editor on your machine."
 	case m.ProcessingRemoteKeys:
 		return "Only your own key opens the scrollback in the editor."

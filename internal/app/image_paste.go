@@ -95,7 +95,7 @@ func (m *OS) imagePasteReason() string {
 	switch {
 	case m.BrowserClient:
 		return "The browser does not give a clipboard image to tuios. Save the image to a file and paste the path."
-	case m.RemoteClient && !m.SSHIsLoopback:
+	case m.RemoteClient:
 		return "tuios runs on another machine, so it cannot read your clipboard image."
 	case m.ProcessingRemoteKeys:
 		return "An image paste that send-keys asked for is not done. Only your own key pastes an image."

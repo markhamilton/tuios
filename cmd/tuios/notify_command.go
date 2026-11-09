@@ -71,7 +71,7 @@ func runNotifyTest(ctx context.Context, w io.Writer, jsonOutput bool) error {
 		_, _ = fmt.Fprintln(w, "Notifications are off (notify.enabled = false). The test sends all the same.")
 	}
 	client := pushnotify.NewClient(n.AllowHTTPRedirects)
-	msg := pushnotify.TestMessage(n.WebURL)
+	msg := pushnotify.TestMessage()
 	results := make([]notifyTestResult, 0, len(providers))
 	failed := false
 	for _, p := range providers {
@@ -95,9 +95,6 @@ func runNotifyTest(ctx context.Context, w io.Writer, jsonOutput bool) error {
 				continue
 			}
 			_, _ = fmt.Fprintf(w, "%s: failed. %s.\n", providers[i].Label(), upperFirst(trimStop(r.Error)))
-		}
-		if msg.Link == "" && n.WebURL != "" {
-			_, _ = fmt.Fprintln(w, "notify.web_url is not an http or https address, so the notification has no link.")
 		}
 	}
 	if failed {

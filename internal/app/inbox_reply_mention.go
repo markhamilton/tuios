@@ -76,7 +76,7 @@ func (m *OS) newReplyMentions(sessionID, windowID string) *replyMentions {
 	// on the daemon's machine, and its file-list call reads that machine's
 	// folders. The person is not at that machine, so the list offers no
 	// files there, as the Copies dialog does not.
-	if m.BrowserClient || (m.RemoteClient && !m.SSHIsLoopback) {
+	if m.BrowserClient || m.RemoteClient {
 		return c
 	}
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {

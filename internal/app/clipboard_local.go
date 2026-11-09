@@ -136,21 +136,17 @@ func hostTerminalLacksOSC52(getenv func(string) string) bool {
 }
 
 // ShouldUseNativeClipboard is the single decision point for the fallback. It is
-// true only when a native tool is reachable AND the human is either at a
-// terminal without OSC 52 on this box or on a loopback SSH session, which is
-// the same person whose clipboard is this machine's.
-func ShouldUseNativeClipboard(loopback bool) bool {
+// true only when a native tool is reachable AND the human is at a terminal
+// without OSC 52 on this box.
+func ShouldUseNativeClipboard() bool {
 	return shouldUseNativeClipboard(detectClipboardToolEnv{
 		getenv:   os.Getenv,
 		lookPath: hasExecutable,
-	}, hostTerminalLacksOSC52(os.Getenv), loopback)
+	}, hostTerminalLacksOSC52(os.Getenv))
 }
 
-func shouldUseNativeClipboard(env detectClipboardToolEnv, hostLacksOSC52, loopback bool) bool {
-	// A loopback SSH session is the same human on the same box: the server
-	// process cannot see the client's terminal, but the native clipboard is
-	// still theirs, so a loopback session is treated like one without OSC 52.
-	if !hostLacksOSC52 && !loopback {
+func shouldUseNativeClipboard(env detectClipboardToolEnv, hostLacksOSC52 bool) bool {
+	if !hostLacksOSC52 {
 		return false
 	}
 	return detectClipboardTool(env) != nil

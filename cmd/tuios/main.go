@@ -129,8 +129,6 @@ func main() {
 func newRootCommand() *cobra.Command {
 	rootCmd := newRootCommandBase()
 
-	sshCmd := newSSHCommand()
-
 	configCmd := newConfigCommand()
 
 	keybindsCmd := newKeybindsCommand()
@@ -2641,7 +2639,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	// The interface flags ride only the commands that draw the interface. They
 	// were persistent on the root once, which buried a read command's few real
 	// flags under twenty appearance ones in its help.
-	registerInterfaceFlags(rootCmd, attachCmd, newCmd, sshCmd, tapePlayCmd)
+	registerInterfaceFlags(rootCmd, attachCmd, newCmd, tapePlayCmd)
 
 	var listAgentsSession string
 	var listAgentsAll bool
@@ -3072,7 +3070,7 @@ command in authorized_keys to make the policy a boundary:
 	}
 	stdioProxyCmd.Flags().StringVar(&stdioProxyAs, "as", "", "Name of the machine the link comes from, for its link policy. Overrides the name that machine gives")
 
-	rootCmd.AddCommand(sshCmd, configCmd, newLookCommand(), keybindsCmd, tapeCmd, layoutCmd, updateCmd)
+	rootCmd.AddCommand(configCmd, newLookCommand(), keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
 	rootCmd.AddCommand(newDetachClientCmd())
@@ -3136,11 +3134,10 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 }
 
 // registerInterfaceFlags registers the appearance and interface flags on each
-// command that renders the TUI: the bare root, attach, new, ssh, and tape
+// command that renders the TUI: the bare root, attach, new, and tape
 // playback. Every registration binds the same interfaceFlags, so the run paths
 // keep reading one set of values while commands that only talk to the daemon
-// stop inheriting flags that mean nothing to them. tuios-web registers the same
-// set through the same cliflags package.
+// stop inheriting flags that mean nothing to them.
 func registerInterfaceFlags(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		interfaceFlags.Register(cmd.Flags())

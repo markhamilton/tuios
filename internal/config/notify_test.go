@@ -31,7 +31,6 @@ func TestNotifySecretsStayOutOfDumps(t *testing.T) {
 	src := `
 [notify]
 content = "loud"
-web_url = "not a url"
 
 [notify.ntfy]
 url = "https://ntfy.example.test/` + topicPath + `"
@@ -98,7 +97,7 @@ token = "` + hookToken + `"
 			}
 		}
 		// The positive half: the validator did look at the table.
-		for _, key := range []string{"content", "web_url", "ntfy.token", "webhook.url"} {
+		for _, key := range []string{"content", "ntfy.token", "webhook.url"} {
 			if !strings.Contains(out, key+":") {
 				t.Errorf("no warning for %s:\n%s", key, out)
 			}

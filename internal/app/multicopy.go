@@ -512,7 +512,7 @@ func (m *OS) MultiCopySaveResolved() (string, error) {
 // multiCopySaveHost is " on <machine>" when the person is not at the machine
 // the file is written on (an SSH or browser client), and empty otherwise.
 func (m *OS) multiCopySaveHost() string {
-	if !m.RemoteClient || m.SSHIsLoopback {
+	if !m.RemoteClient {
 		return ""
 	}
 	host, err := os.Hostname()

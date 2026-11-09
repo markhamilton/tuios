@@ -11,7 +11,6 @@
 package pushnotify
 
 import (
-	"net/url"
 	"strings"
 	"time"
 
@@ -41,8 +40,6 @@ type Message struct {
 	Title string
 	// Body is empty at content level title.
 	Body string
-	// Link opens tuios-web on the item, empty with no web_url.
-	Link string
 	// Urgent is set for an item that waits on the person.
 	Urgent bool
 	// Item is what the webhook carries as fields.
@@ -87,9 +84,9 @@ const (
 )
 
 // Build makes the message for an Inbox item. content is a [notify] content
-// level and webURL is notify.web_url.
-func Build(it Item, content, webURL string) Message {
-	msg := Message{Item: it, Urgent: waits(it.Kind), Link: InboxLink(webURL, it.ID)}
+// level.
+func Build(it Item, content string) Message {
+	msg := Message{Item: it, Urgent: waits(it.Kind)}
 	where := "session " + it.Session
 	if it.Session == "" {
 		where = "tuios"
@@ -118,35 +115,13 @@ func Build(it Item, content, webURL string) Message {
 }
 
 // TestMessage is what tuios notify test sends.
-func TestMessage(webURL string) Message {
+func TestMessage() Message {
 	return Message{
 		Title: "tuios test notification",
 		Body:  "tuios can reach this device. No action is necessary.",
-		Link:  InboxLink(webURL, ""),
 		Item:  Item{Kind: "test"},
 		Test:  true,
 	}
-}
-
-// InboxLink is the tuios-web address that opens the Inbox on an item, or
-// "" with no usable web_url. tuios-web serves it at /inbox.
-func InboxLink(webURL, id string) string {
-	if webURL == "" {
-		return ""
-	}
-	base, err := url.Parse(webURL)
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
-		return ""
-	}
-	if !strings.HasSuffix(base.Path, "/") {
-		base.Path += "/"
-	}
-	base.RawQuery, base.Fragment = "", ""
-	link := base.JoinPath("inbox")
-	if id != "" {
-		link.RawQuery = url.Values{"item": {id}}.Encode()
-	}
-	return link.String()
 }
 
 // Clip cuts s to n bytes on a rune boundary.

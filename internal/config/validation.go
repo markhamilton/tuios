@@ -142,7 +142,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateResumeAgents(cfg, result)
 	validateWindowSize(cfg, result)
 	validateSSHAgent(cfg, result)
-	validateSSH(cfg, result)
 	validateDisplay(cfg, result)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)

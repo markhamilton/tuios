@@ -422,7 +422,7 @@ type dropSentMsg struct {
 // through as it always did. A pane on this machine is never touched.
 func (m *OS) DropPaste(text string) tea.Cmd {
 	w := m.GetFocusedWindow()
-	if w == nil || m.BrowserClient || (m.RemoteClient && !m.SSHIsLoopback) || !m.IsDaemonSession {
+	if w == nil || m.BrowserClient || m.RemoteClient || !m.IsDaemonSession {
 		return nil
 	}
 	host := w.Host

@@ -102,12 +102,11 @@ func (m *OS) PendingCopyText() string { return m.pendingCopy }
 // clipboard_local.go.
 func (m *OS) nativeClipboardAllowed() bool {
 	// RemoteClient is the canonical "the human is not at this machine" flag in
-	// the ClientKind model. A loopback SSH session is the exception: it is the
-	// same person on the same box, so the native clipboard is still theirs.
-	if m.RemoteClient && !m.SSHIsLoopback {
+	// the ClientKind model.
+	if m.RemoteClient {
 		return false
 	}
-	return ShouldUseNativeClipboard(m.SSHIsLoopback)
+	return ShouldUseNativeClipboard()
 }
 
 // clipboardWriteCmd writes text with the native tool when one applies, and

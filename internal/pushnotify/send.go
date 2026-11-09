@@ -269,9 +269,6 @@ func sendNtfy(ctx context.Context, c *Client, p config.NtfyConfig, m Message) er
 		}
 	}
 	h := []string{"Title: " + headerText(m.Title), "Priority: " + strconv.Itoa(prio), "Tags: tuios"}
-	if m.Link != "" {
-		h = append(h, "Click: "+headerText(m.Link))
-	}
 	if token != "" {
 		h = append(h, "Authorization: Bearer "+token)
 	}
@@ -301,10 +298,6 @@ func sendPushover(ctx context.Context, c *Client, p config.PushoverConfig, m Mes
 		msg = m.Title
 	}
 	form.Set("message", msg)
-	if m.Link != "" {
-		form.Set("url", m.Link)
-		form.Set("url_title", "Open the agents view")
-	}
 	if m.Urgent {
 		form.Set("priority", "1")
 	}
@@ -318,7 +311,6 @@ type WebhookBody struct {
 	Kind    string `json:"kind"`
 	Title   string `json:"title"`
 	Body    string `json:"body,omitempty"`
-	Link    string `json:"link,omitempty"`
 	Urgent  bool   `json:"urgent"`
 	ItemID  string `json:"item_id,omitempty"`
 	Session string `json:"session,omitempty"`
@@ -333,7 +325,7 @@ func sendWebhook(ctx context.Context, c *Client, p config.WebhookConfig, m Messa
 	}
 	data, err := json.Marshal(WebhookBody{
 		Event: "tuios.inbox", Test: m.Test, Kind: m.Item.Kind,
-		Title: m.Title, Body: m.Body, Link: m.Link, Urgent: m.Urgent,
+		Title: m.Title, Body: m.Body, Urgent: m.Urgent,
 		ItemID: m.Item.ID, Session: m.Item.Session, Window: m.Item.Window, Harness: m.Item.Harness,
 	})
 	if err != nil {

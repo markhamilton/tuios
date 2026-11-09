@@ -2336,7 +2336,6 @@ attached. Set one provider or more. Each provider gets every notification.
 
 ```toml
 [notify]
-web_url = "https://term.example.com/"   # tuios-web, for a link to the item
 content = "summary"                     # or "title"
 quiet_active_seconds = 120
 cooldown_seconds = 60
@@ -2367,7 +2366,6 @@ token_env = "TUIOS_HOOK_TOKEN"              # optional, sent as a bearer token
 | Key | Default | What it does |
 | --- | --- | --- |
 | `enabled` | `true` | Turns every notification off when `false`. Nothing is sent without a provider. |
-| `web_url` | empty | The address of tuios-web. Each notification links to `web_url/inbox?item=ID`, which opens the agents view on the item. See [WEB.md](WEB.md#open-the-agents-view-from-a-notification). |
 | `content` | `summary` | `summary` sends the kind, the pane name and the one line the Inbox shows. `title` sends only the kind and the session. |
 | `quiet_active_seconds` | `120` | Holds a notification while you typed into a pane at an attached client in this many seconds. When you stay away that long and the item is still open, tuios sends it. `0` sends at once. |
 | `cooldown_seconds` | `60` | The shortest time between two notifications for the same pane and kind. |
@@ -2386,12 +2384,11 @@ nothing here. That host sends its own.
 ### Providers
 
 - `[notify.ntfy]`: `url` is the topic address. `priority` is 1 to 5. When it
-  is unset, an item that waits for you gets 4 and other items get 3. The
-  link goes in the `Click` header.
+  is unset, an item that waits for you gets 4 and other items get 3.
 - `[notify.pushover]`: your user key and an application token. `url`
   replaces the Pushover API address, for a relay.
 - `[notify.webhook]`: tuios sends a JSON `POST` to `url` with these fields:
-  `event` (`tuios.inbox`), `kind`, `title`, `body`, `link`, `urgent`,
+  `event` (`tuios.inbox`), `kind`, `title`, `body`, `urgent`,
   `item_id`, `session`, `window`, `harness`, and `test` for a test
   notification. At `content = "title"` the body is empty.
 
@@ -2884,42 +2881,6 @@ change it, so no pane can loosen it. The [paste buffers](#paste-buffers) hold
 what you copied, so a pane needs `read` to read them, `write` to change them,
 and both to paste one.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
-
-## SSH server limits
-
-The `[ssh]` section sets the limits of the `tuios ssh` server. The server reads
-it when it starts. The defaults do not stop a normal login.
-
-```toml
-[ssh]
-handshake_timeout = "120s" # time to finish the login; 0 turns the limit off
-idle_timeout = "0"         # close a connection with no traffic for this long; 0 is off
-max_handshakes = 32        # connections that log in at the same time; 0 is no limit
-max_sessions = 64          # sessions open at the same time; 0 is no limit
-```
-
-- `handshake_timeout`: The server closes a connection that does not log in
-  within this time. It is the same as `LoginGraceTime` in OpenSSH. The limit
-  ends when the login is complete, so it does not close a session that you
-  use.
-- `idle_timeout`: The server closes a connection after this time with no
-  traffic in either direction. It is off by default. A session that shows a
-  clock or other output that changes stays open.
-- `max_handshakes`: When this many connections are logging in, the server
-  closes a new connection at once. A connection that is logged in does not
-  count.
-- `max_sessions`: When this many sessions are open, over all connections, the
-  server refuses a new session. The client sees a message. The refused session
-  does not attach to a session and does not open a pane.
-
-A duration is a value such as `90s`, `30m` or `2h`. A value that does not
-parse, or a negative value, gives a warning and the default.
-`tuios ssh --handshake-timeout`, `--idle-timeout`, `--max-handshakes` and
-`--max-sessions` replace these values for one run. The server writes the limits
-it uses to its log when it starts.
-
-Like `[hosts]`, the section is not in `list-options`, and `tuios set-config`
-cannot change it.
 
 ## Move between machines
 

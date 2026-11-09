@@ -97,14 +97,6 @@ type OSOptions struct {
 	// IsSSHMode indicates this is an SSH session.
 	IsSSHMode bool
 
-	// SSHIsLoopback marks an SSH session that arrived over loopback (the
-	// same machine), so its native clipboard is the operator's. See
-	// OS.SSHIsLoopback.
-	SSHIsLoopback bool
-
-	// SSHSession is the SSH session reference (nil in local mode).
-	SSHSession SSHConn
-
 	// ForceGraphicsEnabled skips capability detection for the graphics
 	// passthroughs. Use this in web mode where stdin isn't a real TTY so
 	// GetHostCapabilities can't detect terminal support, but the browser
@@ -243,8 +235,6 @@ func NewOS(opts OSOptions) *OS {
 		Client:          opts.Client,
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
-		SSHSession:      opts.SSHSession,
-		SSHIsLoopback:   opts.SSHIsLoopback,
 		TouchClient:     opts.TouchClient,
 		BrowserPaste:    opts.BrowserPaste,
 		RemoteClient:    opts.RemoteClient,
