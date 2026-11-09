@@ -246,7 +246,7 @@ func (m *OS) dndOn() bool {
 // path a program there offers means nothing here. Phase 4 lifts that with a
 // file transfer. paneIsLocal is the one place that judges this.
 func (m *OS) dndPaneLocal(w *terminal.Window) bool {
-	return m.dndOn() && m.paneIsLocal(w)
+	return m.dndOn() && w != nil
 }
 
 // dndFmt is a message as the log shows it.

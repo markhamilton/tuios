@@ -125,21 +125,6 @@ func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 		t.Errorf("value, source = %v, %v, want none, config from animations_enabled = false", res["value"], res["source"])
 	}
 
-	// A machine linked to this one reads no config file: config.toml holds
-	// command strings that can carry tokens, and get-option needs only the
-	// list capability on a link. It gets the session's override, then the
-	// default, as it did before the file was read.
-	link := dialLink(t, sp)
-	for _, key := range []string{"appearance.background", "notifications.agent.command"} {
-		res = result(t, link.call(t, `{"verb":"get-option","params":{"session":"read","key":"`+key+`"}}`))
-		if res["source"] != "default" {
-			t.Errorf("over a link, %s: value, source = %v, %v, want the default and nothing from config.toml", key, res["value"], res["source"])
-		}
-		if v, _ := res["value"].(string); strings.Contains(v, "s3cret") {
-			t.Errorf("over a link, %s leaked a config.toml value: %q", key, v)
-		}
-	}
-
 	result(t, c.call(t, `{"verb":"set-option","params":{"session":"read","key":"appearance.background","value":"off"}}`))
 	res = get("appearance.background")
 	if res["value"] != "off" || res["source"] != "session" {

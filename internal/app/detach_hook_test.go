@@ -147,7 +147,6 @@ func TestAKilledSessionIsNotADetach(t *testing.T) {
 	}{
 		{"the session was killed", ExitSessionKilled},
 		{"the daemon went away", ExitDaemonLost},
-		{"the link to the host closed", ExitHostLost},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m, marker := detachHookOS(t)

@@ -63,22 +63,6 @@ func setNonZero(t *testing.T, v reflect.Value) {
 	}
 }
 
-// TestHostsAndHooksReachTheDaemon covers the two tables outside [daemon] the
-// daemon owns.
-func TestHostsAndHooksReachTheDaemon(t *testing.T) {
-	uc := config.DefaultConfig()
-	uc.Hosts = map[string]config.HostConfig{"box": {Addr: "box.example"}}
-	uc.Hooks = map[string]any{"after_new_window": "true"}
-
-	got := DaemonConfigFromUser(uc)
-	if len(got.Hosts) != 1 || got.Hosts[0].Name != "box" || got.Hosts[0].Addr != "box.example" {
-		t.Errorf("[hosts] reached the daemon as %+v", got.Hosts)
-	}
-	if got.Hooks == nil {
-		t.Error("the hook table did not reach the daemon; a detached session runs none")
-	}
-}
-
 // TestDaemonConfigFromNilAsksForNothing: no file, no settings, and the
 // daemon's own defaults and TUIOS_* environment stand. The one exception is
 // the approval table, whose defaults include the shipped risk rules: a daemon

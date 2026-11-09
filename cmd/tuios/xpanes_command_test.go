@@ -110,16 +110,12 @@ func TestXpanesSSHEndsTheOptions(t *testing.T) {
 	}
 }
 
-// On another machine, a pane with no command has no argv, so the daemon there
-// starts its own shell. On this machine it is $SHELL.
-func TestXpanesShellOnAnotherMachine(t *testing.T) {
-	if got := xpanesShell("build", "/usr/bin/fish"); got != "" {
-		t.Fatalf("remote shell = %q, want the daemon's", got)
-	}
-	if got := xpanesShell("", "/usr/bin/fish"); got != "/usr/bin/fish" {
+// A pane with no command runs $SHELL, else /bin/sh.
+func TestXpanesShell(t *testing.T) {
+	if got := xpanesShell("/usr/bin/fish"); got != "/usr/bin/fish" {
 		t.Fatalf("local shell = %q", got)
 	}
-	if got := xpanesShell("", ""); got != "/bin/sh" {
+	if got := xpanesShell(""); got != "/bin/sh" {
 		t.Fatalf("local shell without $SHELL = %q", got)
 	}
 	if panes := xpanesPanes([]string{"db1"}, 1, "", "{}", "", xpanesInteractive); len(panes[0].Argv) != 0 {

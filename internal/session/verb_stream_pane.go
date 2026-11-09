@@ -830,3 +830,8 @@ func (p *PTY) sizeAt(seq int64) (int, int) {
 	}
 	return p.spawnW, p.spawnH
 }
+
+// ErrVerbUnknownPane reports a pane that closed while it was being read. It
+// is its own code because the remedy differs from a bad parameter: the pane
+// was real and is gone, so the caller should drop it rather than correct it.
+const ErrVerbUnknownPane = "unknown_pane"

@@ -294,9 +294,6 @@ func TestLaunchGrantsNeverWiden(t *testing.T) {
 	if g, verr := d.launchGrants(&connState{}, []string{"respond", "read"}); verr != nil || *g != GrantRespond|GrantRead {
 		t.Errorf("the person giving respond,read = %v, %v", g, verr)
 	}
-	if _, verr := d.launchGrants(&connState{viaLink: true}, []string{"respond"}); verr == nil {
-		t.Error("a link gave respond")
-	}
 }
 
 func TestNewWindowStartsWithItsGrants(t *testing.T) {
@@ -387,8 +384,8 @@ func TestPaneGrantsSurviveClientSyncAndRestore(t *testing.T) {
 	}
 
 	saved := savedAgentSession("regranted")
-	saved.Windows[3].Grants = []string{"read", "unknown-later"}
-	saved.Windows[4].Grants = []string{"none"}
+	saved.Windows[2].Grants = []string{"read", "unknown-later"}
+	saved.Windows[3].Grants = []string{"none"}
 	restored, err := d.restoreSession(saved)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
@@ -536,46 +533,6 @@ func TestRespondGrantLetsAPaneAnswer(t *testing.T) {
 	resp = callP(c, t, "respond", map[string]any{"session": "a", "window": a2, "action": "approve"})
 	if code := errCode(t, resp); code != ErrVerbNotHuman {
 		t.Errorf("an admin pane without respond answered %s, want not_human as before grants", code)
-	}
-}
-
-// TestAHostedPaneReachesNoSessionHereUnderStrict: a process in a pane this
-// machine runs for another machine belongs to no session here. Under strict
-// its own calls to this daemon reach nothing; under open they are served as
-// before.
-func TestAHostedPaneReachesNoSessionHereUnderStrict(t *testing.T) {
-	d, sp, _, _, b1 := scopeFixture(t)
-	d.setApprovalPeer(func(*connState) (bool, string) { return true, "" })
-	d.hostedPeer = func(*connState) string { return "hp-1" }
-	c := dialVerb(t, sp)
-	result(t, callP(c, t, "capture-pane", map[string]any{"session": "b", "window": b1}))
-
-	setStrict(d)
-	wantForbidden(t, "capture from a hosted pane", callP(c, t, "capture-pane", map[string]any{"session": "b", "window": b1}))
-	wantForbidden(t, "a self report from a hosted pane", callP(c, t, "set-agent-state", map[string]any{"session": "b", "window": b1, "state": "idle"}))
-	got := result(t, callP(c, t, "pane-grants", nil))
-	if got["pane"] != true || got["session"] != "" {
-		t.Errorf("pane-grants from a hosted pane = %v, want a pane with no session", got)
-	}
-
-	// A report as the hosted pane passes the grants, to be sent on to the
-	// machine that owns it. Here the owner's check is what answers: the test
-	// process is not in the pane.
-	d.hostedPanesMu.Lock()
-	if d.hostedPanes == nil {
-		d.hostedPanes = map[string]*hostedPane{}
-	}
-	d.hostedPanes["hp-1"] = &hostedPane{id: "hp-1", window: "owner-win"}
-	d.hostedPanesMu.Unlock()
-	t.Cleanup(func() {
-		d.hostedPanesMu.Lock()
-		delete(d.hostedPanes, "hp-1")
-		d.hostedPanesMu.Unlock()
-	})
-	resp := callP(c, t, "set-agent-state", map[string]any{"window": "owner-win", "state": "idle"})
-	msg, _ := resp["error"].(map[string]any)["message"].(string)
-	if !strings.Contains(msg, "the caller is not in that pane") {
-		t.Errorf("a hosted report was refused before it reached the owner's check: %v", resp)
 	}
 }
 

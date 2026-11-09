@@ -215,7 +215,7 @@ func callerEnv(cs *connState, env map[string]string) ([]string, string, *verbErr
 	if len(env) == 0 {
 		return nil, "", nil
 	}
-	if cs != nil && (cs.viaLink || cs.paneOnly) {
+	if cs != nil && cs.paneOnly {
 		return nil, "", hintedVerbError(ErrVerbForbidden, "env from another machine is refused: its variables describe that machine", &VerbHint{
 			Param:  "env",
 			Detail: "Nothing was started. Call without env, and the program is found on this machine's PATH.",

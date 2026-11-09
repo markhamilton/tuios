@@ -81,7 +81,7 @@ func (m *OS) newReplyMentions(sessionID, windowID string) *replyMentions {
 	}
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
-			if w != nil && w.ID == windowID && w.CwdHost == "" && m.paneIsLocal(w) {
+			if w != nil && w.ID == windowID && w.CwdHost == "" {
 				c.dir = m.paneDir(w)
 			}
 		}
@@ -171,9 +171,6 @@ func (m *OS) mentionNames(skip string) []composer.Mention {
 		out = append(out, composer.Mention{Kind: composer.MentionAgent, Label: addr, Insert: insert, Note: sidebarStateWords(e.State)})
 	}
 	for _, s := range tree.Sessions {
-		if s.Host != "" {
-			continue
-		}
 		for _, w := range s.Children {
 			if agents[w.ID] || w.Title == "" || w.ID == skip {
 				continue

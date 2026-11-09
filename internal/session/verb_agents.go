@@ -10,7 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -350,7 +349,6 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	p.raw = params
 	if p.Select != "" {
 		return d.sendAgentMessageSelect(cs, p)
 	}
@@ -375,13 +373,8 @@ type sendAgentMessageParams struct {
 	// parts, text is ignored. See mailParts.
 	Parts      []queuePart `json:"parts"`
 	HumanNonce string      `json:"human_nonce"`
-	Host       string      `json:"host"`
 	Select     string      `json:"select"`
 	Confirm    string      `json:"confirm"`
-	// raw is the call's params as sent, which a send with host forwards to
-	// the far machine as they are, so an older daemon there sees only the
-	// names the caller used.
-	raw json.RawMessage
 }
 
 // sendAgentMessageSelect sends one message to every pane a selector matches,
@@ -393,9 +386,6 @@ type sendAgentMessageParams struct {
 func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams) (any, *verbError) {
 	if p.To != "" {
 		return nil, invalidParam("to", "select names the recipients, so it takes no to. Drop one or the other")
-	}
-	if p.Host != "" {
-		return nil, invalidParam("host", "select reaches the panes of this machine and its linked hosts by its host: term, so it takes no host. Put a host: term in the selector instead")
 	}
 	if p.Session != "" {
 		return nil, invalidParam("session", "select reaches every session, so it takes no session. Put a session: term in the selector instead")
@@ -443,12 +433,11 @@ func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams)
 // another session by its exact id, for a send by selector, where the sender's
 // pane is in one session and the recipients are in many.
 func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromAnySession bool) (map[string]any, *verbError) {
-	viaLink := cs != nil && cs.viaLink
 	// A message in parts is checked here, and its files are written only
 	// once every other check has passed. Mail to another machine carries
 	// its parts there, and that machine writes them.
 	var filed bool
-	if p.Parts != nil && p.Host == "" {
+	if p.Parts != nil {
 		shown, size, verr := checkParts(p.Parts, agentMsgMaxText)
 		if verr != nil {
 			return nil, verr
@@ -465,12 +454,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 			}
 			if n > agentMsgMaxAttachments {
 				return nil, invalidParam("parts", "a message carries at most 8 attachments, its pastes and images included")
-			}
-			if viaLink && !d.linkPolicy(cs).Allows(config.LinkAllowFiles) {
-				cs.mu.Lock()
-				peer := cs.linkPeer
-				cs.mu.Unlock()
-				return nil, linkFilesRefusal(peer)
 			}
 		} else {
 			p.Text = joined
@@ -490,16 +473,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	}
 	if len(p.Attachments) > agentMsgMaxAttachments {
 		return nil, invalidParam("attachments", "a message carries at most 8 attachments")
-	}
-	// A message for a session on another machine goes over this machine's
-	// link to it, and waits here while the link is down. See host_outbox.go.
-	if p.Host != "" {
-		res, verr := d.sendAgentMessageToHost(cs, p.Host, p.Session, p.To, p.From, p.raw)
-		if verr != nil {
-			return nil, verr
-		}
-		out, _ := res.(map[string]any)
-		return out, nil
 	}
 	// An id past the last one issued names a message that has never existed, so
 	// it is a caller mistake rather than the ring having forgotten. The two are
@@ -522,20 +495,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	msg := AgentMessage{Kind: agentMsgNotice, Text: p.Text, Subject: p.Subject, ReplyTo: p.ReplyTo}
 
 	switch {
-	case viaLink:
-		// The sender is on another machine, so it is not a window here and
-		// its name is not resolved against this session: it is kept as the
-		// label it claimed, and the message is marked with where it came
-		// from. The one name that is honoured is human, because the person
-		// at a client attached through a link is the person at the attached
-		// client. Their reply still carries the origin mark.
-		msg.Origin = AgentOriginLink
-		msg.OriginHost = printableClaim(p.FromHost, agentMsgMaxHostName)
-		if p.From == AgentInboxHuman {
-			msg.From, msg.FromLabel = AgentInboxHuman, AgentInboxHuman
-		} else {
-			msg.FromLabel = printableClaim(p.From, agentMsgMaxSubject)
-		}
 	case p.From != "":
 		id, label, err := d.resolveSender(state, p.From, fromAnySession)
 		if err != nil {
@@ -547,7 +506,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// A process inside a pane of this daemon cannot speak as the person at
 	// all, not even as a claim: whatever it was told, the answer it would be
 	// forging is the one the person gives. See human_origin.go.
-	if msg.From == AgentInboxHuman && !viaLink && !d.mayActAsHuman(cs) {
+	if msg.From == AgentInboxHuman && !d.mayActAsHuman(cs) {
 		return nil, humanForbiddenError("send-agent-message")
 	}
 
@@ -582,12 +541,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// the person passes it on with release-agent-message. The recipient was
 	// resolved above, so a send to a window that does not exist is still
 	// refused rather than held.
-	if viaLink && msg.To != AgentInboxHuman && d.linkPolicy(cs).HoldMail {
-		msg.HeldFor, msg.HeldForLabel = msg.To, msg.ToLabel
-		msg.Held = true
-		msg.Kind = agentMsgDirect
-		msg.To, msg.ToLabel = AgentInboxHuman, AgentInboxHuman
-	}
 
 	for _, path := range p.Attachments {
 		// A path from another machine names a file on this one, and the only
@@ -597,7 +550,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		// exists on this machine. A hosted pane's call (paneOnly) is held to
 		// the same rule: its process, and the daemon that forwarded it, are
 		// on the other machine too.
-		if (viaLink || (cs != nil && cs.paneOnly)) && !d.stash.owns(sess.ID, path) {
+		if (cs != nil && cs.paneOnly) && !d.stash.owns(sess.ID, path) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "attachment "+echoName(path)+": a message from another machine can attach only a stashed file", &VerbHint{
 				Param:   "attachments",
 				Command: "tuios stash put",
@@ -621,9 +574,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// flood from a link cannot spend the anonymous local bucket. The table
 	// of buckets is bounded, and past the bound a link shares one bucket.
 	sender := msg.From
-	if viaLink {
-		sender = queueByLinkPrefix + msg.OriginHost + ":" + msg.FromLabel
-	}
 	if !d.agents.checkRate(sess.Name(), sender) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
 			Command: "tuios read-agent-messages " + sessionArg(sess),
@@ -632,21 +582,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	}
 	// And what other machines can leave waiting is bounded on its own, so a
 	// link cannot fill the ring with mail nobody here asked for.
-	if viaLink {
-		unread, notices := d.agents.linkQueued(sess.Name())
-		if msg.Kind == agentMsgDirect && unread >= agentLinkMaxQueued {
-			return nil, hintedVerbError(ErrVerbRateLimited, "this session holds "+strconv.Itoa(unread)+" unread messages from other machines, which is the cap", &VerbHint{
-				Command: "tuios read-agent-messages",
-				Detail:  "This machine holds a bounded number of unread messages from other machines. Wait for the recipient to read its inbox, then send again.",
-			})
-		}
-		if msg.Kind == agentMsgNotice && notices >= agentLinkMaxQueued {
-			return nil, hintedVerbError(ErrVerbRateLimited, "this session holds "+strconv.Itoa(notices)+" notices from other machines, which is the cap", &VerbHint{
-				Param:  "to",
-				Detail: "A notice from another machine is kept until the ring drops it. Send a message to one window instead.",
-			})
-		}
-	}
 
 	if filed {
 		text, paths, err := d.fileParts(p.Parts)
@@ -1109,12 +1044,7 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 // leaves the line and types nothing.
 func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool, gone <-chan struct{}) (map[string]any, *verbError) {
 	from, fromLabel := "", ""
-	viaLink := cs != nil && cs.viaLink
 	switch {
-	case viaLink:
-		// As in send-agent-message: a caller on another machine is not a
-		// window here, so its name is a label and never resolved.
-		fromLabel = printableClaim(p.From, agentMsgMaxSubject)
 	case p.From != "":
 		fid, flabel, ferr := d.resolveSender(state, p.From, fromAnySession)
 		if ferr != nil {
@@ -1128,9 +1058,6 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		from, fromLabel = fid, flabel
 	}
 	origin := askOrigin{}
-	if viaLink {
-		origin = askOrigin{origin: AgentOriginLink, host: printableClaim(p.FromHost, agentMsgMaxHostName)}
-	}
 	if from != "" && from == target.ID {
 		return nil, hintedVerbError(ErrVerbLoopRefused, "a pane cannot ask itself", &VerbHint{
 			Param:  "window",

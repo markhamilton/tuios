@@ -139,17 +139,16 @@ func (h humanHolder) covers(sessionID string) bool {
 }
 
 // humanNonceHolder finds the attach or presence nonce belongs to, under the
-// sender rules: the sender may act as the person, comes over the same kind
-// of connection, and, where the kernel gave both pids, is the process that
+// sender rules: the sender may act as the person and, where the kernel gave both pids, is the process that
 // holds it. A nil sender is the daemon itself. attachSession, when set,
 // also needs an attach nonce to come from an attach to that session.
 func (d *Daemon) humanNonceHolder(nonce, attachSession string, sender *connState) (humanHolder, bool) {
 	if nonce == "" {
 		return humanHolder{}, false
 	}
-	viaLink, linkHuman, pid := false, false, 0
+	pid := 0
 	if sender != nil {
-		viaLink, linkHuman, pid = sender.viaLink, sender.linkHuman, sender.peerPID
+		pid = sender.peerPID
 	}
 	if !d.mayActAsHuman(sender) {
 		return humanHolder{}, false
@@ -158,8 +157,7 @@ func (d *Daemon) humanNonceHolder(nonce, attachSession string, sender *connState
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		same := cs.viaLink == viaLink && cs.linkHuman == linkHuman &&
-			(pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid)
+		same := (pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid)
 		attach := cs.attached && cs.isTUIClient && (attachSession == "" || cs.sessionID == attachSession) &&
 			cs.humanNonce != "" && subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
 		// A presence from attach-presence is held to the same sender rules

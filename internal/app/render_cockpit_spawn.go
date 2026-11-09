@@ -445,7 +445,7 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		if on {
 			mark, mc, ink = l.g(ckGlyphPicked), pal.AccentBright, pal.Fg
 		}
-		if (i == 0 && !s.spawnCanWorktree() && s.read) || (i == 1 && s.host() != "") {
+		if i == 0 && !s.spawnCanWorktree() && s.read {
 			mc, ink = pal.FgMute, pal.FgMute
 		}
 		x0 := rx
@@ -585,13 +585,13 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		switch {
 		case !mc.up:
 			sub += sepWord() + "not connected"
-		case mc.host == "":
+		default:
 			sub += sepWord() + "this machine"
 		}
 		if p.twoLine {
 			c.textR(right-2, y, load...)
 			end := right - 2
-			if mc.host == "" && agent != "" && s.read {
+			if agent != "" && s.read {
 				if s.agents[s.agent].installed {
 					end = c.textR(right-2, y+1, ckSeg{t: agent + " ready", fg: pal.FgDim})
 				} else {

@@ -4,14 +4,12 @@
 a phone app. `attach-presence` gives a connection the person's `human_nonce`
 without an attach. `tuios pane-view -s S -w W` is the command for
 `stream-pane`: it shows one pane in the terminal it runs in. `attach-presence`
-has no command. Write JSON to `$TUIOS_SOCKET` (`tuios --skill events`). A
-client on another machine uses `tuios stdio-proxy` over ssh.
+has no command. Write JSON to `$TUIOS_SOCKET` (`tuios --skill events`).
 
 ```sh
 tuios pane-view -s work -w build
 tuios list-verbs stream-pane
 tuios list-verbs attach-presence
-tuios stdio-proxy --as phone
 ```
 
 docs/protocol.md has the full contract. This topic is the part an agent needs.

@@ -660,10 +660,6 @@ func hintForeground(window *terminal.Window) string {
 // machine, or "" when it may.
 func (m *OS) hintFileBlocked(window *terminal.Window) string {
 	switch {
-	case window.Host != "":
-		return "The pane runs on another machine."
-	case m.AttachedHost != "":
-		return "This session runs on another machine."
 	case m.IsRemoteClient():
 		return "A remote client can not open files."
 	case slices.Contains(hintRemoteShells, hintForeground(window)):

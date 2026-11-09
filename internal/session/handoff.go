@@ -225,13 +225,6 @@ func (r *handoffRun) prepare() error {
 	}
 	r.undo = append(r.undo, d.pipes.open)
 
-	// handoffRefusal counted the hosted panes, but an open-pane from a link
-	// does not wait on paneLife, so the count and the shut are one step.
-	if n := d.shutHostedPanes(); n > 0 {
-		return hostedRefusal(n)
-	}
-	r.undo = append(r.undo, d.openHostedPanes)
-
 	sessions := d.manager.AllSessions()
 	var refs []handoffPaneRef
 	for _, sess := range sessions {
@@ -242,9 +235,6 @@ func (r *handoffRun) prepare() error {
 			p := sess.GetPTY(w.PTYID)
 			if p == nil {
 				continue
-			}
-			if p.host != "" {
-				return fmt.Errorf("window %s runs on %s, and a pane on another machine cannot be handed over. Close it first", shortID(w.ID), p.host)
 			}
 			refs = append(refs, handoffPaneRef{sess: sess, pty: p, window: w.ID})
 		}
@@ -397,32 +387,11 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 	return nil
 }
 
-// shutHostedPanes refuses new hosted panes and reports how many run. A
-// hosted pane's master is not among the descriptors the exec keeps, so the
-// exec would close its terminal and end the pane on the machine that opened
-// it. When some run, nothing is shut, and the handoff is refused.
-func (d *Daemon) shutHostedPanes() int {
-	d.hostedPanesMu.Lock()
-	defer d.hostedPanesMu.Unlock()
-	if n := len(d.hostedPanes); n > 0 {
-		return n
-	}
-	d.hostedPanesShut = true
-	return 0
-}
-
-// openHostedPanes lets hosted panes open again.
-func (d *Daemon) openHostedPanes() {
-	d.hostedPanesMu.Lock()
-	d.hostedPanesShut = false
-	d.hostedPanesMu.Unlock()
-}
-
 // namedListeners is every listening socket, by the name the manifest gives it.
 func (d *Daemon) namedListeners() map[string]net.Listener {
 	out := map[string]net.Listener{}
 	for name, l := range map[string]net.Listener{
-		"main": d.listener, "link": d.linkListener, "link-human": d.linkHumanListener, "herdr": d.herdrListener,
+		"main": d.listener, "herdr": d.herdrListener,
 	} {
 		if l != nil {
 			out[name] = l

@@ -163,14 +163,12 @@ func (d *Daemon) placeClient(cs *connState, p *AttachPayload) (*Session, string)
 		return d.manager.GetSessionByID(placed), why
 	}
 	var sess *Session
-	if !cs.viaLink {
-		if !p.Served {
-			sess, why = d.paneSession(cs.peerPID)
-		}
-		if sess == nil {
-			if id := seenNestProbe(p.NestProbe); id != "" {
-				sess, why = d.manager.GetSessionByID(id), paneOriginProbe
-			}
+	if !p.Served {
+		sess, why = d.paneSession(cs.peerPID)
+	}
+	if sess == nil {
+		if id := seenNestProbe(p.NestProbe); id != "" {
+			sess, why = d.manager.GetSessionByID(id), paneOriginProbe
 		}
 	}
 	if sess != nil {

@@ -114,11 +114,6 @@ func (d *Daemon) checkpointTarget(cs *connState, sessionName, window string) (*S
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
 	}
-	if target.Host != "" {
-		return nil, WindowState{}, reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its checkpoints are there, not here", &VerbHint{
-			Detail: "Nothing was read or changed. Checkpoints of a pane on another machine are not supported yet. Attach to that machine and use them there.",
-		})
-	}
 	repo, verr := d.paneRepo(sess, target)
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
@@ -297,7 +292,7 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	if verr != nil {
 		return nil, verr
 	}
-	if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && !pa.grants.Has(GrantAdmin) {
+	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		if why := d.typingRefusal(pa, target, true); why != "" {
 			return nil, grantForbidden("restore-checkpoint", pa, why+". A restore writes the files that pane's agent works on")
 		}

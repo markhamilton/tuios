@@ -37,11 +37,8 @@ const (
 	// with respond, without the person's attach nonce. No mode gives it by
 	// default, and admin does not imply it.
 	PaneGrantRespond = "respond"
-	// PaneGrantFiles copies files with tuios cp: a copy whose ends on this
-	// machine are inside the pane's own folder (its worktree, else its
-	// working folder) and whose ends on a host are under that host's home,
-	// and it sees, pauses, resumes and cancels the copies it started. Admin
-	// implies it.
+	// PaneGrantFiles is kept so a config that names it still parses. It gives
+	// nothing on its own since tuios cp was removed. Admin implies it.
 	PaneGrantFiles = "files"
 	// PaneGrantTask adds, claims, finishes, stages, blocks and releases the
 	// task cards of its own session. A pane acts only on the card it holds,

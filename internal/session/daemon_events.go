@@ -90,20 +90,6 @@ const (
 	// to the end returns now. It carries nothing of the file, and it reaches
 	// only a subscriber that names it in types. See verb_agent_transcript.go.
 	EventTranscript = "transcript"
-	// EventTransfer is a change of a copy the daemon runs (transfer.go):
-	// Action is created, state, ended or removed, and Transfer is the job's
-	// row as transfer-list gives it. A copy's state is said once per change.
-	// removed says a copy that ended left the list, by transfer-clear or 30
-	// minutes after it ended, and carries the last row it had.
-	EventTransfer = "transfer"
-	// EventTransferProgress is a copy's row while its bytes move, at most
-	// four times a second per copy. It reaches only a subscriber that names
-	// it in types, and it is not kept for replay: the next one replaces it.
-	EventTransferProgress = "transfer-progress"
-	// EventTransferFile is one file of a copy: Action and File.State are
-	// done, same, skipped, conflict or failed. It reaches only a subscriber
-	// that names it in types, and it is not kept for replay.
-	EventTransferFile = "transfer-file"
 	// EventTML is what a person did on a TML surface that its owner hears:
 	// an emit action, or the close. TML carries the surface, the name and
 	// the value. It reaches only a subscriber that names it in types, and a
@@ -211,10 +197,6 @@ type streamEvent struct {
 	Entry *AgentActivityEntry `json:"entry,omitempty"`
 	// Cursor is a transcript event's agent-transcript cursor.
 	Cursor string `json:"cursor,omitempty"`
-	// Transfer is a transfer or transfer-progress event's copy.
-	Transfer *TransferRow `json:"transfer,omitempty"`
-	// File is a transfer-file event's file.
-	File *TransferFile `json:"file,omitempty"`
 	// TML is a tml-event's surface, name and value.
 	TML *TMLEvent `json:"tml,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
@@ -396,7 +378,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTML: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -561,8 +543,6 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq,
 		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq,
 		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq,
-		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq,
-		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq,
 		filter.types[EventLayoutChanged] && h.lastLayoutSeq > from.afterSeq,
 		filter.types[EventTML] && h.lastTMLSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
@@ -593,12 +573,6 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventTranscript:
 		h.lastTranscriptSeq = ev.Seq
-		return
-	case EventTransferProgress:
-		h.lastProgressSeq = ev.Seq
-		return
-	case EventTransferFile:
-		h.lastFileSeq = ev.Seq
 		return
 	case EventLayoutChanged:
 		// One fires on every step of a dragged split. A subscriber that

@@ -81,7 +81,7 @@ func fromPluginErr(e *herdrplugin.Error) *herdrError { return herdrErr(e.Code, e
 // asks: never from a pane, from a process the daemon started (a plugin's
 // own command included), or over a link.
 func (d *Daemon) herdrPluginTrust(cs *connState, method string) *herdrError {
-	if cs != nil && (cs.viaLink || !d.mayActAsHuman(cs)) {
+	if cs != nil && !d.mayActAsHuman(cs) {
 		return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios")
 	}
 	return nil
@@ -91,9 +91,6 @@ func (d *Daemon) herdrPluginTrust(cs *connState, method string) *herdrError {
 // command runs with the person's rights, so starting one needs what
 // starting a pane needs: admin.
 func (d *Daemon) herdrPluginMayRun(cs *connState) *herdrError {
-	if cs != nil && cs.viaLink {
-		return herdrErr("forbidden", "plugin commands are not run for another machine")
-	}
 	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		return herdrErr("forbidden", "running a plugin command needs the admin grant, and this pane holds "+pa.grants.String())
 	}
@@ -533,9 +530,6 @@ func (d *Daemon) herdrPluginLogList(cs *connState, params json.RawMessage) (any,
 	// that may not run a plugin command may not read what one printed.
 	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		return nil, herdrErr("forbidden", "reading plugin logs needs the admin grant, and this pane holds "+pa.grants.String())
-	}
-	if cs != nil && cs.viaLink {
-		return nil, herdrErr("forbidden", "plugin logs are not read from another machine")
 	}
 	id, herr := pluginIDParam(in.PluginID)
 	if herr != nil {

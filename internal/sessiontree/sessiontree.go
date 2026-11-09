@@ -40,11 +40,6 @@ const (
 	KindSession NodeKind = iota
 	// KindWindow is a window node under a session.
 	KindWindow
-	// KindHost is a federated host's group header. Its rows are the sessions
-	// that machine holds, which follow it in the same list. The session nodes
-	// under it belong to that machine: selecting one attaches it in this client,
-	// and none is ever renamed, moved or deleted from here.
-	KindHost
 	// KindRepo is a repository's group header. Its rows are the worktree
 	// sessions of that repository, which follow it in the same list. See
 	// GroupByRepo in worktree.go.
@@ -137,29 +132,6 @@ type Node struct {
 	// Note is the session's return note, empty for none. Always empty for
 	// window nodes.
 	Note string
-	// Host is the machine a node belongs to, empty for anything on this one. It
-	// is set on a KindHost header and on every session node under it.
-	Host string
-	// HostLink, on a window node, is "reconnecting" while the link to the
-	// machine its process runs on is lost. Empty everywhere else.
-	HostLink string
-	// HostStatus is a KindHost header's link state, as the federation package
-	// names it ("up", "unreachable", "no_daemon", "no_tuios", "incompatible",
-	// "connecting"). Empty on every other node.
-	HostStatus string
-	// HostNote is the one plain sentence a host header shows when it is not up.
-	HostNote string
-	// HostLastOK is when a host last answered, as Unix seconds, zero for never.
-	HostLastOK int64
-	// HostQueued is how many messages wait on this machine for a KindHost
-	// header's link to come back. Zero on every other node.
-	HostQueued int
-	// Global marks the global session's row. The row sits at machine level in
-	// the rail, above the machines, because the session it stands for is not a
-	// session of any one machine: it holds panes from several. It is drawn
-	// like a machine header and it behaves like a session row, so selecting it
-	// attaches the global session.
-	Global bool
 	// Worktree is the git worktree this session sits in, nil for a session
 	// that is not one. It is what puts the row under a repository parent and
 	// labels it with its branch, unless the session is Named.
@@ -260,13 +232,6 @@ type WindowInput struct {
 	// not know. A surface showing panes of a session it is not attached to
 	// reads it off the wire, where an older daemon simply sends nothing.
 	Workspace int
-	// Host is the machine the pane's process runs on, empty for this one.
-	// A session can hold panes from more than one machine, so a list of its
-	// panes has to be able to say which is which.
-	Host string
-	// HostLink is "reconnecting" while the link to Host is lost, empty
-	// otherwise.
-	HostLink string
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -291,9 +256,6 @@ type SessionInput struct {
 	// Restored says this session came back from saved state and has not been
 	// attached to since.
 	Restored bool
-	// Global marks a session meant to hold panes from more than one machine.
-	// The rail files it in its own group rather than under a machine.
-	Global bool
 	// CurrentWorkspace is the workspace this session is showing, or 0 when the
 	// caller does not know.
 	CurrentWorkspace int
@@ -390,7 +352,6 @@ func BuildSession(s SessionInput) Node {
 		WindowCount: s.WindowCount,
 		Workspace:   s.CurrentWorkspace,
 		Restored:    s.Restored,
-		Global:      s.Global,
 		Worktree:    s.Worktree,
 		Named:       s.Named,
 		Space:       s.Space,
@@ -423,8 +384,6 @@ func BuildSession(s SessionInput) Node {
 			Program:      w.Program,
 			IsCurrent:    w.Focused,
 			Workspace:    w.Workspace,
-			Host:         w.Host,
-			HostLink:     w.HostLink,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, node.Subagents, bestRank = w.AgentState, w.DoneSeen, w.Subagents, r

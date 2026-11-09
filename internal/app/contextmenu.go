@@ -35,9 +35,6 @@ const (
 	// CtxTargetWorkspacePill is one workspace tab in the dock's strip. The "+"
 	// tab is not one: it stands for a workspace that does not exist yet.
 	CtxTargetWorkspacePill
-	// CtxTargetMachine is a machine's group header on the rail. What the menu
-	// is about rides in ContextMenu.SessionID, which holds the host name.
-	CtxTargetMachine
 	// CtxTargetRepo is a repository's group header on the rail. What the menu
 	// is about rides in ContextMenu.Repo, which holds the repository's name.
 	CtxTargetRepo

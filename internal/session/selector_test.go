@@ -33,12 +33,12 @@ func TestParseSelectorRefusesWhatIsNotASelector(t *testing.T) {
 
 func TestSelectorMatch(t *testing.T) {
 	codex := SelectorTarget{
-		Host: "local", Session: "api-fan-retry-2", Name: "reviewer", State: "idle",
+		Session: "api-fan-retry-2", Name: "reviewer", State: "idle",
 		Harness: "codex", Cwd: "/home/me/src/api", Group: "fan/retry",
 		Tasks: []string{"t3"}, Stages: []string{"doing"},
 	}
 	blocked := SelectorTarget{
-		Host: "build", Session: "web", Name: "claude", State: "needs_input",
+		Session: "web", Name: "claude", State: "needs_input",
 		Harness: "claude-code", Cwd: "/srv/web", NeedsYou: true,
 	}
 	for _, tc := range []struct {
@@ -61,8 +61,8 @@ func TestSelectorMatch(t *testing.T) {
 		// matches a group term, not even one that matches everything.
 		{"group:*", false, false},
 		{"group:*/*", true, false},
-		{"host:local", true, false},
-		{"host:build", false, true},
+		{"host:local", true, true},
+		{"host:build", false, false},
 		{"name:rev*", true, false},
 		{"cwd:~/src", true, false},
 		{"cwd:~/src/api", true, false},

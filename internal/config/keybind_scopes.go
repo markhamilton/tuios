@@ -73,7 +73,6 @@ const (
 	SectionInbox            = "inbox"
 	SectionInboxPeek        = "inbox_peek"
 	SectionMail             = "mail"
-	SectionTransfers        = "transfers"
 	SectionCopyMode         = "copy_mode"
 	SectionReview           = "review"
 	SectionGlobal           = "global"
@@ -93,7 +92,6 @@ const (
 	ScopeInbox          = "inbox"
 	ScopeInboxPeek      = "inbox.peek"
 	ScopeMail           = "mail"
-	ScopeTransfers      = "transfers"
 	ScopeCopyMode       = "copy"
 	ScopeReview         = "review"
 	ScopePrefix         = "prefix"
@@ -185,13 +183,6 @@ func Scopes(leader string) []Scope {
 		{
 			ID: ScopeMail, Name: "Mailbox",
 			Sections: []string{SectionMail},
-			Reaches:  ReachModal,
-		},
-		{
-			// The Copies panel owns the keyboard while it is up, so p, x and
-			// r mean the copy under the cursor there and nothing else.
-			ID: ScopeTransfers, Name: "Copies",
-			Sections: []string{SectionTransfers},
 			Reaches:  ReachModal,
 		},
 		{
@@ -366,8 +357,6 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.InboxPeek
 	case SectionMail:
 		return k.Mail
-	case SectionTransfers:
-		return k.Transfers
 	case SectionCopyMode:
 		return k.CopyMode
 	case SectionReview:

@@ -283,9 +283,6 @@ var errResumeNothing = errors.New("no resumable conversation")
 // errResumeBusy says the pane's shell does not hold the foreground.
 var errResumeBusy = errors.New("the pane is running a program")
 
-// errResumeRemote says the window's process is on another machine.
-var errResumeRemote = errors.New("the pane is on another machine")
-
 // resumePlan is what a resume of one window would type, and why not when it
 // cannot.
 type resumePlan struct {
@@ -311,9 +308,6 @@ func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 		return resumePlan{}, err
 	}
 	w := state.Windows[idx]
-	if w.Host != "" {
-		return resumePlan{window: w}, errResumeRemote
-	}
 	if w.AgentSessionID == "" {
 		return resumePlan{window: w}, errResumeNothing
 	}
@@ -418,10 +412,6 @@ func (d *Daemon) resumeError(sess *Session, plan resumePlan, err error) *verbErr
 			Verb:    "capture-pane",
 			Command: "tuios capture-pane " + paneArgs(sess, plan.window.ID),
 			Detail:  "resume-agent types only into a pane whose shell is at its prompt, so the command cannot land in an editor or another agent. Quit what runs there, or open a new pane, and try again.",
-		})
-	case errors.Is(err, errResumeRemote):
-		return hintedVerbError(ErrVerbNotResumable, "the pane runs on "+echoName(plan.window.Host)+", resume it there", &VerbHint{
-			Detail: "The conversation belongs to the machine the pane runs on.",
 		})
 	case errors.Is(err, errResumeNothing):
 		return hintedVerbError(ErrVerbNotResumable, "no conversation is recorded for this pane", &VerbHint{

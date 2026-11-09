@@ -151,7 +151,7 @@ func runQueuePrompt(sessionName, window, text string, jsonOutput bool) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Println(describeQueued(res.ID, window, res.Position, res.Delivering) + t.on())
+	fmt.Println(describeQueued(res.ID, window, res.Position, res.Delivering))
 	return nil
 }
 
@@ -207,7 +207,7 @@ func runQueueList(w io.Writer, sessionName, window string, jsonOutput bool) erro
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	return printQueueRows(w, res.Session+t.on(), res.Entries)
+	return printQueueRows(w, res.Session+"", res.Entries)
 }
 
 // printQueueRows writes list-queued's entries as a table. Every field but the
@@ -264,11 +264,11 @@ func runQueueRemove(sessionName, window, id string, all, jsonOutput bool) error 
 	}
 	switch len(res.Cancelled) {
 	case 0:
-		fmt.Printf("Nothing was dropped%s. %d still queued.\n", t.on(), res.Queued)
+		fmt.Printf("Nothing was dropped. %d still queued.\n", res.Queued)
 	case 1:
-		fmt.Printf("Dropped %s%s. %d still queued.\n", plainLine(res.Cancelled[0]), t.on(), res.Queued)
+		fmt.Printf("Dropped %s. %d still queued.\n", plainLine(res.Cancelled[0]), res.Queued)
 	default:
-		fmt.Printf("Dropped %d messages%s. %d still queued.\n", len(res.Cancelled), t.on(), res.Queued)
+		fmt.Printf("Dropped %d messages. %d still queued.\n", len(res.Cancelled), res.Queued)
 	}
 	return nil
 }

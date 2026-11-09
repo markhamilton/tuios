@@ -89,7 +89,6 @@ var settingLabels = map[string]string{
 	"appearance.confirm_quit":             "Confirm quit",
 	"appearance.session_colors":           "Session colors",
 	"appearance.session_border":           "Session border",
-	"appearance.global_session":           "Global session",
 	"appearance.git_dirty":                "Git dirty counts",
 	"appearance.links":                    "Links",
 	"appearance.link_click":               "Link click",

@@ -21,7 +21,6 @@ import (
 type attentionRow struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
-	Host      string `json:"host"`
 	Session   string `json:"session"`
 	Window    string `json:"window"`
 	Workspace int    `json:"workspace"`
@@ -39,16 +38,6 @@ type attentionRow struct {
 	RequestID string `json:"request_id"`
 	// Options are the answers a question ask-human put takes.
 	Options []string `json:"options"`
-	// Stale marks an item of a linked host whose link is down, last heard
-	// from at SeenAt (unix nanoseconds).
-	Stale  bool  `json:"stale"`
-	SeenAt int64 `json:"seen_at"`
-	// HeldFor is set on mail another machine sent an agent here that the
-	// link policy held for the person; HeldID is its message id.
-	HeldFor string `json:"held_for"`
-	HeldID  uint64 `json:"held_id"`
-	// ForHost is the machine an outbox item's mail waits for.
-	ForHost string `json:"for_host"`
 	// SnoozedUntil is set on an item the person snoozed, listed with
 	// --snoozed: when it opens again (unix nanoseconds), -1 for when it
 	// changes.
@@ -103,7 +92,7 @@ func waitedFor(since int64, now time.Time) string {
 	}
 }
 
-func runListAttention(sessionName, host string, kinds []string, selector string, snoozed, jsonOutput bool) error {
+func runListAttention(sessionName string, kinds []string, selector string, snoozed, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -112,9 +101,6 @@ func runListAttention(sessionName, host string, kinds []string, selector string,
 	params := map[string]any{}
 	if sessionName != "" {
 		params["session"] = sessionName
-	}
-	if host != "" {
-		params["host"] = host
 	}
 	if len(kinds) > 0 {
 		params["kinds"] = kinds
@@ -167,9 +153,6 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 			fmt.Fprintf(w, "%s\n", heading)
 		}
 		where := plainLine(it.Session)
-		if it.Host != "" {
-			where = plainLine(it.Host) + ":" + where
-		}
 		name := plainLine(it.Name)
 		if name == "" && it.Window != "" {
 			name = shortWindowID(it.Window)
@@ -177,13 +160,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if name != "" {
 			where += "/" + name
 		}
-		if it.Kind == session.AttentionOutbox {
-			where = "for " + plainLine(it.ForHost)
-		}
 		summary := plainLine(it.Summary)
-		if it.HeldID != 0 {
-			summary = fmt.Sprintf("[held for %s, message %d] %s", plainLine(it.HeldFor), it.HeldID, summary)
-		}
 		if it.Count > 1 {
 			summary = strings.TrimSpace(summary + fmt.Sprintf(" (%d)", it.Count))
 		}
@@ -211,14 +188,6 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if it.SnoozedUntil != 0 {
 			fmt.Fprintf(w, "  [%s]", snoozedUntilWords(it.SnoozedUntil, now))
 		}
-		if it.Stale {
-			// What that machine said last. Nobody can check it now.
-			seen := "never"
-			if it.SeenAt > 0 {
-				seen = waitedFor(it.SeenAt, now) + " ago"
-			}
-			fmt.Fprintf(w, "  [unreachable, seen %s]", seen)
-		}
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "\n%d waiting. Open the agents view with the prefix key then i, or jump to the oldest with the prefix key then o.\n", waiting)
@@ -239,7 +208,7 @@ func snoozedUntilWords(until int64, now time.Time) string {
 
 // newListAttentionCommand is `tuios list-attention`.
 func newListAttentionCommand() *cobra.Command {
-	var sessionName, host, selector string
+	var sessionName, selector string
 	var kinds []string
 	var jsonOutput, snoozed bool
 	cmd := &cobra.Command{
@@ -247,11 +216,9 @@ func newListAttentionCommand() *cobra.Command {
 		Short: "List what is waiting for you in every session: the Inbox",
 		Long: `List the Inbox: every approval and question an agent is blocked on, mail to
 you, errored agents, conversations a restart left to resume, and finished turns
-nobody has looked at, in every session on this machine and on every linked
-host. Rows are grouped Approvals, Questions, Mail, Errored, Resume, Finished,
-oldest first, with how long each has waited. A row of another machine is named
-host:session, and a row of a machine whose link is down says when it was last
-heard from.
+nobody has looked at, in every session. Rows are grouped Approvals,
+Questions, Mail, Errored, Resume, Finished, oldest first, with how long each has
+waited.
 
 An item closes by itself when what opened it stops being true: the agent
 leaves needs_input or errored, the mail is read, a client focuses the pane
@@ -267,9 +234,6 @@ change.`,
   # Only what blocks an agent
   tuios list-attention --kind approval --kind question
 
-  # Only what waits on the build host
-  tuios list-attention --host build
-
   # Only the codex agents of one fan-out
   tuios list-attention --select 'harness:codex group:fan/add-retry'
 
@@ -280,12 +244,11 @@ change.`,
   tuios list-attention --snoozed`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListAttention(sessionName, host, kinds, selector, snoozed, jsonOutput)
+			return runListAttention(sessionName, kinds, selector, snoozed, jsonOutput)
 		},
 	}
 	cmd.Flags().StringVar(&selector, "select", "", "Only the items a selector matches: space-separated key:value terms, such as 'harness:codex needs:you'")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session on this machine, or on --host (default: every session)")
-	cmd.Flags().StringVar(&host, "host", "", "Only this machine: local, or a linked host by name (default: every machine)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session (default: every session)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "Only these kinds: "+strings.Join(session.AttentionKindNames, ", "))
 	cmd.Flags().BoolVar(&snoozed, "snoozed", false, "Also list the items snoozed in the Inbox, after the rest")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")

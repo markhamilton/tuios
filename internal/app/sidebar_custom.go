@@ -204,15 +204,10 @@ func (m *OS) railContextNow() railContext {
 	ctx := railContext{}
 	if w := m.GetFocusedWindow(); w != nil {
 		ctx.PaneID = w.ID
-		ctx.Remote = m.AttachedHost != ""
-		switch {
-		case ctx.Remote, w.Cwd != "" && w.Host == "":
+		if w.Cwd != "" {
 			ctx.PaneDir = w.Cwd
-		case w.Host == "":
+		} else {
 			ctx.PanePgid = w.ShellPgid
-		default:
-			// A pane on another machine in a session on this one: nothing
-			// here can say where it is, so the run is told the home folder.
 		}
 	}
 	w := m.GetSidebarWidth()
@@ -239,8 +234,6 @@ func (ctx railContext) folder() string {
 	switch {
 	case ctx.PaneID == "":
 		return ""
-	case ctx.Remote:
-		return remoteFolder(ctx.PaneDir)
 	}
 	raw := ctx.PaneDir
 	if raw == "" && ctx.PanePgid != 0 {

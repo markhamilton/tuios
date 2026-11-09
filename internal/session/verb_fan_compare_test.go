@@ -146,20 +146,6 @@ func TestFanVerbsReachOnlyTheSiblingsThePaneReaches(t *testing.T) {
 	}
 }
 
-// TestVerifyFanEnvIsRefusedOverALink: a link may not send its machine's
-// variables, the rule fan has.
-func TestVerifyFanEnvIsRefusedOverALink(t *testing.T) {
-	d, sp, repo := worktreeFixture(t)
-	c := dialVerb(t, sp)
-	names := fakeFan(t, d, c, repo, "fan/retry", 1, "")
-	link := dialLink(t, sp)
-	mustRefuse(t, callP(link, t, "verify-fan", map[string]any{"session": names[0], "command": "true", "env": map[string]any{"A": "b"}}),
-		ErrVerbForbidden, "verify-fan with env over a link")
-	if v := d.manager.GetSession(names[0]).Worktree().Verify; v != nil {
-		t.Errorf("a refused call started a check: %+v", v)
-	}
-}
-
 // TestCompareFanRefusalNamesOnlyFansThePaneReaches: a pane that names a
 // worktree session outside any fan gets a hint listing the fan sessions it
 // reaches, and no name of a fan it could not reach.

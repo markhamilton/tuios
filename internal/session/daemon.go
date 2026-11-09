@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
@@ -41,13 +40,6 @@ type Daemon struct {
 	// others in its own [hosts] table.
 	instance string
 	listener net.Listener
-	// linkListener is the second socket, the one `tuios stdio-proxy` dials
-	// for a connection that arrived over another machine's link. Every
-	// connection accepted on it is marked viaLink; see LinkSocketPath.
-	linkListener net.Listener
-	// linkHumanListener is the third socket, the one the proxy dials for a
-	// stream the hub vouched for. See LinkHumanSocketPath.
-	linkHumanListener net.Listener
 	// herdrListener is the socket harnesses that speak herdr's pane state
 	// protocol report to. See herdr_compat.go.
 	herdrListener net.Listener
@@ -110,7 +102,6 @@ type Daemon struct {
 	personBudget   *memBudget
 	peerBudget     *memBudget
 	openConns      atomic.Int64
-	openLinkConns  atomic.Int64
 	// refusalsTold counts the refused connections being told why now.
 	refusalsTold atomic.Int64
 	// connRefusals counts the connections refused over maxConnections since
@@ -165,30 +156,14 @@ type Daemon struct {
 	// are not loaded.
 	agentHooks *agentHookGate
 
-	// federation holds the outbound links to the hosts named in config. It is
-	// nil when no hosts are configured, which is the default, and every reader
-	// checks. Links are outbound only: a remote daemon never dials this one and
-	// never gets a channel into it (federation package, section 1 of the design
-	// document).
-	federation *federation.Manager
-	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
-	hostDial federation.Dialer
-	// fleet follows the agents and the Inbox of every linked host over the
-	// links, so the Inbox and the host listings cover every machine. See
-	// host_fleet.go.
-	fleet *hostFleet
-	// federationMu guards federationProblems and the hosts watcher, both of
-	// which a config reload rewrites while a verb is reading them.
-	federationMu sync.Mutex
-	// federationProblems are the config entries that were dropped, kept so the
-	// list-hosts verb can report them instead of leaving the user to wonder
-	// where a host went.
-	federationProblems []string
-	// hostsWatcher follows the config file so an edit to the [hosts] table
-	// reaches the links without a restart. Nil when no config path is set,
-	// which is every test that builds a DaemonConfig by hand.
-	hostsWatcher *config.Watcher
-	// configPath is the file hostsWatcher follows.
+	// configWatchMu guards configWatcher, which a shutdown clears while the
+	// watcher may be delivering.
+	configWatchMu sync.Mutex
+	// configWatcher follows the config file so an edit reaches the daemon
+	// without a restart. Nil when no config path is set, which is every test
+	// that builds a DaemonConfig by hand.
+	configWatcher *config.Watcher
+	// configPath is the file configWatcher follows.
 	configPath string
 	// plugins runs the enabled herdr plugins. See plugin_host.go.
 	plugins *pluginHost
@@ -207,33 +182,9 @@ type Daemon struct {
 	// panes_may_allow, and the person has not applied it
 	// (narrowApprovalPolicy).
 	approvalsWaiting atomic.Bool
-	// hostsWaiting is set when a config reload changed [hosts] in a way that
-	// dials more or gives a linked machine more, and only what narrows was
-	// applied (reloadHosts, reloadLinkPolicies).
-	hostsWaiting atomic.Bool
 	// grantsWidenedAtStart is set when panes on the default hold more at
 	// this start than at the last run (checkGrantsSinceLastRun).
 	grantsWidenedAtStart atomic.Bool
-
-	// hostedPanes are the panes this daemon runs on another machine's behalf,
-	// keyed by the id open-pane returned. They are held here rather than on a
-	// Session because a hosted pane belongs to no session on this machine: the
-	// session it is a window of is on the daemon that asked for it. See
-	// hosted_pane.go.
-	hostedPanes   map[string]*hostedPane
-	hostedPanesMu sync.Mutex
-	// hostedPanesShut refuses a new hosted pane while a live upgrade runs,
-	// whose exec would close its terminal. See shutHostedPanes.
-	hostedPanesShut bool
-
-	// outbox holds mail for machines whose link is down, and delivers it when
-	// the link comes back. See host_outbox.go.
-	outbox *hostOutbox
-
-	// linkPolicies is the [hosts] table the policy for a machine linked to
-	// this one is resolved from. Nil means no table: every link gets the
-	// built-in default. See link_policy.go.
-	linkPolicies linkPolicyPointer
 
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session
@@ -283,9 +234,6 @@ type Daemon struct {
 	// reply a test waits on is written with writev, which gives the race
 	// detector no happens-before edge.
 	approvalPeer atomic.Pointer[peerPlacer]
-	// hostedPeer names the hosted pane a caller runs in, for pane grants.
-	// Nil walks the process table (hostedPaneOfPeer); a test sets it.
-	hostedPeer func(cs *connState) string
 
 	// protocolPanes holds the windows start-agent --protocol opened, window
 	// id to protocol. See agent_protocol.go.
@@ -300,11 +248,6 @@ type Daemon struct {
 	// which is why the daemon deletes them on session deletion, on shutdown, and
 	// again on the next start. See stash.go.
 	stash *stashStore
-	// transfers holds the copies this daemon runs. See transfer.go.
-	transfers *transferManager
-	// linkFiles counts the write streams and part files each linked machine
-	// has open here. See verb_files_limits.go.
-	linkFiles linkFileUsage
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
@@ -318,10 +261,6 @@ type Daemon struct {
 	// uploads are the buffers being sent in parts. See verb_buffers.go.
 	uploadsMu sync.Mutex
 	uploads   map[*connState]*bufferUpload
-
-	// bundles holds the worktree transfers bundle-worktree has open. Its zero
-	// value is ready. See verb_bundle_worktree.go.
-	bundles bundleStore
 
 	// queue holds the messages waiting to be typed to an agent when it comes
 	// to rest. Its zero value is ready. See agent_queue.go.
@@ -668,36 +607,8 @@ type connState struct {
 	// cleared after every reply.
 	replyFailed func()
 
-	// viaLink says this connection was accepted on the link socket, which
-	// only the proxy on this machine dials, for a stream that came in over a
-	// hub's link. It is a fact about the connection, not a claim in any
-	// message: whatever arrives on it was written on another machine, and
-	// the mailbox marks what it stores from it as such.
-	viaLink bool
-
-	// linkHuman says this connection was accepted on the link-human socket:
-	// it came over a hub's link, and the hub vouched that the process that
-	// opened it on the hub's machine is not inside one of the hub's panes. It
-	// implies viaLink. See human_origin.go.
-	linkHuman bool
-
-	// linkPeer is the machine a link connection came from, as the link-peer
-	// handshake named it; empty when it named none. linkPeerSet says the
-	// handshake ran, linkPinned that the name was pinned on this machine with
-	// stdio-proxy --as, and linkServed that something other than the
-	// handshake has run, after which the peer can no longer be named. All
-	// four are guarded by mu. See link_policy.go.
-	linkPeer    string
-	linkPeerSet bool
-	linkPinned  bool
-	// linkAgentSock is the agent socket stdio-proxy reported in the
-	// link-peer handshake, "" when the link forwards none.
-	linkAgentSock string
-	linkServed    bool
-
 	// peerPID is the pid of the process on the other end, as the kernel
-	// recorded it at connect time, or 0 where the platform does not say. For
-	// a link connection it is the pid of this machine's stdio-proxy.
+	// recorded it at connect time, or 0 where the platform does not say.
 	peerPID int
 	// peerUID is the uid of that process, and peerUIDOK says the kernel gave
 	// it. Read at accept. The display follow takes a display only from a
@@ -913,10 +824,6 @@ type DaemonConfig struct {
 	// restart restores it. The zero value saves nothing; a real starter fills
 	// it through DaemonConfigFromUser.
 	History HistoryPolicy
-	// Hosts are the federated peers from the [hosts] config table. Empty, the
-	// default, means the daemon holds no links and every federation verb reports
-	// an empty table.
-	Hosts []federation.Host
 	// Hooks is the [hooks] table from the user config. Empty, the default, means
 	// the daemon fires no hooks and a detached session runs no commands.
 	Hooks map[string]any
@@ -926,14 +833,10 @@ type DaemonConfig struct {
 	// AgentHookCommand is [notifications.agent].command, the shorthand spelling
 	// of an after-agent-state hook.
 	AgentHookCommand string
-	// ConfigPath is the user config file the daemon follows for changes to the
-	// [hosts] table. DaemonConfigFromUser fills it, so every real starter has
-	// it and a hand-built config in a test does not.
+	// ConfigPath is the user config file the daemon was started with.
+	// DaemonConfigFromUser fills it, so every real starter has it and a
+	// hand-built config in a test does not.
 	ConfigPath string
-	// HostDial opens the transport to a host. Nil, the default, runs ssh. A
-	// test sets it to reach a second daemon in the same process without an ssh
-	// server.
-	HostDial federation.Dialer
 	// RespondFromShell is [daemon] respond_from_shell: let a caller whose
 	// process the kernel names, and which runs outside every pane, answer a
 	// prompt with respond without an attach nonce. False, the default, leaves
@@ -942,10 +845,6 @@ type DaemonConfig struct {
 	// Approvals is the [agents.approvals] table. The zero value is the
 	// default: no harness holds a prompt for the Inbox.
 	Approvals ApprovalPolicy
-	// LinkPolicies is the [hosts] table as the machine a link arrives at reads
-	// it: what each machine linked to this one may do here. Nil gives every
-	// link the built-in default. See link_policy.go.
-	LinkPolicies map[string]config.HostConfig
 	// RecapTestPatterns is [agents.recap] test_patterns: the commands an
 	// agent-activity recap reads as a test run. Nil means the defaults.
 	RecapTestPatterns []string
@@ -1028,7 +927,6 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
 	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
-	d.SetLinkPolicies(cfg.LinkPolicies)
 	d.manager.SetPanePermissions(cfg.Permissions)
 	d.SetQueueMax(cfg.QueueMax)
 	// Stored, not set: the wake latches are made below.
@@ -1036,11 +934,9 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
 	d.SetCheckpoints(cfg.Checkpoints)
-	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
-	d.transfers = newTransferManager(d)
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
@@ -1077,47 +973,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 
 	d.configPath = cfg.ConfigPath
 	d.plugins = newPluginHost(d, cfg.Plugins)
-	d.hostDial = cfg.HostDial
-	d.fleet = newHostFleet(d)
-	d.setupFederation(cfg.Hosts)
 
 	return d
-}
-
-// setupFederation builds the host table and the link manager. Nothing is dialed
-// here; Start launches the supervisors.
-//
-// The manager is built even with no hosts configured, which is the default. It
-// costs a struct and no goroutine, and it is what lets a host added later reach
-// a running daemon: a nil manager would have to be built from the config
-// reload, and the verbs read the pointer without a lock.
-func (d *Daemon) setupFederation(hosts []federation.Host) {
-	table, problems := federation.NewTable(hosts)
-	for _, p := range problems {
-		d.federationProblems = append(d.federationProblems, p.Error())
-		log.Printf("[FEDERATION] %v", p)
-	}
-	dial := d.hostDial
-	if dial == nil {
-		// TUIOS_SSH names the ssh program to run. It exists for a machine where
-		// ssh is not on the daemon's PATH, and it is what lets the link layer be
-		// exercised end to end without an ssh server.
-		dial = federation.SSHDialerEnv(os.Getenv("TUIOS_SSH"), d.linkSSHEnv)
-	}
-	d.federation = federation.New(table, federation.Options{
-		Dial:            dial,
-		ClientName:      "tuios-daemon",
-		ClientVersion:   d.version,
-		VerbProtocol:    VerbProtocolVersion,
-		MinVerbProtocol: MinVerbProtocolVersion,
-		// The name every host this one links to resolves its policy for this
-		// machine from. See link_policy.go.
-		Self: linkSelfName(d.hostedPaneHostName()),
-		Log: func(format string, args ...any) {
-			log.Printf("[FEDERATION] "+format, args...)
-		},
-		OnStatus: d.fleet.onStatus,
-	})
 }
 
 // onSessionCreated installs a session's event and state sinks and publishes a
@@ -1137,23 +994,6 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	if d.transcriptWatcher != nil {
 		s.SetTranscriptWatcher(d.transcriptWatcher)
 	}
-	// The links a window on another machine is opened over. The nil check is
-	// not defensive noise: d.federation is a typed pointer, and handing a nil
-	// one to an interface parameter makes an interface that is not nil and
-	// panics on first use, so the session would think it had links.
-	if d.federation != nil {
-		s.SetFederation(d.federation)
-	}
-	// A window opened on another machine gets a report channel, so an agent
-	// in it can report its state and read its mail. See hosted_calls.go.
-	s.SetRemotePaneHook(func(windowID string, p *remotePane) {
-		if d.ctx.Err() != nil {
-			return
-		}
-		d.goTracked(func() {
-			d.serveHostedCalls(s, windowID, p)
-		})
-	})
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
@@ -1199,7 +1039,6 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				pty.takeAgentProgress()
 				pty.takeAgentNotify()
 				s.noteCwdOnOutput(pty)
-				pty.remoteForeground()
 			}
 		} else if ev.Type == EventOutput {
 			if pty := s.GetPTY(ev.PTYID); pty != nil {
@@ -1230,10 +1069,6 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// pane whose bytes are arriving, so a session sitting idle pays
 				// nothing. See pane_cwd_check.go.
 				s.noteCwdOnOutput(pty)
-				// And what it is running, on the same terms and its own
-				// slower clock. A pane that has just written is a pane where
-				// something may have started or finished.
-				pty.remoteForeground()
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
 					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
 				}
@@ -1487,16 +1322,8 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
-	// The link socket. It is optional: a daemon that cannot bind it still
-	// serves, and the proxy falls back to the main socket, at the cost of a
-	// message from another machine not being marked as one. The start lock
-	// is held, so a stale file here is a dead daemon's and is removed.
-	d.linkListener = listenLinkSocket(LinkSocketPath(socketPath), "Mail from other machines is not marked.")
-	// The link-human socket is optional in the same way. Without it a proxy
-	// falls back to the plain link socket, and no attach through a link can
-	// verify a reply from human, which is the safe way to lose it.
-	d.linkHumanListener = listenLinkSocket(LinkHumanSocketPath(socketPath), "A reply from human over a link is not verified.")
-	// The herdr protocol socket is optional in the same way. Without it no
+	// The herdr protocol socket is optional: a daemon that cannot bind it
+	// still serves. Without it no
 	// pane is told it may report there, and the screen rules carry those
 	// harnesses as before.
 	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
@@ -1550,11 +1377,6 @@ func (d *Daemon) Start() error {
 	// A default that widened while the daemon was down is said now, when
 	// the Inbox can show it.
 	d.checkGrantsSinceLastRun()
-	// A host entry dropped at start is said now, when the Inbox can show it.
-	d.noteHostProblems(d.configProblems())
-	// Mail still waiting for another machine comes back with its Inbox items,
-	// and goes when that machine's link comes up.
-	d.outbox.load(outboxPath())
 	// Review notes come back for the panes that came back.
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 
@@ -1590,23 +1412,12 @@ func (d *Daemon) serveHerdrOn(l net.Listener, socketPath string) {
 }
 
 // serve starts everything that runs once the sessions are in place: the
-// links, the watchers, the plugins and the accept loops. Start runs it after a
-// restore, and adopt after taking over a predecessor's panes.
+// watchers, the plugins and the accept loops. Start runs it after a restore,
+// and adopt after taking over a predecessor's panes.
 func (d *Daemon) serve() {
-	// The links come up in the background. Start returns at once whatever the
-	// remote machines are doing, so a host that is powered off cannot delay the
-	// daemon's own socket by one millisecond.
-	if d.federation != nil {
-		d.federation.Start(d.ctx)
-	}
-	// The copies the previous daemon did not finish go on from their parts,
-	// once the links are on their way up. See transfer_journal.go.
-	d.transfers.load()
-	// Each linked host's agents are followed from here on. See host_fleet.go.
-	d.fleet.start(d.ctx)
-	// The config file is followed from here on, so a host added while the daemon
-	// runs reaches the links without a restart.
-	d.startHostsWatch()
+	// The config file is followed from here on, so a change reaches the daemon
+	// without a restart.
+	d.startConfigWatch()
 	// The Inbox's push notifications follow the event stream from here on.
 	d.notify.start()
 	// The enabled plugins' startup commands run once the daemon is up, and
@@ -1626,12 +1437,6 @@ func (d *Daemon) serve() {
 // stops them without closing a socket.
 func (d *Daemon) startAccepting() {
 	d.acceptWG.Go(d.acceptLoop)
-	if d.linkListener != nil {
-		d.acceptWG.Go(d.acceptLinkLoop)
-	}
-	if d.linkHumanListener != nil {
-		d.acceptWG.Go(func() { d.acceptLinkOn(d.linkHumanListener, true) })
-	}
 	if d.herdrListener != nil {
 		d.acceptWG.Go(func() { d.acceptHerdrLoop(d.herdrListener) })
 	}
@@ -1665,7 +1470,7 @@ func (d *Daemon) resumeAccepting() {
 // listeners is every socket the daemon accepts on.
 func (d *Daemon) listeners() []net.Listener {
 	var out []net.Listener
-	for _, l := range []net.Listener{d.listener, d.linkListener, d.linkHumanListener, d.herdrListener} {
+	for _, l := range []net.Listener{d.listener, d.herdrListener} {
 		if l != nil {
 			out = append(out, l)
 		}
@@ -1778,14 +1583,6 @@ func (d *Daemon) shutdown() error {
 		if d.listener != nil {
 			_ = d.listener.Close()
 		}
-		if d.linkListener != nil {
-			_ = d.linkListener.Close()
-			_ = os.Remove(LinkSocketPath(d.manager.SocketPath()))
-		}
-		if d.linkHumanListener != nil {
-			_ = d.linkHumanListener.Close()
-			_ = os.Remove(LinkHumanSocketPath(d.manager.SocketPath()))
-		}
 		// The plugins' processes stop with the daemon that started them.
 		d.plugins.stop()
 		if d.herdrListener != nil {
@@ -1799,26 +1596,8 @@ func (d *Daemon) shutdown() error {
 		// come and gone.
 		_ = d.transcriptWatcher.Close()
 
-		// The config watch ends before the links do, so a save landing during
-		// shutdown cannot dial a host the daemon is about to drop.
-		d.stopHostsWatch()
+		d.stopConfigWatch()
 		d.notify.stop()
-
-		// Panes running here on another machine's behalf end with the daemon
-		// that was relaying them. Their owner is on the far side of a link
-		// that is about to go, so a survivor would be a shell on a pty nobody
-		// can reach.
-		d.closeHostedPanes()
-
-		// The streams that follow the linked hosts end before the links do,
-		// so none of them reads a closing link as a host going away.
-		d.fleet.stop()
-
-		// Every ssh child is killed here. A link left running would outlive the
-		// daemon that owns it.
-		if d.federation != nil {
-			d.federation.Stop()
-		}
 
 		// Parked agent-state firings are dropped and the hooks already running
 		// are given a moment to finish. Hooks run in their own goroutines, which
@@ -1926,86 +1705,6 @@ func (d *Daemon) acceptLoop() {
 	}
 }
 
-// acceptLinkLoop is acceptLoop for the link socket. A connection from it is
-// served exactly like any other, with one difference: it is marked as having
-// come over a link before a byte of it is read.
-func (d *Daemon) acceptLinkLoop() {
-	d.acceptLinkOn(d.linkListener, false)
-}
-
-// acceptLinkOn accepts on one of the two link sockets. human marks every
-// connection from it as one the hub vouched for; see LinkHumanSocketPath.
-func (d *Daemon) acceptLinkOn(l net.Listener, human bool) {
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			if d.acceptPaused.Load() {
-				return
-			}
-			select {
-			case <-d.ctx.Done():
-				return
-			default:
-				log.Printf("Accept error on a link socket: %v", err)
-				continue
-			}
-		}
-		if !d.admitConnection(conn, &d.openLinkConns, maxLinkConnections) {
-			continue
-		}
-		go func() {
-			defer d.openLinkConns.Add(-1)
-			d.handleConnectionOn(conn, true, human)
-		}()
-	}
-}
-
-// LinkSocketPath is the socket the local proxy dials for a connection that
-// arrived over a hub's link, beside the daemon's own socket. The daemon marks
-// everything accepted on it as from another machine. A proxy that finds no
-// such socket dials the main one, which is what an older daemon has, so the
-// two builds still link; the mark is then simply absent.
-func LinkSocketPath(socketPath string) string {
-	return socketPath + ".link"
-}
-
-// LinkHumanSocketPath is the socket the local proxy dials, instead of
-// LinkSocketPath, for a stream the hub opened on behalf of a process it
-// checked was not inside one of its own panes. A client attached through it
-// can be issued the attach nonce that verifies a reply from human; one attached
-// through the plain link socket cannot. The daemon still checks the process on
-// this end, which is the proxy: a process inside one of this machine's panes
-// that dials the socket itself is refused the same way. See human_origin.go.
-//
-// A proxy that finds no such socket dials the plain link socket, which is what
-// a daemon from before it has. That daemon trusts every link attach as it
-// always did.
-func LinkHumanSocketPath(socketPath string) string {
-	return socketPath + ".link-human"
-}
-
-// listenLinkSocket opens one of the optional link sockets, owner only, and
-// returns nil after logging what is lost when it cannot. The start lock is
-// held, so a stale file at path is a dead daemon's and is removed.
-func listenLinkSocket(path, lost string) net.Listener {
-	_ = os.Remove(path)
-	ll, err := net.Listen("unix", path)
-	if err != nil {
-		log.Printf("The link socket %s could not be opened: %v. %s", path, err, lost)
-		return nil
-	}
-	if ul, ok := ll.(*net.UnixListener); ok {
-		ul.SetUnlinkOnClose(false)
-	}
-	if err := os.Chmod(path, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
-		_ = ll.Close()
-		_ = os.Remove(path)
-		log.Printf("The link socket %s could not be secured: %v. %s", path, err, lost)
-		return nil
-	}
-	return ll
-}
-
 // shortID returns the first 8 bytes of s, or all of s if it is shorter. IDs
 // reaching the daemon can be client-controlled and arbitrarily short, so a
 // plain s[:8] slice would panic; this makes ID truncation for logs safe.
@@ -2014,10 +1713,6 @@ func shortID(s string) string {
 		return s
 	}
 	return s[:8]
-}
-
-func (d *Daemon) handleConnection(conn net.Conn) {
-	d.handleConnectionFrom(conn, false)
 }
 
 // lastClientID is the number in the last client id handed out.
@@ -2038,14 +1733,8 @@ func newClientID() string {
 	}
 }
 
-// handleConnectionFrom serves one connection. viaLink marks it as accepted on
-// the link socket.
-func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
-	d.handleConnectionOn(conn, viaLink, false)
-}
-
-// handleConnectionOn is handleConnectionFrom with the link-human mark.
-func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
+// handleConnection serves one connection.
+func (d *Daemon) handleConnection(conn net.Conn) {
 	// A panic on the untrusted client-parsed message surface must not take down
 	// the daemon and every other session. Recover, log, and drop just this
 	// client. Registered before the cleanup defer below so cleanup (which closes
@@ -2066,8 +1755,6 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		done:             make(chan struct{}),
 		ptySubscriptions: make(map[string]*ptySubscriber),
 		ptyResume:        make(map[string]int64),
-		viaLink:          viaLink,
-		linkHuman:        viaLink && linkHuman,
 		// Read before a byte is served: the kernel's record of who connected,
 		// which nothing the peer sends can change. See human_origin.go.
 		peerPID: peerPID(conn),
@@ -2078,11 +1765,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 	// leaves its pid free for reuse; see peerChanged.
 	d.pinPeer(cs)
 
-	if viaLink {
-		LogBasic("Client %s connected over a link", clientID)
-	} else {
-		LogBasic("Client %s connected", clientID)
-	}
+	LogBasic("Client %s connected", clientID)
 
 	d.clientsMu.Lock()
 	d.clients[clientID] = cs
@@ -2256,7 +1939,6 @@ func (d *Daemon) serveMessage(cs *connState, msg *Message, release func()) {
 	} else {
 		defer release()
 	}
-	markLinkServed(cs)
 	if err := d.handleMessage(cs, msg); err != nil {
 		LogError("Error handling message from %s: %v", cs.clientID, err)
 		_ = d.replyError(cs, msg, ErrCodeInternal, err.Error())
@@ -2609,18 +2291,6 @@ func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroun
 		pty := sess.GetPTY(ptyID)
 		if pty == nil || pty.IsExited() {
 			return foregroundInfo{}, false
-		}
-		// A pane whose process is on another machine is asked about there.
-		// Reading a pid here would read nothing, because there is no process
-		// on this machine, and every tier that starts from the foreground
-		// process would give up.
-		//
-		// The answer arrives in the same struct the local read produces, so
-		// nothing downstream knows or cares which machine looked: the rules,
-		// the manifests and the user's configuration stay here, with the
-		// window. See remotePane.Foreground.
-		if info, running, remote := pty.remoteForeground(); remote {
-			return info, running
 		}
 		shellPID := pty.ShellPID()
 		info, running := foregroundProcess(shellPID)

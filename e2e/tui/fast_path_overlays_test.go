@@ -1,8 +1,6 @@
 package tuie2e
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,60 +127,4 @@ func TestPanelsDrawOverALoneFullscreenPane(t *testing.T) {
 			alive(t, term, "after the "+tc.name)
 		})
 	}
-}
-
-// TestDropDialogDrawsOverALoneFullscreenPane pastes a file's path into the
-// only pane, which runs on another machine and fills the screen once tiled.
-// The paste is held for the question whether to send the file, which has to
-// be drawn, and Esc gives the keys back to the pane.
-func TestDropDialogDrawsOverALoneFullscreenPane(t *testing.T) {
-	base, _, term := copiesMachines(t, 64<<20)
-	src := filepath.Join(base, "fast path drop.txt")
-	if err := os.WriteFile(src, []byte("dropped\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := tuiosCLI(t, base, "new-window", "faraway", "-s", "home", "--host", "build"); err != nil {
-		t.Fatalf("create a window on build: %v\n%s", err, out)
-	}
-	if err := term.WaitForText("build:faraway", uiTimeout); err != nil {
-		t.Fatalf("the far window never appeared: %v\n%s", err, term.Snapshot())
-	}
-	// The dock here shows no mode, so the tiling below is what tells that
-	// alt+esc left terminal mode.
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(2 * insertGuard)
-	if err := term.SendKeys("t"); err != nil {
-		t.Fatal(err)
-	}
-	waitFillsScreen(t, term, "after tiling the far pane")
-	enterTerminalMode(t, term)
-
-	if err := term.Paste("'" + src + "' "); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "Send fast path drop.txt", "to build?", "Paste the text")
-	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the drop question is not drawn over a lone fullscreen pane: %v\n%s", err, term.Snapshot())
-	}
-	saveFrame(t, term, "fast-path-drop-dialog")
-
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Paste the text")
-	}, uiTimeout); err != nil {
-		t.Fatalf("esc did not close the drop question: %v\n%s", err, term.Snapshot())
-	}
-	// Whatever esc did with the held paste, the line is cleared before the
-	// shell is asked to compute something.
-	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(insertGuard)
-	shellHasKeys(t, term, "FARBACK")
-	alive(t, term, "after the drop question")
 }

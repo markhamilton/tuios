@@ -155,14 +155,6 @@ func (d *Daemon) readBudgetFor(cs *connState) *memBudget {
 	if cs == nil || cs.paneOnly {
 		return d.peerBudget
 	}
-	if cs.viaLink {
-		// The person working through a hub is the person. Any other link
-		// is a peer.
-		if cs.linkHuman {
-			return d.personBudget
-		}
-		return d.peerBudget
-	}
 	if d.manager != nil && !d.bufferAccess(cs).person() {
 		return d.peerBudget
 	}
@@ -218,12 +210,9 @@ func (d *Daemon) readClientFrame(cs *connState, br *bufio.Reader) (*Message, fun
 		}
 		return nil, noop, &FrameTooLargeError{Type: h.Type, Size: totalLen, Limit: typeMax, ReqID: h.ReqID}
 	}
-	// The link policy and the pane grants are held before the body is read,
-	// so a frame the connection may not send never takes memory.
-	verr := d.checkLinkMessage(cs, h.Type)
-	if verr == nil {
-		verr = d.checkGrantMessage(cs, h.Type)
-	}
+	// The pane grants are held before the body is read, so a frame the
+	// connection may not send never takes memory.
+	verr := d.checkGrantMessage(cs, h.Type)
 	if verr != nil {
 		if err := skipPayload(br, h); err != nil {
 			return nil, noop, err

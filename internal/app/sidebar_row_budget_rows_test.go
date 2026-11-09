@@ -1,68 +1,16 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Rows drawn on the row budget, at the widths a person can set.
-
-// TestADownMachineSaysSoOnANarrowRail: with the budget, a narrow rail kept a
-// down machine's name and dropped the whole figure, so "workstation" with
-// three messages queued read "▾ workstation ───": no mail, and nothing but
-// the ink to say the machine was down. Every width from 15 to 40 columns now
-// draws the mail count, and a down machine with no mail draws a mark, while
-// an up machine draws neither.
-func TestADownMachineSaysSoOnANarrowRail(t *testing.T) {
-	m, _ := sectionsTestOS(t, 120, 30)
-	pal := theme.UI()
-	row := func(status federation.Status, queued, cw int) string {
-		node := sessiontree.Node{Kind: sessiontree.KindHost, Host: "workstation", Title: "workstation", HostStatus: string(status), HostQueued: queued}
-		return ansi.Strip(m.sidebarHostRow(node, cw, pal, "", sidebarRowState{}, false))
-	}
-	mark := hostDownMark()
-	for rail := 15; rail <= 40; rail++ {
-		cw := rail - 1
-		queued := row(federation.StatusUnreachable, 3, cw)
-		if !strings.Contains(queued, "3 queued") {
-			t.Errorf("rail %d: a down machine with mail lost its count: %q", rail, queued)
-		}
-		// The mail outranks the name here, so the narrowest rails read
-		// "w… 3 queued", as they did before the budget.
-		if !strings.Contains(queued, "▾ w") {
-			t.Errorf("rail %d: the header names no machine: %q", rail, queued)
-		}
-		down := row(federation.StatusUnreachable, 0, cw)
-		if !strings.Contains(down, "offline") && !strings.Contains(down, mark) {
-			t.Errorf("rail %d: a down machine reads like an up one: %q", rail, down)
-		}
-		// The positive half: the mark means down, so an up machine and one
-		// on its way up never wear it.
-		if up := row(federation.StatusUp, 0, cw); strings.Contains(up, mark) {
-			t.Errorf("rail %d: an up machine wears the down mark: %q", rail, up)
-		}
-		if on := row(federation.StatusConnecting, 0, cw); strings.Contains(on, mark) {
-			t.Errorf("rail %d: a machine that is connecting wears the down mark: %q", rail, on)
-		}
-		for _, r := range []string{queued, down} {
-			if w := lipgloss.Width(r); w > cw {
-				t.Errorf("rail %d: the header is %d cells, wider than %d: %q", rail, w, cw, r)
-			}
-		}
-	}
-	// A rail with room for everything says all of it.
-	if got := row(federation.StatusUnreachable, 3, 39); !strings.Contains(got, "3 queued, offline") {
-		t.Errorf("a wide rail should say the mail and why: %q", got)
-	}
-}
 
 // TestAgentQueuedFigureIsPickedInTheBudget: the queued figure used to be
 // picked against the name's keep alone, so a row with the state after the

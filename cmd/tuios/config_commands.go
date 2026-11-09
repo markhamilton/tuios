@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -340,4 +342,41 @@ func previewThemeColors(themeName string) error {
 	}
 
 	return nil
+}
+
+// describeConfigApplied is what tuios config apply prints: each change, then
+// the grant mode in force.
+func describeConfigApplied(raw []byte) string {
+	var res struct {
+		Mode          string   `json:"mode"`
+		DefaultGrants []string `json:"default_grants"`
+		Changes       []string `json:"changes"`
+		DroppedKeys   []string `json:"dropped_keys"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return "The daemon applied config.toml.\n"
+	}
+	var b strings.Builder
+	b.WriteString("The daemon applied config.toml.\n")
+	if len(res.Changes) == 0 {
+		b.WriteString("Nothing changed.\n")
+	}
+	for _, c := range res.Changes {
+		b.WriteString(plainLine(c))
+		b.WriteString("\n")
+	}
+	grants := "no grants"
+	if len(res.DefaultGrants) > 0 {
+		grants = strings.Join(res.DefaultGrants, ", ")
+	}
+	fmt.Fprintf(&b, "Mode %s: a pane started with no grants of its own holds %s.\n", plainLine(res.Mode), plainLine(grants))
+	if len(res.DroppedKeys) > 0 {
+		fmt.Fprintf(&b, "tuios cannot read %s:\n", plural.CountAs(len(res.DroppedKeys), "key", "keys"))
+		for _, d := range res.DroppedKeys {
+			b.WriteString("  ")
+			b.WriteString(plainLine(d))
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }

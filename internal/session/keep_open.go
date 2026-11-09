@@ -157,9 +157,6 @@ func exitNoteText(p *PTY) string {
 	var msg string
 	code, _ := p.ExitStatus()
 	switch sig := p.ExitSignal(); {
-	case p.host != "":
-		// A pane on another machine reports only that its stream ended.
-		msg = "The program ended."
 	case sig > 0:
 		msg = fmt.Sprintf("The program stopped on signal %d.", sig)
 	default:
@@ -170,9 +167,9 @@ func exitNoteText(p *PTY) string {
 
 // exitResult adds a pane's exit status to a verb result: exit_code, and signal
 // when a signal ended the process. It adds nothing while the process runs, or
-// for a pane on another machine, whose status does not cross the link.
+// for a nil pane.
 func exitResult(p *PTY, res map[string]any) {
-	if p == nil || p.host != "" {
+	if p == nil {
 		return
 	}
 	code, exited := p.ExitStatus()

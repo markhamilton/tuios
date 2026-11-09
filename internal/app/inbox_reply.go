@@ -207,10 +207,7 @@ func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 		context = "errored"
 	}
 	context += " " + inboxWait(it.Since, time.Now())
-	if it.Host != "" {
-		m.openHostReply(it.Host, it.Session, it.Window, inboxWho(it), context)
-		return nil, true
-	}
+
 	m.openInboxReply(it.Session, it.Window, inboxWho(it), context, false)
 	return nil, true
 }
@@ -369,7 +366,7 @@ func (m *OS) SidebarAgentReply(sessionID, windowID string) (tea.Cmd, bool) {
 		m.OpenInbox("")
 	}
 	for _, it := range m.Inbox.Items {
-		if it.Host == "" && it.Window == windowID && (sessionID == "" || it.Session == sessionID) {
+		if it.Window == windowID && (sessionID == "" || it.Session == sessionID) {
 			m.Inbox.SelectedID = it.ID
 			m.clampInboxSelection()
 			break
@@ -760,7 +757,7 @@ func (m *OS) railQueued(sessionID, windowID string) int {
 			}
 		}
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		return 0
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {

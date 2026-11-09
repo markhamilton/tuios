@@ -61,19 +61,8 @@ func (f *shipFlags) add(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 }
 
-// dialShip connects for a ship verb, on this machine only.
+// dialShip connects for a ship verb.
 func dialShip(f shipFlags) (*verbTarget, error) {
-	host, sess, _, err := resolveTarget(f.session, f.window)
-	if err != nil {
-		return nil, err
-	}
-	if host != "" {
-		return nil, &diagnosticError{
-			What:  fmt.Sprintf("ship works on this machine's sessions, and %s:%s is on %s.", host, sess, host),
-			Cause: "shipping a session on a linked machine is not supported yet.",
-			Fix:   fmt.Sprintf("attach to %s and run 'tuios ship' there, or bring the work here with 'tuios worktree pull %s:%s'.", host, host, sess),
-		}
-	}
 	return dialTarget(f.session, f.window)
 }
 

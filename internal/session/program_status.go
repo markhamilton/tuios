@@ -97,9 +97,8 @@ func (p *PTY) reportGroup(id string) int {
 }
 
 // foregroundReportGroup reads which process group holds the pane's terminal,
-// and returns it when it is not the pane's own process: on this machine from
-// the kernel, for a pane on another machine from what that machine last said
-// (at most two seconds old). It returns 0 when the pane's own process holds
+// and returns it when it is not the pane's own process, from the kernel. It
+// returns 0 when the pane's own process holds
 // the foreground or nothing can be read.
 func (p *PTY) foregroundReportGroup() int {
 	if shell := p.ShellPID(); shell > 0 {
@@ -107,9 +106,6 @@ func (p *PTY) foregroundReportGroup() int {
 			return pgid
 		}
 		return 0
-	}
-	if info, running, remote := p.remoteForeground(); remote && running && info.pid > 0 && info.pid != info.shellPID {
-		return info.pid
 	}
 	return 0
 }
@@ -377,21 +373,12 @@ func (s *Session) yieldNoneClaim(windowID string) {
 // foreground program exiting ends its own records and leaves a background
 // job's alone.
 //
-// On this machine a group has ended when no process is left in it. For a pane
-// on another machine, whose processes cannot be asked, it has ended when that
-// machine says the pane's shell holds the foreground again. The caller holds
-// no lock.
-func (p *PTY) endProgramStatusOfEndedGroups(info foregroundInfo, running bool) {
+// A group has ended when no process is left in it. The caller holds no lock.
+func (p *PTY) endProgramStatusOfEndedGroups(_ foregroundInfo, _ bool) {
 	if len(p.progStatus.Groups()) == 0 {
 		return
 	}
-	_, _, remote := p.remoteForeground()
-	ended := func(group int) bool {
-		if remote {
-			return running && info.pid > 0 && info.pid == info.shellPID && info.pid != group
-		}
-		return !processGroupAlive(group)
-	}
+	ended := func(group int) bool { return !processGroupAlive(group) }
 	if p.progStatus.DropEnded(ended) {
 		p.progStatusDirty.Store(true)
 		p.flushProgramStatus()

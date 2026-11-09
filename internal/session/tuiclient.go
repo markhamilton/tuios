@@ -281,10 +281,7 @@ type TUIClient struct {
 	emptyWorkspacePanes atomic.Bool
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
 	// multiClientMu like the other push handlers.
-	dirChangedHandler func(dir string)
-	// viaHost is the host this client reached the daemon through, or "" for
-	// the daemon on this machine. See ConnectThroughHost.
-	viaHost             string
+	dirChangedHandler   func(dir string)
 	disconnectHandler   DisconnectHandler
 	sessionEndedHandler SessionEndedHandler
 	// agentMailHandler takes each message the daemon pushes from the session's
@@ -464,14 +461,10 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		// See daemon_goodbye.go.
 		Goodbye: true,
 	}
-	// A client draws TML surfaces of this machine's daemon only: what the
-	// person does on one goes back through this machine's socket, which
-	// holds no surface of a session on another machine. Through a host the
-	// window shows its placeholder line instead. See tml_surface.go.
-	hello.TMLSurfaces = c.viaHost == ""
+	hello.TMLSurfaces = true
 	// Plugins run on this machine's daemon, and only the person here
 	// answers for them. See plugin_approval.go.
-	hello.PluginApprovals = c.viaHost == ""
+	hello.PluginApprovals = true
 
 	// Add graphics capabilities if provided
 	if caps != nil {
@@ -486,13 +479,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.SymbolImages = caps.SymbolImages
 	}
 
-	// A hello through a host goes to the other machine, where this path
-	// means nothing. That daemon follows the agent the link forwards, and
-	// open-host-connection told this machine's daemon this socket.
-	if c.viaHost == "" {
-		hello.SSHAuthSock = c.SSHAuthSock
-		hello.Display = c.Display
-	}
+	hello.SSHAuthSock = c.SSHAuthSock
+	hello.Display = c.Display
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
 	hello.WindowSize = !legacyWindowSize()
@@ -1245,7 +1233,7 @@ func (c *TUIClient) OnPluginApprovals(handler func(PluginApprovalsPayload)) {
 
 // DrawsTML reports whether this client draws TML surfaces: only a client of
 // this machine's daemon does. See the hello.
-func (c *TUIClient) DrawsTML() bool { return c.viaHost == "" }
+func (c *TUIClient) DrawsTML() bool { return true }
 
 // OnTMLSurface registers the handler for MsgTMLSurface, the daemon's push of
 // a TML surface when it opens, changes or closes, and of every open one when
@@ -1993,11 +1981,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 	case MsgHostsChanged:
-		if c.viaHost != "" {
-			// The push is about the far daemon's table. The rail lists this
-			// machine's hosts, which that table says nothing about.
-			return
-		}
 		var payload HostsChangedPayload
 		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[CLIENT] Failed to parse a hosts change: %v", err)
@@ -2084,14 +2067,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 		debugLog("[REMOTE] Received command: type=%s, tapeCmd=%s, args=%v, keys=%s", payload.CommandType, payload.TapeCommand, payload.TapeArgs, payload.Keys)
-
-		if why := c.refuseHostCommand(&payload); why != "" {
-			// A daemon on another machine may drive the session it owns and
-			// nothing else on this machine. See hostCommandAllowed.
-			debugLog("[REMOTE] Refused a command from host %s: %s", c.viaHost, why)
-			_ = c.SendCommandResult(payload.RequestID, false, why)
-			return
-		}
 
 		c.remoteCommandMu.RLock()
 		handler := c.remoteCommandHandler

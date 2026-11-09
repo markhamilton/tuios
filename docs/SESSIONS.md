@@ -21,13 +21,7 @@ what does and does not come back after each kind of interruption.
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
-- [Windows on Another Machine](#windows-on-another-machine)
-- [Agents and Worktrees on Another Machine](#agents-and-worktrees-on-another-machine)
-- [Global Sessions](#global-sessions)
-- [Keeping Hosts on One Version](#keeping-hosts-on-one-version)
-- [Starting the Daemon on a Host](#starting-the-daemon-on-a-host)
 - [Adding a Phone](#adding-a-phone)
-- [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
 - [Local Network Access on macOS](#local-network-access-on-macos)
 - [Limitations](#limitations)
@@ -176,8 +170,8 @@ the session. See [Session size with more than one client](#session-size-with-mor
 Every attached client has full control: it sees all output, sends input, and
 manipulates windows. There is no per-client permission tier, so share a session
 only with people you would hand the keyboard to. Local clients are gated by the
-socket's Unix permissions (same user only), SSH clients by SSH authentication,
-and web clients by whatever stands in front of `tuios-web`. See
+socket's Unix permissions (same user only). A client that logs in over ssh and
+runs `tuios attach` is a local client of that socket. See
 [Multi-client sessions](https://tuios.dev/docs/sessions) on the site for
 the full picture.
 
@@ -249,14 +243,7 @@ session. While such a client is attached, the session uses `smallest`, and
 `session-info` reports `window_size` as `smallest`. A new client attached to
 an older daemon works as before, at the smallest size.
 
-Native clients, `tuios-web` clients and clients through the SSH server all
-report input in the same way, so each of them can be the latest client.
-
-A client that cannot send input, such as `tuios-web --read-only`, does not set
-the size under `largest` or `latest`. A viewer with a large browser window
-does not make the session larger than the people who type can see. Under
-`smallest` it counts like every other client.
-If only viewers are attached, they set the size. A tool
+A tool
 that uses the verb socket only, such as Collie, is not a client with a size.
 It does not change the size of the session.
 
@@ -296,13 +283,6 @@ commands from them still reach the session. `tuios attach` and
 `tuios kill-session` with the old name fail and name the new one. An event
 stream on the session keeps its events under the new name. A name that another
 session has is refused. A name that a saved session has is refused too.
-
-With remote hosts in `[hosts]`, the switcher also lists the sessions on your
-other machines. A remote session shows as `name @ host`, and the filter
-matches that text. `Enter` switches to it, and back again, in either
-direction. The rail, the palette and session cycling switch across machines
-the same way. Rename and delete work only on sessions on the machine you are
-on.
 
 `tuios switch-session` switches a client from the command line, also from a
 pane. See [Sessionizer](#sessionizer).
@@ -357,11 +337,7 @@ to the session of that folder. Its windows start in the folder.
 - `--create` makes the session when it is missing. `--cwd` sets the folder
   of its windows. The session keeps this folder after a daemon restart.
 - With `startup.tiled = true`, the new session is tiled. tuios reads this
-  setting from the config of the client that switches. This is also true
-  for a session on a host.
-- To open a project on a host, put the host before the name:
-  `tuios switch-session --create --cwd "$dir" "build:$(basename "$dir")"`.
-  The folder is a path on that host.
+  setting from the config of the client that switches.
 
 From a shell outside tuios, name the client with `-s`:
 
@@ -420,9 +396,6 @@ pane that had the focus, in terminal mode.
   attach again.
 - After a daemon restart, the scratch terminal comes back hidden. Each pane has
   a new shell in its own folder, under its saved history, in the same layout.
-- In a session on a different machine, the key opens the scratch terminal on
-  that machine. That machine must allow `"open"` for your machine in its
-  `[hosts]` table.
 - Until the daemon restarts after an upgrade, and while a client of an older
   tuios is attached to the session, the scratch terminal is one pane in a
   popup, as in older versions. The key shows and hides it the same way.
@@ -487,8 +460,7 @@ unpin it.
   different client does not see it. A detach or a switch to a different
   session removes it.
 - `tuios pip` reaches one client. With more than one client attached, it acts
-  on the client that `tuios run-command` reaches. When you attach to a session
-  on a different machine, that machine cannot pin a pane on your screen.
+  on the client that `tuios run-command` reaches.
 - A kitty image in a pane under the view is cut around the view. A sixel image
   is not, so it can draw over the view. Floating panes have the same limit.
 - One pane at a time is pinned. A pin replaces the previous one.
@@ -675,9 +647,6 @@ What comes back:
 - The scratch terminal's history. Other popups do not come back, so their
   history is not saved.
 
-A pane that ran on another machine through `[hosts]` comes back as a shell on
-this machine, without history. That machine keeps its own copy.
-
 Copy mode, search and hints reach the restored lines like any other history.
 An agent pane keeps its resume offer. The resumed agent starts under the
 divider.
@@ -741,407 +710,11 @@ If the restore fails, the command says which of the reasons applies: there is no
 saved state under that name, the state is corrupt, or the state was written by a
 newer TUIOS. In the last two cases it also prints where the file was archived.
 
-## Windows on Another Machine
-
-A window's process does not have to run on the machine the session is on.
-
-```bash
-tuios new-window deploy --host build
-```
-
-The window belongs to the session it was created in. It is drawn here, sized by
-the layout here, and closed here; only the process is on `build`. The machine
-comes from the `[hosts]` table, the same one `tuios hosts` lists, and a name
-that is not in it is refused before anything is started.
-
-A session holding such a window is still an ordinary session, so `tuios ls`, the
-verbs, the mailbox, hooks and resurrection keep working on it with no special
-case. What makes the window different is one field recording where its process
-is.
-
-Panes on two machines can sit side by side in one layout, because each pane is
-a window of this session and the layout does not care where any of their
-processes are.
-
-### What it looks like
-
-A pane whose shell is elsewhere says so on its title bar, as `build:name`. This
-is not optional: two panes side by side are otherwise identical, and the same
-typed line is a different act depending on which machine answers it.
-
-### Agents in a pane on another machine
-
-Agent detection works. The daemon that owns the window cannot do it alone: the
-pane's process is on the other machine, so the pid it would read means nothing
-here and every tier of detection starts from that process. It asks the other
-machine what the pane is running, through the `pane-agent` verb, and decides
-what the answer means itself. The rules, the manifests and your configuration
-stay with the window.
-
-An agent in such a pane also reports its own state and reads its mail, with the
-same commands and hooks as anywhere. The pane has `TUIOS_PANE_ID`, the window's
-id on the machine holding it, and `TUIOS_PANE_HOSTED=1`, and no `TUIOS_SOCKET`.
-A report the agent sends naming `$TUIOS_PANE_ID` goes to the daemon on the
-machine it runs on, which sends it back over a channel the daemon holding the
-window opened, since the link is dialled one way. The daemon holding the window
-runs it as that window and nothing else. Only the process in the pane is
-forwarded for, and only state, meta, session id, its own mail and a wait for its
-own mail cross. See [A pane on another machine](AGENT_STATE.md#a-pane-on-another-machine).
-With a machine holding the window from before this, the pane has no
-`TUIOS_PANE_ID` and a report fails with `protocol_mismatch`; the agent is still
-detected.
-
-`TUIOS_SESSION` is deliberately not set in such a pane. It would name a session
-on the other machine, and every tool that reads it addresses a session on the
-machine it is running on. `TUIOS_SESSION_REMOTE` carries the name for anything
-that wants to know where the pane came from.
-
-Sending mail between machines is a different thing and it does work: see
-`tuios send-agent-message -s build:api -w 1 'text'`. When `build`'s link is
-down the message waits on this machine and goes when the link is back; see
-[Mail waiting for another machine](AGENT_STATE.md#mail-waiting-for-another-machine). A reply from the person
-over a link is verified on the far machine only when this machine vouched for
-the process that sent it: one outside every pane here. The far daemon hears
-that from the link itself, not from the request, and an agent in a pane here
-that attaches or sends through the link cannot be verified there. See [Who
-can act as the person](AGENT_STATE.md#who-can-act-as-the-person).
-
-### What crosses, and what does not
-
-The machine supplying the process supplies a process and a pty, and nothing
-else. It runs no terminal emulator for the pane and keeps no scrollback for it,
-and it does not know which session the pane belongs to. All of that is here, on
-the daemon that owns the window, exactly as it is for a pane of its own.
-
-That division has a consequence worth knowing: the pane is **not** a window of
-any session on the other machine. It will not appear in `tuios ls` there, and
-it is not enrolled in that machine's size negotiation, so a layout here can
-never shrink a session someone is working in there.
-
-### Pasting an image
-
-`Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios
-reads the image on your machine and sends it over the link. The other machine
-writes it to a file and tuios pastes the path of that file into the pane. An
-agent in the pane, such as Claude Code, can then read the image. The file is
-8 MB or less, only you can read it, and it is deleted after one hour. The
-other machine needs a tuios with `paste-pane-image`, and it must allow
-`files` from this machine. See [Paste an image](KEYBINDINGS.md#paste-an-image).
-
-### What it needs
-
-Both machines need a tuios new enough to speak `open-pane`. An older one
-refuses by name and says to update it.
-
-### What the other machine may do here
-
-The machine a link arrives at decides what the machine at the other end may
-do there, from its own `[hosts]` table: read listings, send mail, open
-sessions, windows and panes, write into panes, and answer prompts. By default
-it may do everything but answer prompts for you. Opening a window on a host
-needs `open` there; what is typed into that window travels on the pane's own
-connection and needs nothing more. See [What another machine
-may do here](CONFIGURATION.md#what-another-machine-may-do-here) for the table,
-`hold_mail`, and pinning the name with a forced command.
-
-### Limits
-
-- **The window outlives a dropped link for a while.** When the link drops, the
-  other machine keeps the process running for its `hosted_grace` (ten minutes
-  unless its `[hosts]` table says otherwise, see [What another machine may do
-  here](CONFIGURATION.md#what-another-machine-may-do-here)) and keeps its last
-  64 KB of output. The window stays, its title bar reads
-  `[reconnecting] build:name`, the rail row reads `build reconnecting`, and
-  keystrokes are refused rather than queued. When the link comes back the pane
-  is reattached, what the process printed meanwhile is written to it, and it is
-  live again. If more was printed than 64 KB, the whole 64 KB is written and the
-  pane is resized a row and back, so a full screen program draws its screen
-  again. If the grace runs out first, or the process exits meanwhile, the
-  window closes the way it closes when its shell exits. With `hosted_grace =
-  "0"` on the other machine, or a tuios there too old to keep a pane, the
-  window ends when the link does, as it always did.
-- **Closing the window ends the process at once.** A window closed on purpose
-  tells the other machine with `close-pane`, so its process does not wait out
-  the grace. If the link is down when it is closed, the grace ends it.
-- **A restart of this daemon does not reattach.** The panes on the other
-  machine wait out their grace and end.
-- **A resurrected session brings the window back on this machine.** Resurrection
-  respawns a shell from saved state, and it does not redial a host to do it.
-- **A resurrected window runs a local shell.** The layout comes back and the
-  pane in it is on this machine, whatever it said before.
-
-## Agents and Worktrees on Another Machine
-
-A hosted window keeps the window here and the process there, and ends when the
-link stays down past the far machine's `hosted_grace`. For agent work that
-should outlive the link for good, start the whole session on the other machine
-instead. `tuios fan --host build`, `tuios worktree new --host
-build` and `tuios start-agent -s build:SESSION` make the sessions on build,
-where they run and survive like any of build's sessions, and they show in the
-rail under build.
-
-The repository is named by the origin URL of the checkout you run the command
-in. build finds its own checkout of it under `repos_root` in `[hosts.build]`:
-
-```toml
-[hosts.build]
-addr = "gaurav@buildbox"
-repos_root = "~/src"   # a path on build, as build reads it
-```
-
-With no `repos_root`, build looks under `~/src`, `~/dev`, `~/code`,
-`~/projects`, `~/repos`, `~/git`, `~/work` and `~/go/src` there. `--clone`
-clones the repository there when build has none.
-
-`tuios worktree pull build:SESSION` brings a worktree session's commits and its
-uncommitted work into a new worktree session here, on a new branch. Nothing on
-build changes. See [CLI Reference](CLI_REFERENCE.md#tuios-worktree).
-
-## Global Sessions
-
-A session whose panes are all on one machine is that machine's session. A
-session holding panes from several is not, and the rail says so: once a second
-machine is reachable, it draws a group called `global` above the machines.
-
-```
-global                +
-  deploy
-local                 +
-  work
-build                 +
-  api
-```
-
-Sessions in the global group work like any other. What is different is that
-every way of making a window in one asks which machine it should run on, by
-every route: the key, the rail's `+`, the command palette. That question has one
-sensible answer in an ordinary session and is worth asking in this one, which is
-why the picker appears here and nowhere else.
-
-Make one from the `+` on the group header, or from the shell:
-
-```bash
-tuios new deploy --global
-```
-
-A global session is created with no windows, since the first pane is the one you
-pick a machine for.
-
-The group holds as many sessions as you make. It is drawn above the machines
-because a global session is not any machine's: it is held by a daemon, the way
-any session is, but where it is held says nothing about where its panes run.
-
-Turn the group off with `global_session = false` in the config. Sessions that
-already exist stay listed.
-
-## Keeping Hosts on One Version
-
-`tuios hosts sync` installs the tuios version of this machine on every host in
-the `[hosts]` table that runs another one. A release build sends its own
-release, `--dev` sends a build of the checkout, and `--binary` sends a file.
-
-```sh
-tuios hosts sync --dry-run    # see what would change
-tuios hosts sync --dev        # install a build of this checkout everywhere
-```
-
-The daemon on a host keeps running the old version, and its sessions keep
-running. The row for the host gives the command to restart it. Add
-`--restart` to restart them in the same run: sync lists the sessions and the
-programs that a restart ends, and asks first. The sessions come back after the
-restart with their layouts and new shells. See
-[`tuios hosts sync`](CLI_REFERENCE.md#tuios-hosts-sync).
-
-## Starting the Daemon on a Host
-
-A link reaches a host only when a tuios daemon runs there. When none runs,
-`tuios hosts test NAME` reports `no_daemon` and prints the command to run on
-the host. To start the daemon from this machine, add `--start`:
-
-```sh
-tuios hosts test build --start    # start the daemon on build if it does not run
-tuios hosts sync build --start    # install tuios on build if needed, then start it
-```
-
-`hosts test --start` does not install tuios. On a host with no tuios, use
-`hosts sync --start`. See [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test).
-
 ## Adding a Phone
 
-The tuios phone app is not released yet. An Android app is in private
-testing. An iOS app comes later. `tuios pair` pairs a phone with that app.
-
-To use tuios on a phone today:
-
-- Open tuios-web in the browser on the phone. Keep tuios-web on `localhost`
-  and reach it over Tailscale or an ssh tunnel, or start it with a password.
-  See [Who can connect](WEB.md#who-can-connect).
-- Use [Collie](https://github.com/AltanS/collie) to talk to agents. Collie has
-  its own pairing. It does not use `tuios pair`.
-
-A phone connects to this machine over ssh and runs
-`tuios stdio-proxy --as NAME`. To give the phone its key with no copy and
-paste, use `tuios pair`:
-
-```sh
-tuios pair --name phone
-```
-
-1. Scan the QR code with the tuios app on the phone.
-2. Compare the check code and the key fingerprint on the screen with the ones
-   on the phone.
-3. Type `y` to accept the key.
-
-The phone must reach this machine, for example on the same Wi-Fi network or
-on your tailnet. The code works one time, for 5 minutes. Anyone who sees the
-code can try to pair until the phone does. Do not show the code on a shared
-screen.
-
-The key can only open a tuios link under the name `phone`. tuios writes a new
-`[hosts.phone]` table first, and then adds the key. The table sets what the
-phone may do. By default it allows `list` and `mail`:
-
-- `list` lets the phone read: listings, pane captures, screenshots, agent
-  state, the Inbox and the event stream.
-- `mail` lets the phone send and read agent mail.
-
-The phone cannot start programs, type into panes or answer prompts. To allow
-more, give `--allow`, for example `--allow list,mail,open,write`. See
-[`tuios pair`](CLI_REFERENCE.md#tuios-pair) for each flag and the protocol.
-
-To remove the phone, delete the line that ends in `tuios-pair:phone` from
-`~/.ssh/authorized_keys`, and the `[hosts.phone]` table from `config.toml`.
-
-## Machines on a Tailnet
-
-If this machine is on a [Tailscale](https://tailscale.com) tailnet, tuios can
-list the machines on it and offer them as addresses:
-
-```bash
-tuios hosts tailnet
-```
-
-```
-   arch-btw          arch-btw.example.ts.net          offline
- + ente              ente.example.ts.net
- = forgejo           forgejo.example.ts.net           already the host forgejo
-   my-phone          my-phone.example.ts.net          cannot run tuios (iOS)
-```
-
-Add one:
-
-```bash
-tuios hosts add ente --tailnet
-```
-
-**Nothing is added on its own.** This is the same rule the ssh_config aliases
-follow: a host exists because you named it. What is discovered is what to type,
-not what to connect to.
-
-**Nothing new is dialled either.** A host added this way is reached over ssh like
-every other host. A MagicDNS name resolves like any other name, so the tailnet is
-how the name resolves and how the traffic is carried, and tuios does not open a
-tailnet connection itself. That also means ssh over a tailnet already worked
-before this existed: you could always write the MagicDNS name as an address by
-hand. This saves you the typing and tells you what is there.
-
-tuios asks the `tailscaled` already running on this machine, through the local
-API, which is the same thing `tailscale status` asks. It needs no root, no
-auth key, and no operator setting. A machine with no tailscale on it gets an
-empty list and behaves exactly as it did before.
-
-Every machine is listed, offered or not, and one that is not offered says why.
-By default a machine is left out when it is offline, when it is this machine,
-when it was shared in from another tailnet, or when it runs an operating system
-that cannot host a tuios daemon.
-
-Change any of that in the `[tailscale]` table:
-
-```toml
-[tailscale]
-# Offer tailnet machines as addresses at all.
-enabled = true
-# Which form of address: "dns" is the MagicDNS name and works anywhere on the
-# tailnet, "name" is the short name and needs a search domain, "ip" is the
-# 100.x address and needs no DNS.
-addr = "dns"
-# An ssh login put in front of every address.
-user = "ubuntu"
-# The operating systems to offer. An empty list offers every machine.
-os = ["linux", "macOS", "windows"]
-# Offer machines that are offline, this machine, and machines shared in.
-offline = false
-self = false
-shared = false
-# Glob patterns matched against the short name and the MagicDNS name.
-# exclude wins over include.
-include = ["*"]
-exclude = ["*-pad-*"]
-# How many to offer.
-max = 50
-# Where the tailscaled local API socket is, if it is not in the usual place.
-socket = ""
-
-# Per-machine logins, which win over the user above. This has to come last,
-# because everything after a sub-table heading belongs to it.
-[tailscale.users]
-build = "root"
-```
-
-For a script or an agent, `tuios hosts tailnet --json` gives every machine with
-`offered` and, when it is false, `skipped` saying which rule left it out.
-
-### Tailscale SSH check mode
-
-Tailscale SSH can hold a login until you approve it in a browser. This is
-"check" mode. ssh then waits, and Tailscale prints a link to open:
-
-```
-# Tailscale SSH requires an additional check.
-# To authenticate, visit: https://login.tailscale.com/a/l1d9c7e392d3020
-```
-
-tuios reads this link and shows it.
-
-- **The rail** shows "sign in" beside the host, in the colour of an agent that
-  needs you. Click "sign in", or move the cursor to it and press Enter, to open
-  the sign-in page in your browser. The notice names the domain of the page and
-  the host. A click on the name of the host still folds its group. Hover the
-  host to see why it waits. On an ssh or web client, tuios cannot start your
-  browser. It shows the address in a notice and puts it on your clipboard.
-- **Only a Tailscale address opens.** The link comes from ssh's error output,
-  and anything on the host can print there. tuios shows and opens it only when
-  it is https on `login.tailscale.com` or `controlplane.tailscale.com`, matched
-  exactly. For any other address, the rail says "The sign-in link from NAME is
-  not a Tailscale address, so tuios did not open it." Run ssh to the host in a
-  terminal to see it. With Headscale, give the origin of your server for that
-  host: `tailscale_login = "https://headscale.example"` in `[hosts.NAME]`.
-- **The daemon's link** waits up to 10 minutes on one page. It goes on when you
-  sign in, and the host comes up on the rail with no other step. When Tailscale
-  ends the wait, the link asks again and shows a new page. After you open a
-  page from the rail or with `tuios hosts signin`, the link asks again every few
-  seconds for two minutes.
-- **`tuios hosts`** shows the status "sign in", with the page to open and the
-  command that opens it. In `--json` the status stays `tailscale_check`, with
-  `approval_url`.
-- **`tuios hosts signin [NAME]`** opens the sign-in page of each host that
-  waits, or of the named host. With no desktop, as over ssh, it prints the
-  address. `--print` prints it and opens nothing. `--json` prints
-  `{"hosts":[{"host","url","opened","note"}]}`.
-- **`tuios hosts test`** and **`tuios hosts add`** report `tailscale_check`
-  with the link. Open it, approve the login, then run the command again.
-- **`tuios hosts sync`** on a terminal lists the link of each host that waits.
-  Then it asks to wait up to 5 minutes. Each host continues when you approve
-  its login. Without a terminal, or with `--json`, the host fails at once.
-  Its row has `"error_kind": "tailscale_check"` and `approval_url`.
-
-All ssh calls of one `hosts sync` run to a host use one shared connection.
-Thus one approval covers the whole run. The connection uses a private socket
-in `$XDG_RUNTIME_DIR` and stops when the run ends.
-
-If the tailnet policy refuses the login, tuios names the user it refused. The
-row has `"error_kind": "tailscale_policy"`. Change the user in the `addr` of the
-host in `[hosts]`, for example `addr = "ubuntu@ente"`.
+To use tuios on a phone, log in to this machine over ssh from a terminal app
+on the phone and run `tuios attach`. The phone is then a local client of the
+daemon's socket, like any other.
 
 ## Copying
 
@@ -1253,8 +826,8 @@ reboot.
 ### One daemon per user
 
 A desktop session sets `XDG_RUNTIME_DIR`. A command run over ssh often does
-not: a host link, `tuios hosts sync`, or a paired device. tuios picks the same
-socket for both, so one user on one machine always reaches one daemon:
+not. tuios picks the same socket for both, so one user on one machine always
+reaches one daemon:
 
 1. `$XDG_RUNTIME_DIR/tuios`, when the variable is set.
 2. `/run/user/<uid>/tuios`, when the variable is unset and `/run/user/<uid>`
@@ -1420,7 +993,7 @@ help, restart the Mac. `tccutil` can only reset a permission. It cannot give one
   attach from.
 - **Panes never inherit `TMUX` or `TMUX_PANE`.** Every pane starts from the
   environment of the process that spawns it, less these two, whether it is a
-  daemon pane, a pane hosted for another machine, or a standalone pane. A tuios
+  daemon pane or a standalone pane. A tuios
   started from inside tmux used to pass them on, and a program in the pane then
   believed it was in a tmux pane: Codex wrapped its notifications in tmux
   passthrough, which tuios drops, and an agent that opens panes through tmux

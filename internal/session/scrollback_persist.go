@@ -72,9 +72,8 @@ const (
 	// maxHistoryDim and maxHistoryCells bound the screen a history file may
 	// describe. A restore builds an emulator of that size at daemon start,
 	// before any client is connected, so the size is input to check, not a
-	// fact: the same bound a pane spawned for another machine is held to,
-	// and an area no real terminal reaches.
-	maxHistoryDim   = hostedPaneMaxDim
+	// fact: an area no real terminal reaches.
+	maxHistoryDim   = 10000
 	maxHistoryCells = 1 << 20
 )
 
@@ -264,7 +263,7 @@ func (s *Session) saveHistory(state *SessionState, force bool) {
 		}
 		keep[w.ID] = true
 		pty := s.GetPTY(w.PTYID)
-		if pty == nil || pty.host != "" {
+		if pty == nil {
 			continue
 		}
 		mark, seen := s.history.mark(w.ID)
@@ -292,15 +291,10 @@ func (s *Session) saveHistory(state *SessionState, force bool) {
 }
 
 // historyWanted reports whether a window's history is worth saving: every pane
-// a restore brings back. A popup is dropped by the restore, every scratch
-// pane comes back with its own history, and a pane whose process ran on
-// another machine comes back as a local shell, while the history belongs to
-// the machine that ran it.
+// a restore brings back. A popup is dropped by the restore, and every scratch
+// pane comes back with its own history.
 func historyWanted(w WindowState) bool {
-	if w.Popup && !w.Scratch {
-		return false
-	}
-	return w.Host == ""
+	return !w.Popup || w.Scratch
 }
 
 // saveOnePane captures one pane and writes its file, and returns the stream

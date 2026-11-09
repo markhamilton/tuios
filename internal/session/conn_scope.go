@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // Restricted connections: the minimal form of scoped callers.
@@ -120,17 +118,13 @@ var verbScopes = map[string]scopeKind{
 	// apply-config is for the person, outside every pane.
 	"apply-config": scopeDeny,
 
-	"list-sessions":      scopeGlobal,
-	"list-clients":       scopeGlobal,
-	"list-attention":     scopeGlobal,
-	"list-worktrees":     scopeGlobal,
-	"list-hosts":         scopeGlobal,
-	"list-routes":        scopeGlobal,
-	"list-host-sessions": scopeGlobal,
-	"list-host-agents":   scopeGlobal,
-	"list-themes":        scopeGlobal,
-	"list-glyphs":        scopeGlobal,
-	"list-hooks":         scopeGlobal,
+	"list-sessions":  scopeGlobal,
+	"list-clients":   scopeGlobal,
+	"list-attention": scopeGlobal,
+	"list-worktrees": scopeGlobal,
+	"list-themes":    scopeGlobal,
+	"list-glyphs":    scopeGlobal,
+	"list-hooks":     scopeGlobal,
 	// search-panes takes a list of sessions, and every session without one.
 	"search-panes": scopeGlobal,
 
@@ -190,26 +184,15 @@ var verbScopes = map[string]scopeKind{
 	"new-session":          scopeDeny,
 	// switch-session moves a client and detach-client takes clients off
 	// their sessions: client-level actions, like attach.
-	"switch-session":       scopeDeny,
-	"detach-client":        scopeDeny,
-	"new-worktree":         scopeDeny,
-	"remove-worktree":      scopeDeny,
-	"open-host-connection": scopeDeny,
+	"switch-session":  scopeDeny,
+	"detach-client":   scopeDeny,
+	"new-worktree":    scopeDeny,
+	"remove-worktree": scopeDeny,
 	// retry-host is the person's act from the rail or from 'tuios hosts
 	// signin'. A restricted caller has no reason to make a link dial.
-	"retry-host":        scopeDeny,
-	"open-pane":         scopeDeny,
-	"resize-pane":       scopeDeny,
-	"pane-cwd":          scopeDeny,
-	"pane-agent":        scopeDeny,
-	"pane-calls":        scopeDeny,
-	"pane-kitty-medium": scopeDeny,
 	// paste-image is the person's act and paste-pane-image the owning
 	// daemon's. Neither is for a restricted caller.
-	"paste-image":      scopeDeny,
-	"paste-pane-image": scopeDeny,
-	"read-dir":         scopeDeny,
-	"wait-dir":         scopeDeny,
+	"paste-image": scopeDeny,
 	// The file verbs, transfers and drops are the person's explorer, not a
 	// restricted caller's. A pane's own shell already reaches its files.
 	"file-stat":        scopeDeny,
@@ -224,19 +207,6 @@ var verbScopes = map[string]scopeKind{
 	"file-remove":      scopeDeny,
 	"file-commit":      scopeDeny,
 	"file-abort":       scopeDeny,
-	"file-drop-dir":    scopeDeny,
-	"transfer-start":   scopeDeny,
-	"transfer-list":    scopeDeny,
-	"transfer-cancel":  scopeDeny,
-	"transfer-pause":   scopeDeny,
-	"transfer-resume":  scopeDeny,
-	"transfer-answer":  scopeDeny,
-	"transfer-clear":   scopeDeny,
-	"file-check":       scopeDeny,
-	"open-tree-stream": scopeDeny,
-	"speed-test":       scopeDeny,
-	"host-speed-test":  scopeDeny,
-	"drop-files":       scopeDeny,
 	"new-window":       scopeDeny,
 	"popup":            scopeDeny,
 	// A pane opens, changes and closes a TML surface with the write grant,
@@ -292,8 +262,6 @@ var verbScopes = map[string]scopeKind{
 	// From the host policy and dropped-link work: the link handshake,
 	// ending a hosted pane, and passing on held mail are for a link
 	// connection or the person's client, never a restricted caller.
-	"link-peer":             scopeDeny,
-	"close-pane":            scopeDeny,
 	"release-agent-message": scopeDeny,
 
 	// From the shell command and ask-human work. run types a line at a
@@ -306,7 +274,6 @@ var verbScopes = map[string]scopeKind{
 
 	// From the host targeting work: reading a worktree's files out is for
 	// the person's own CLI (worktree pull), not a restricted caller.
-	"bundle-worktree": scopeDeny,
 
 	// From the agent review, triage, queue and approval work
 	// (verb_protocol_agents.go). Reads of one session and its fan group: a
@@ -478,7 +445,7 @@ func scopeWidenError(param, msg string) *verbError {
 // A caller placed nowhere gets an empty window and no error: its restriction
 // then reaches no session.
 func (d *Daemon) placeCaller(cs *connState, paneID, token string) (window, via string, verr *verbError) {
-	if !cs.viaLink && !cs.paneOnly {
+	if !cs.paneOnly {
 		if _, win := d.peerPane(cs); win != "" {
 			if paneID != "" && paneID != win {
 				return "", "", hintedVerbError(ErrVerbForbidden, "pane_id names another pane than the one this process runs in", &VerbHint{
@@ -492,7 +459,7 @@ func (d *Daemon) placeCaller(cs *connState, paneID, token string) (window, via s
 	if paneID == "" {
 		return "", "", nil
 	}
-	if cs.viaLink || !d.manager.VerifyPaneToken(paneID, token) {
+	if !d.manager.VerifyPaneToken(paneID, token) {
 		return "", "", hintedVerbError(ErrVerbForbidden, "pane_token does not prove pane_id", &VerbHint{
 			Param:  "pane_token",
 			Detail: "Pass the TUIOS_PANE_TOKEN of the pane named by TUIOS_PANE_ID, from the same pane's environment. A token is good for one pane of one daemon start.",
@@ -557,7 +524,7 @@ func (d *Daemon) callerSession(cs *connState) *Session {
 	if w := cs.paneBound.Load(); w != nil {
 		return d.sessionHoldingWindow(*w)
 	}
-	if cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
+	if cs.paneOnly || cs.peerPID <= 0 {
 		return nil
 	}
 	if _, win := d.peerPane(cs); win != "" {
@@ -632,29 +599,6 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 // See pane_grants.go.
 func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if ev.Type == EventGap {
-		return true
-	}
-	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
-	// events reach no restricted connection, and a pane without admin sees
-	// only the copies it started, with the files grant. A link hears them
-	// only when it may list the transfers, which needs the files capability
-	// and relay, not list alone.
-	if ev.Transfer != nil || ev.File != nil {
-		if cs.scope.Load() != nil {
-			return false
-		}
-		if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
-			owner := ""
-			if ev.Transfer != nil {
-				owner = ev.Transfer.Pane
-			} else {
-				owner = ev.File.Pane
-			}
-			return pa.grants.Has(GrantFiles) && owner != "" && owner == pa.window
-		}
-		if cs.viaLink && d.checkLinkCaps(cs, "transfer", []string{capRelay, config.LinkAllowFiles}) != nil {
-			return false
-		}
 		return true
 	}
 	var owners []string

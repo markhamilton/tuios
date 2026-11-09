@@ -25,7 +25,7 @@ ID and NAME are exactly what `-w` takes. `ready` in `--json` is whether
 `ask-agent` would type at the pane now: true for `idle`, `done`, `errored` and
 `none`, false for `needs_input` (typing answers the prompt) and for `unknown`.
 `--all` lists every window, which is how you find out a pane you expected is
-simply not reporting. `--all-sessions` and `--all-hosts` widen the listing.
+simply not reporting. `--all-sessions` widens the listing.
 
 ```sh
 tuios list-agents -s work --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'
@@ -163,8 +163,7 @@ tuios stash list -s work
 `stash put` prints only the stored path on stdout. The file lives as long as the
 session, the same bytes are stored once, one file is capped at 16 MB and a
 session at 256 MB (oldest unreferenced files go first), and nothing can delete
-from it by hand. `stash put -s HOST:SESSION FILE` sends a file to another
-machine, capped at 8 MB.
+from it by hand.
 
 ### Asking a question and waiting for the answer
 

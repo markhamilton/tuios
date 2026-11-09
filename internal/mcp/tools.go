@@ -374,10 +374,6 @@ var EventTypes = []string{
 	"session-created", "session-closed", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
 	"agent-activity", "transcript",
-	// The daemon sends no transfer event to a restricted connection, which
-	// every connection of tuios mcp is, so these two never arrive here.
-	// They are listed so the list stays the daemon's.
-	"transfer", "transfer-progress", "transfer-file",
 	// What a person did on a TML surface. Opt-in.
 	"tml-event",
 	// A session's task cards.

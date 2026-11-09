@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // getSessionClientCount returns the number of TUI clients attached to a session.
@@ -167,9 +168,8 @@ func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width,
 }
 
 // clientLabel names a client for the hint a larger client shows. Its
-// machine is the link peer for a client that came over a link, then the host
-// name the client's hello gave, then this machine's host name for a client
-// from before that field. Its kind is the hello's ClientKind. A zero
+// machine is the host name the client's hello gave, then this machine's host
+// name for a client from before that field. Its kind is the hello's ClientKind. A zero
 // SizeOwner when the client is not known.
 func (d *Daemon) clientLabel(clientID string) SizeOwner {
 	if clientID == "" {
@@ -179,18 +179,16 @@ func (d *Daemon) clientLabel(clientID string) SizeOwner {
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		id, peer, machine, kind, link := cs.clientID, cs.linkPeer, cs.machine, cs.kind, cs.viaLink
+		id, machine, kind := cs.clientID, cs.machine, cs.kind
 		cs.mu.Unlock()
 		if id != clientID {
 			continue
 		}
 		owner := SizeOwner{Kind: kind, Client: clientID}
 		switch {
-		case peer != "":
-			owner.Machine = peer
 		case machine != "":
 			owner.Machine = machine
-		case !link:
+		default:
 			owner.Machine = localHostLabel()
 		}
 		return owner
@@ -198,11 +196,10 @@ func (d *Daemon) clientLabel(clientID string) SizeOwner {
 	return SizeOwner{}
 }
 
-// helloMachine is the hello's Machine when it is a valid machine name, the
-// rule a link peer's name follows, and "" otherwise. It is shown to other
-// clients, and over a link it comes from another machine.
+// helloMachine is the hello's Machine when it is a valid machine name, and
+// "" otherwise. It is shown to other clients.
 func helloMachine(name string) string {
-	if ValidLinkPeerName(name) != nil {
+	if name == "" || len(name) > 64 || !machineNamePattern().MatchString(name) {
 		return ""
 	}
 	return name
@@ -262,30 +259,6 @@ func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) 
 	_, _, _ = d.recalculateAndBroadcastSize(sessionID, joiningClient.clientID)
 }
 
-// refreshLinkedViewer records on a session whether any TUI client drawing it
-// arrived over a link, from another machine. It runs whenever a client joins
-// or leaves, so the answer the session's panes give a kitty graphics query
-// follows the clients actually attached. See Session.kittyQueryResponse.
-func (d *Daemon) refreshLinkedViewer(sessionID string) {
-	session := d.manager.GetSessionByID(sessionID)
-	if session == nil {
-		return
-	}
-	linked := false
-	d.clientsMu.RLock()
-	for _, cs := range d.clients {
-		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient && cs.viaLink
-		cs.mu.Unlock()
-		if match {
-			linked = true
-			break
-		}
-	}
-	d.clientsMu.RUnlock()
-	session.SetLinkedViewer(linked)
-}
-
 // notifyClientLeft broadcasts a client leave event to all other clients in the session.
 // input is the leaving client's last input, for the latest policy.
 func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string, input time.Time) {
@@ -294,7 +267,6 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string, inpu
 	// this is where the agent link moves back to the client before.
 	d.agentForget(sessionID, leavingClientID)
 	d.displayForget(sessionID, leavingClientID)
-	d.refreshLinkedViewer(sessionID)
 	clientCount := d.getSessionClientCount(sessionID)
 
 	payload := &ClientLeftPayload{
@@ -506,3 +478,7 @@ func (d *Daemon) syncPTYPixelDimensions(session *Session, cellWidth, cellHeight 
 		}
 	}
 }
+
+// machineNamePattern is what a machine name may be: letters, digits, dot,
+// dash and underscore, starting with a letter or digit.
+var machineNamePattern = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)

@@ -211,9 +211,9 @@ func (m *OS) navigatorListNote() string {
 func (m *OS) navigatorSessionColors() {
 	names := make([]string, 0, len(m.navigator.sessions))
 	for _, s := range m.navigator.sessions {
-		if s.Host == "" {
-			names = append(names, s.Name)
-		}
+
+		names = append(names, s.Name)
+
 	}
 	m.refreshSessionColors(names)
 }
@@ -519,9 +519,7 @@ func (m *OS) navSessionSpans(s *navSession, k navInks) (left, right string) {
 	}
 	title := printableTitle(s.Title)
 	left = k.lit(title, k.ink(tint).Bold(true), m.navMatch(title, false))
-	if s.Host != "" {
-		left += k.ink(k.mute).Render(" @ ") + k.ink(k.dim).Render(printableTitle(s.Host))
-	}
+
 	switch {
 	case s.Note != "":
 		right = k.ink(k.mute).Italic(true).Render(s.Note)
@@ -644,9 +642,7 @@ func (m *OS) navBreadcrumb(s *navSession, ws int, k navInks) string {
 	}
 	title := printableTitle(s.Title)
 	out := k.lit(title, k.ink(tint), m.navMatch(title, false))
-	if s.Host != "" {
-		out += k.ink(k.mute).Render(" @ ") + k.ink(k.dim).Render(printableTitle(s.Host))
-	}
+
 	label := printableTitle(s.workspaceLabel(ws))
 	return out + k.ink(k.mute).Render(" › ") + k.lit(label, k.ink(k.mute), m.navMatch(label, false))
 }
@@ -826,14 +822,10 @@ func (m *OS) navigatorScreen(s *navSession, p *navPane, width, rows int) []strin
 	return out
 }
 
-// navTintKey is the name a session's colour is kept under: its name, or for
-// a session on another machine the id the rail gives its row, so the rail and
-// the navigator give a session the same colour.
+// navTintKey is the name a session.s colour is kept under, its name, so the
+// navigator gives a session the same colour as the rail.
 func navTintKey(s *navSession) string {
-	if s.Host == "" {
-		return s.Name
-	}
-	return hostNodeID(s.Host) + ":" + s.Name
+	return s.Name
 }
 
 // navFolder is a folder short enough for a list row: the home folder as ~,

@@ -41,7 +41,7 @@ something for someone: there is a control they can adjust.
 Tables are not scalar options and are edited in config.toml:
 `[appearance.sidebar.agent_row]` (which tokens an agent row draws, their looks
 and value rules; `now`, `context`, `subagents` and `prompt` read what the hooks
-and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[hosts]`, `[notify]`, `[agents.approvals]`, `[agents.checkpoints]`,
+and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[notify]`, `[agents.approvals]`, `[agents.checkpoints]`,
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios restart-server` to take effect.
 
@@ -52,17 +52,16 @@ hand, find the file that sets it:
 
 ```sh
 tuios config files                     # every file, in merge order, read-only ones marked
-tuios config origin hosts              # the file that sets each key under [hosts]
+tuios config origin notify             # the file that sets each key under [notify]
 ```
 
-Edit that file, not config.toml. `set-config`, `tuios hosts add` and
+Edit that file, not config.toml. `set-config` and
 `tuios keybinds unbind` already write only the changed key, to the file that
 holds it. They never write a read-only file: the change goes to the last
 writable file, and they say so. config.toml wins over every other file, so do
 not copy a value into it that another file already sets.
 
-A change to `[agents.permissions]` or `[hosts]` that gives panes or other
-machines more waits for the person, and the Inbox says so. The person applies
+A change to `[agents.permissions]` that gives panes more waits for the person, and the Inbox says so. The person applies
 it with `tuios config apply` in a terminal outside tuios. From a pane that
 command is refused. Do not edit config.toml to widen what you hold: it waits
 for the person, and the change tells them what you did.
@@ -116,13 +115,10 @@ socket of the client that attached or used it last. New panes get
 `SSH_AUTH_SOCK` set to the link. A shell that started earlier keeps its old
 value: `p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"` points
 it at the link, and leaves the value alone when the option is off.
-Through a host, it needs the option on both machines and agent forwarding
-on the link (`ssh_options = ["-A"]` or `ForwardAgent yes`), which tuios never
-turns on by itself. The option is in the file only. Do not change it, or the
-forwarding, unless the person asks.
+The option is in the file only. Do not change it unless the person asks.
 
 `daemon.display = "follow"` is the default. A daemon with no display of its
-own (one that a host link started over ssh) gives new panes the
+own (one started over ssh) gives new panes the
 `WAYLAND_DISPLAY`, `DISPLAY` and `XAUTHORITY` of the newest local client.
 `WAYLAND_DISPLAY` names a link that follows the client. A shell that started
 earlier has no display: `eval "$(tuios display-env 2>/dev/null)"` gives it the
@@ -191,8 +187,7 @@ question about the screen. Do not change them unless the person asks.
   pastes the path into that pane, quoted for its shell.
 - In the rail's files section, `space` shows a preview of the row: code,
   Markdown, a picture, a PDF page or a folder. `j` and `k` move it to the
-  next row. `space` or `esc` closes it. A row of a listing on another machine
-  is read on that machine, and needs the `files` grant there.
+  next row. `space` or `esc` closes it.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty

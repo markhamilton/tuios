@@ -128,8 +128,6 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 	}
 
 	d.listener = listeners["main"]
-	d.linkListener = listeners["link"]
-	d.linkHumanListener = listeners["link-human"]
 	if err := d.writePidFile(); err != nil {
 		LogError("Live upgrade: writing the pid file: %v", err)
 	}
@@ -181,8 +179,6 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 	d.lastHandoff.Store(&stats)
 
 	d.attention.load(attentionPath(), d.attentionLive)
-	d.noteHostProblems(d.configProblems())
-	d.outbox.load(outboxPath())
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 	d.serve()
 	_ = mf.Close()

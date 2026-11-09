@@ -152,47 +152,6 @@ func writeLinkSSH(t *testing.T, dir string, m *oneMachine) string {
 	return path
 }
 
-// TestOneDaemonWithAndWithoutXDGRuntimeDir is the reported bug. The desktop
-// daemon runs with XDG_RUNTIME_DIR set. A command over ssh without it, and a
-// host link's stdio-proxy, must reach that same daemon and see its sessions.
-func TestOneDaemonWithAndWithoutXDGRuntimeDir(t *testing.T) {
-	m := newOneMachine(t)
-	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
-
-	// A command over ssh sees the desktop's session, and what it makes the
-	// desktop sees. Errorf, so a broken build also reports the link below.
-	if out, _ := m.cli(t, m.sshEnv(), "ls"); !strings.Contains(out, "desk") {
-		t.Errorf("ASSERTION: without XDG_RUNTIME_DIR, ls does not list the desktop session:\n%s", out)
-	}
-	m.mustCLI(t, m.sshEnv(), "new", "oversh", "--detach")
-	if out, _ := m.cli(t, m.desktopEnv(), "ls"); !strings.Contains(out, "oversh") {
-		t.Errorf("ASSERTION: the session made without XDG_RUNTIME_DIR is not on the desktop daemon:\n%s", out)
-	}
-	if _, err := os.Stat(m.legacySocket()); err == nil {
-		t.Errorf("ASSERTION: a second daemon socket exists at %s", m.legacySocket())
-	}
-
-	// A host link, through the real stdio-proxy over the ssh stand-in.
-	hub := t.TempDir()
-	writeOneHostConfig(t, hub, tuiosBin)
-	env := []string{"TUIOS_SSH=" + writeLinkSSH(t, hub, m)}
-	killDaemon(t, hub)
-	if out, err := tuiosCLIEnv(t, hub, env, "new", "home", "--detach"); err != nil {
-		t.Fatalf("start the hub daemon: %v\n%s", err, out)
-	}
-	waitForHostListing(t, hub, func(s string) bool {
-		return strings.Contains(s, "build") && strings.Contains(s, "up")
-	}, "the hub never reported build up: the link found no daemon")
-	for _, name := range []string{"desk", "oversh"} {
-		if out, err := tuiosCLIEnv(t, hub, env, "list-windows", "-s", "build:"+name); err != nil {
-			t.Fatalf("ASSERTION: the link does not reach session %s on build: %v\n%s", name, err, out)
-		}
-	}
-	if _, err := os.Stat(m.legacySocket()); err == nil {
-		t.Fatalf("ASSERTION: the link left a second daemon socket at %s", m.legacySocket())
-	}
-}
-
 // TestADaemonAnOlderLinkStartedIsFoundNotSplit is the upgrade. An older tuios
 // started a daemon over ssh in /tmp/tuios-<uid>. A new client without
 // XDG_RUNTIME_DIR uses that daemon rather than starting a second one in

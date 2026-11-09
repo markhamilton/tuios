@@ -19,7 +19,6 @@ type sidebarRenderCache struct {
 	w          int
 	hits       []sidebarRowHit
 	sessionIDs []string
-	hostIDs    []string
 	nav        []sidebarNavRow
 	sections   [sidebarSectionCount][2]int
 	stripRows  []sidebarStripRow
@@ -63,7 +62,6 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
-		m.SidebarHostIDs = append(m.SidebarHostIDs[:0], m.sidebarCache.hostIDs...)
 		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
 		m.sidebarSectionY = m.sidebarCache.sections
 		m.sidebarStripRows = append(m.sidebarStripRows[:0], m.sidebarCache.stripRows...)
@@ -81,7 +79,6 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		w:          w,
 		hits:       append([]sidebarRowHit(nil), m.SidebarHits...),
 		sessionIDs: append([]string(nil), m.SidebarSessionIDs...),
-		hostIDs:    append([]string(nil), m.SidebarHostIDs...),
 		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
 		sections:   m.sidebarSectionY,
 		stripRows:  append([]sidebarStripRow(nil), m.sidebarStripRows...),
@@ -199,7 +196,6 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(int(m.filesView.Show))
 	mixS(m.filesView.Dir)
 	mixS(m.filesView.Origin)
-	mixS(m.filesView.Host)
 	mixS(m.filesView.Err)
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScrollF)
@@ -329,9 +325,8 @@ func (m *OS) sidebarSignature() uint64 {
 	for _, o := range m.SidebarOrder {
 		mixS(o)
 	}
-	attached := m.attachedMachine()
-	mixB(m.sessionOrderPending(attached))
-	mixB(m.sessionOrderFromDaemon(attached))
+	mixB(m.sessionOrderPending())
+	mixB(m.sessionOrderFromDaemon())
 
 	// The worktree groups. Which repositories are folded decides which rows the
 	// sessions section draws at all, and the attached session's own record is
@@ -352,40 +347,6 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(repoFold)
 
-	// The machine groups: which machine the rows come from, the user's order
-	// over the others, their session orders, and which are folded. The
-	// snapshot's own generation is folded below.
-	mixS(m.AttachedHost)
-	for _, h := range m.SidebarHostOrder {
-		mixS(h)
-	}
-	var hostFold uint64
-	for host, collapsed := range m.SidebarCollapsedHosts {
-		if !collapsed {
-			continue
-		}
-		e := uint64(1469598103934665603)
-		for i := range len(host) {
-			e ^= uint64(host[i])
-			e *= prime
-		}
-		hostFold ^= e
-	}
-	mixU(hostFold)
-	var hostOrder uint64
-	for host, order := range m.SidebarHostSessionOrder {
-		e := uint64(1469598103934665603)
-		for _, s := range append([]string{host}, order...) {
-			for i := range len(s) {
-				e ^= uint64(s[i])
-				e *= prime
-			}
-			e ^= 0x2f
-			e *= prime
-		}
-		hostOrder ^= e
-	}
-	mixU(hostOrder)
 	if m.SessionWorktree != nil {
 		mixS(m.SessionWorktree.Repo)
 		mixS(m.SessionWorktree.Branch)
@@ -405,11 +366,6 @@ func (m *OS) sidebarSignature() uint64 {
 	if m.DaemonClient != nil {
 		mixU(m.DaemonClient.CacheGen())
 	}
-
-	// The federated host groups, folded by their snapshot generation for the
-	// same reason: the rows come from a stored snapshot, and a new snapshot is
-	// the only thing that can change them.
-	mixU(m.federationGen)
 
 	// A rename in flight is not folded in: the buffer lives in its own dialog
 	// and the rail keeps drawing the old name, so typing no longer rebuilds the

@@ -161,8 +161,7 @@ Some values come from tuios facts:
   that does not report `history_rows` leaves it empty.
 - `pane_pid` is the process the pane started, and `pane_tty` its terminal
   device, both from the daemon. A pane the shim opened runs its pane holder
-  first, so its `pane_pid` is the holder's. A pane on another machine has
-  neither.
+  first, so its `pane_pid` is the holder's.
 - `pid` is the daemon's pid: the daemon is the shim's tmux server.
 - `pane_at_left` and the others are 1 for a pane on that edge of the box
   around its workspace's panes. `window_zoomed_flag` is 1 when a pane of the
@@ -421,8 +420,8 @@ This is the plan for `%output` with the pane's bytes. It is not built yet.
   in base64. It subscribes to the pane's PTY as an attached client does
   (`PTY.Subscribe`), with pacing off, so a slow control client never holds
   the pane's program back. It is a read, held to the same grants as
-  `capture-pane`, and it needs entries in the connection scope table, the
-  link policy and `list-verbs`.
+  `capture-pane`, and it needs entries in the connection scope table and
+  `list-verbs`.
 - When the subscriber falls behind and the PTY marks a gap, the verb sends a
   gap line and starts again from the ring's tail. The graphics frames the
   PTY can drop for a newer one are resolved as `streamPTYOutput` resolves

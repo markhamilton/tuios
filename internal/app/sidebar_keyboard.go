@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"slices"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -358,7 +357,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowHost, sidebarRowRepo:
+	case sidebarRowSession, sidebarRowRepo:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -429,24 +428,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		// The new pane is the request, so the rail hands the keyboard back to it.
 		m.SidebarNewWindow(row.SessionID)
 		return true
-	case sidebarRowHostSession:
-		// The remote session opens in a pane, which is where the user asked to
-		// go, so the rail hands the keyboard back.
-		m.openRemoteSession(row.SessionID, row.WindowID)
-		return true
-	case sidebarRowHostNew:
-		m.createRemoteSession(row.SessionID)
-		return true
-	case sidebarRowHostSignIn:
-		// The page opens in a browser, so the keyboard stays in the rail.
-		m.queueSidebarCmd(m.openHostSignIn(row.SessionID))
 	case sidebarRowRailPaneStart:
 		m.RestartRailPane()
-	case sidebarRowGlobalNew:
-		// A new global session is where the user asked to end up, so the rail
-		// hands the keyboard back the way the other create controls do.
-		m.SidebarNewGlobalSession()
-		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
@@ -459,8 +442,6 @@ func (m *OS) SidebarActivateCursor() bool {
 		// Folding a group is a change to the rail, not a place to go, so the
 		// keyboard stays in the rail on the row that was folded.
 		m.SidebarToggleRepoCollapsed(row.SessionID)
-	case sidebarRowHost:
-		m.SidebarToggleHostCollapsed(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -482,16 +463,10 @@ func (m *OS) SidebarActivateCursor() bool {
 
 // SidebarReorderCursor moves the cursor's session up or down in the rail order
 // and persists it, the keyboard equivalent of a drag-reorder. The cursor rides
-// with the moved session so successive presses keep moving the same one. On a
-// machine's header it moves the machine among the others, the keyboard twin
-// of dragging the header; this machine stays first.
+// with the moved session so successive presses keep moving the same one.
 func (m *OS) SidebarReorderCursor(delta int) {
 	row, ok := m.sidebarCursorRow()
 	if !ok {
-		return
-	}
-	if row.Kind == sidebarRowHost {
-		m.sidebarReorderHost(row.SessionID, delta)
 		return
 	}
 	if row.Kind != sidebarRowSession {
@@ -514,37 +489,6 @@ func (m *OS) SidebarReorderCursor(delta int) {
 	// The rail relays out next frame; follow the moved session so the cursor and
 	// its highlight ride to the new slot rather than staying on a fixed index.
 	m.sidebarFollowSession = row.SessionID
-}
-
-// sidebarReorderHost moves one machine's group delta places among the other
-// machines and persists the order. The cursor tracks the header by identity,
-// so it rides with the moved group on its own.
-func (m *OS) sidebarReorderHost(host string, delta int) {
-	order := append([]string(nil), m.SidebarHostIDs...)
-	from := slices.Index(order, host)
-	if from < 0 {
-		// This machine. It is not in the order at all, so the swap below would
-		// do nothing and say nothing, which is how a person decides a feature
-		// is missing.
-		m.sidebarSayMachinePinned()
-		return
-	}
-	to := from + delta
-	if to < 0 || to >= len(order) {
-		return
-	}
-	order[from], order[to] = order[to], order[from]
-	m.SidebarHostOrder = order
-	m.saveSidebarState()
-}
-
-// sidebarSayMachinePinned answers a move this machine cannot make. The rail
-// keeps this machine at the top of the sessions section whatever the others
-// are dragged into, and a refusal that draws nothing reads as a rail that
-// cannot be reordered at all.
-func (m *OS) sidebarSayMachinePinned() {
-	m.ShowNotification("This machine stays first. Move another machine instead.",
-		"info", m.Settings.NotificationDuration)
 }
 
 // SidebarCycleSection walks the cursor forward through the rail's three
@@ -622,13 +566,13 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 }
 
 // sidebarRowHasMenu reports whether a row points at something a context menu
-// can be about: a session, a machine, a pane in either of the two sections
+// can be about: a session, a pane in either of the two sections
 // that list panes, or any row of the files section. The rail's own controls
 // point at the rail itself, which the right-click on blank rail already
 // covers.
 func sidebarRowHasMenu(row sidebarNavRow) bool {
 	switch row.Kind {
-	case sidebarRowSession, sidebarRowHost:
+	case sidebarRowSession:
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
@@ -796,12 +740,7 @@ func (m *OS) SidebarNewSession() {
 		return
 	}
 	m.clearSidebarReturn() // the new session is where the user asked to end up
-	if m.AttachedHost != "" {
-		// The connection goes to another machine, and a create sent over it
-		// would make the session there.
-		m.makeSessionHere(false)
-		return
-	}
+
 	// Creating a session is a daemon round trip, and this runs on the Update
 	// goroutine. Doing it inline parked input, rendering and socket draining for
 	// as long as the daemon took, made worse by the background session poll
@@ -813,33 +752,6 @@ func (m *OS) SidebarNewSession() {
 	w, h := m.GetContentWidth(), m.GetUsableHeight()
 	go func() {
 		ch <- SessionCreatedMsg{Name: name, Err: client.CreateDetachedSession(name, w, h)}
-	}()
-}
-
-// SidebarNewGlobalSession makes another global session and switches to it,
-// which is what the global group's "+" means.
-//
-// The session is created with no windows. Its first pane is the one the user
-// picks a machine for, and the picker is opened for them once the switch has
-// landed; see SessionCreatedMsg.
-func (m *OS) SidebarNewGlobalSession() {
-	if !m.SidebarCanCreateSession() {
-		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
-		return
-	}
-	m.clearSidebarReturn()
-	if m.AttachedHost != "" {
-		// The global group is this machine's. From a session on another
-		// machine the create goes to this machine's daemon, not over the
-		// connection to that machine.
-		m.makeSessionHere(true)
-		return
-	}
-	name := m.nextGlobalSessionName()
-	client, ch := m.DaemonClient, m.sessionCreateChan()
-	w, h := m.GetContentWidth(), m.GetUsableHeight()
-	go func() {
-		ch <- SessionCreatedMsg{Name: name, Global: true, Err: client.CreateGlobalSession(name, w, h)}
 	}()
 }
 

@@ -137,11 +137,6 @@ const (
 	ErrVerbProtocolMismatch = "protocol_mismatch"
 )
 
-// The two federation error codes live in verb_hosts.go beside the verbs that
-// raise them: ErrVerbUnknownHost and ErrVerbHostUnreachable. Both are final.
-// A caller that gets either must report it, never retry into a different host
-// name, because reaching the wrong machine is worse than reaching none.
-
 // MinVerbProtocolVersion is the oldest protocol version this daemon still
 // serves. A caller announcing anything older is told to upgrade rather than
 // being allowed to proceed into undefined behavior.
@@ -368,17 +363,14 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSetPaneGrants,
 		},
 		"apply-config": {
-			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
-			params: []verbParam{
-				{Name: "host", Type: "string", Description: "Apply only this host's entry, or its removal, and nothing else in the file. tuios hosts add sends it."},
-			},
+			description: "Apply config.toml now, including the changes that give panes more: [agents.permissions]. A change to the file applies only what narrows it; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane.",
 			returns: []verbParam{
 				{Name: "mode", Type: "string", Description: "[agents.permissions] mode now in force."},
 				{Name: "default_grants", Type: "[]string", Description: "What a pane started with no grants of its own holds now."},
-				{Name: "changes", Type: "[]string", Description: "What changed, one sentence each: the default grants, hosts added, removed or dialled another way, and link policies."},
-				{Name: "still_waiting", Type: "bool", Description: "True when config.toml still holds a change that waits, which happens when only one host was applied."},
+				{Name: "changes", Type: "[]string", Description: "What changed, one sentence each: the default grants."},
+				{Name: "still_waiting", Type: "bool", Description: "True when config.toml still holds a change that waits."},
 			},
-			examples: []string{`{"id":1,"verb":"apply-config"}`, `{"id":1,"verb":"apply-config","params":{"host":"build"}}`},
+			examples: []string{`{"id":1,"verb":"apply-config"}`},
 			handler:  (*Daemon).verbApplyConfig,
 		},
 		"list-verbs": {
@@ -517,7 +509,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			description: "Switch an attached client to another session in place, as the session switcher does. The client is the one named by client, else the one showing session, else the one showing the caller's own session from a pane, else the only one attached.",
 			params: []verbParam{
 				{Name: "name", Type: "string", Required: true, Description: "Session to switch to."},
-				{Name: "host", Type: "string", Description: "Machine from the client's [hosts] table that holds the session. Omit, or local, for this daemon."},
 				{Name: "create", Type: "bool", Description: "Create the session when it does not exist.", Default: "false"},
 				{Name: "cwd", Type: "string", Description: "With create, the directory the new session's windows start in."},
 				{Name: "session", Type: "string", Description: "Session the client to switch shows."},
@@ -525,7 +516,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Session the client now shows."},
-				{Name: "host", Type: "string", Description: "Machine the session is on. Absent for this daemon."},
 				{Name: "client_id", Type: "string", Description: "Id of the client that switched."},
 				{Name: "created", Type: "bool", Description: "True when create made the session on this daemon."},
 				{Name: "already", Type: "bool", Description: "True when the client already showed the session. Nothing changed."},
@@ -533,7 +523,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{
 				`{"id":1,"verb":"switch-session","params":{"name":"api"}}`,
 				`{"id":1,"verb":"switch-session","params":{"name":"api","create":true,"cwd":"/src/api"}}`,
-				`{"id":1,"verb":"switch-session","params":{"name":"api","host":"build","session":"work"}}`,
 			},
 			handler: (*Daemon).verbSwitchSession,
 		},
@@ -699,40 +688,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbFan,
 		},
-		"bundle-worktree": {
-			description: "Read a worktree session's work out in chunks so it can cross a link: its commits as a git bundle, then its uncommitted work as a binary patch. The first call makes the transfer and answers with its first chunk. Later calls pass the token and the next offset. tuios worktree pull is the caller.",
-			params: []verbParam{
-				{Name: "session", Type: "string", Description: "The worktree session to read. Required on the first call. Never guessed."},
-				{Name: "full", Type: "bool", Description: "Bundle the branch's whole history. Without it only the commits past the merge base with the worktree's base are carried, and the reader must have base_commit.", Default: "false"},
-				{Name: "token", Type: "string", Description: "The transfer to read on, from the first call's reply. Only the connection that made a transfer can read it."},
-				{Name: "offset", Type: "int", Description: "Where to read from: the next of the previous reply.", Default: "0"},
-				{Name: "release", Type: "bool", Description: "With token, end the transfer without reading the rest.", Default: "false"},
-			},
-			returns: []verbParam{
-				{Name: "token", Type: "string", Description: "The transfer's token. It ends after its last chunk, on release, when this connection closes, or after ten minutes unread."},
-				{Name: "content", Type: "string", Description: "This chunk, base64, at most 4 MB before encoding."},
-				{Name: "offset", Type: "int", Description: "Where this chunk starts."},
-				{Name: "next", Type: "int", Description: "Where the next chunk starts."},
-				{Name: "done", Type: "bool", Description: "True on the last chunk, after which the token is gone."},
-				{Name: "repo", Type: "string", Description: "First call only: the repository's name."},
-				{Name: "origin_url", Type: "string", Description: "First call only: the repository's origin URL, empty when it has none."},
-				{Name: "branch", Type: "string", Description: "First call only: the branch the worktree has checked out."},
-				{Name: "base", Type: "string", Description: "First call only: the ref the worktree was made from, empty when it is not known."},
-				{Name: "base_commit", Type: "string", Description: "First call only: the commit the bundle assumes the reader has, empty for a full bundle."},
-				{Name: "head", Type: "string", Description: "First call only: the commit the branch is at."},
-				{Name: "full", Type: "bool", Description: "First call only: true when the bundle carries the whole history."},
-				{Name: "bundle_bytes", Type: "int", Description: "First call only: how many bytes of the transfer are the bundle, zero when the branch has no commits past base_commit."},
-				{Name: "patch_bytes", Type: "int", Description: "First call only: how many bytes after the bundle are the patch, zero when nothing is uncommitted."},
-				{Name: "changes", Type: "int", Description: "First call only: how many paths the patch touches, untracked files included."},
-				{Name: "size", Type: "int", Description: "First call only: the transfer's whole length."},
-				{Name: "sha256", Type: "string", Description: "First call only: the SHA-256 of the whole transfer, for the reader to check."},
-			},
-			examples: []string{
-				`{"id":1,"verb":"bundle-worktree","params":{"session":"api-fan-add-retry-2"}}`,
-				`{"id":2,"verb":"bundle-worktree","params":{"token":"<token>","offset":4194304}}`,
-			},
-			handler: (*Daemon).verbBundleWorktree,
-		},
 		"start-agent": {
 			description: "Start an agent in a new pane of a session and answer once it is ready for a prompt: its state reads idle or done, from a report, a hook, its screen or its title (unknown counts only for a harness that can never show idle). A pane on needs_input ends the wait at once with ready false and blocked_by, and is kept. With prompt, the first prompt is typed once it is ready, the way fan types it. A named session that does not exist is created. From another machine, address it with a host-qualified session and name the repository by repo_url.",
 			params: append([]verbParam{
@@ -784,153 +739,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbStartAgent,
 		},
-		"list-routes": {
-			description: "List the addresses this machine has now, so a phone paired on one network can reach it from another.",
-			returns: []verbParam{
-				{Name: "routes", Type: "[]object", Description: "host (a name or an IP, without a port) and kind (tailnet, lan or public), the tailnet name first."},
-			},
-			examples: []string{`{"id":1,"verb":"list-routes"}`},
-			handler:  (*Daemon).verbListRoutes,
-		},
-		"list-hosts": {
-			description: "List the machines named in the [hosts] config table, with the state of each link.",
-			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back. cores, load1, mem_pct and agents_working are the host's load from the last hello on the link, at load_at (Unix seconds), and rtt_ms is that hello's round trip in milliseconds; all are absent until a hello from the host carried a load."},
-				{Name: "total", Type: "int", Description: "How many hosts are configured."},
-				{Name: "events_push", Type: "bool", Description: "Always true from a daemon that pushes host changes: host-changed on subscribe, and a hosts-changed push to attached clients."},
-				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
-			},
-			examples: []string{`{"id":1,"verb":"list-hosts"}`},
-			handler:  (*Daemon).verbListHosts,
-		},
-		"retry-host": {
-			description: "Dial the link to one host again now. The backoff starts again from one second. If the link is up, the link pings the host instead. If the host does not answer in 5 seconds, the link dials again. If the host waits for a Tailscale SSH sign-in, the link dials every few seconds for two minutes. A dial in progress continues.",
-			params: []verbParam{
-				{Name: "host", Type: "string", Required: true, Description: "A host by name from the [hosts] config table."},
-			},
-			returns: []verbParam{
-				{Name: "host", Type: "string", Description: "The host."},
-				{Name: "status", Type: "string", Description: "The link state when the call was made."},
-				{Name: "approval_url", Type: "string", Description: "The Tailscale sign-in page, when the link waits for one and has it. Omitted otherwise."},
-				{Name: "approval_refused", Type: "bool", Description: "True when the link waits for a sign-in and the banner named an address that is not a Tailscale login origin. Omitted otherwise."},
-			},
-			examples: []string{`{"id":1,"verb":"retry-host","params":{"host":"build"}}`},
-			handler:  (*Daemon).verbRetryHost,
-		},
-		"open-host-connection": {
-			description: "Turn this connection into a connection to the daemon on one host. After the reply, every byte written here reaches that daemon and every byte it writes comes back. Send nothing until the reply has arrived.",
-			params: []verbParam{
-				{Name: "host", Type: "string", Description: "A host by name from the [hosts] config table."},
-				{Name: "ssh_auth_sock", Type: "string", Description: "The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = \"follow\", the agent link the link's ssh forwards points at it while this caller is the newest person attached."},
-			},
-			returns: []verbParam{
-				{Name: "host", Type: "string", Description: "The host the connection reaches."},
-				{Name: "daemon_version", Type: "string", Description: "The version the host's daemon reported when the link came up. It is what the host said, not a fact this daemon checked."},
-				{Name: "protocol", Type: "int", Description: "The control protocol version the host's daemon reported."},
-			},
-			examples: []string{`{"id":1,"verb":"open-host-connection","params":{"host":"build"}}`},
-			handler:  (*Daemon).verbOpenHostConnection,
-		},
-		"open-pane": {
-			description: "Spawn a process on this machine and turn this connection into its pty. After the reply, every byte written here reaches the process and every byte it writes comes back. Send nothing until the reply has arrived. This is the far half of a global session: the pane belongs to the session on the daemon that asked, which draws it and sizes it; this machine supplies the process and nothing else.",
-			params: []verbParam{
-				{Name: "width", Type: "int", Description: "The pane's width in cells, decided by the layout that owns the window. Out of range falls back to 80."},
-				{Name: "height", Type: "int", Description: "The pane's height in cells. Out of range falls back to 80."},
-				{Name: "cwd", Type: "string", Description: "A directory on this machine to start in. Ignored when it does not exist here, since the asking machine's path need not mean anything on this one."},
-				{Name: "command", Type: "[]string", Description: "An argv to run in place of the shell. Omit for a login shell."},
-				{Name: "term", Type: "string", Description: "TERM for the process. It comes from the asking session because that session's emulator is what the process is talking to."},
-				{Name: "color_term", Type: "string", Description: "COLORTERM for the process, for the same reason."},
-				{Name: "shell", Type: "string", Description: "The shell to run. Omit to use this machine's."},
-				{Name: "session", Type: "string", Description: "The asking session's name, exported as TUIOS_SESSION_REMOTE."},
-				{Name: "window", Type: "string", Description: "The asking daemon's id for the window the pane is drawn in. Exported as TUIOS_PANE_ID, and a promise to open the pane's report channel with pane-calls: a report the process sends naming it is forwarded there."},
-				{Name: "resumable", Type: "bool", Description: "Ask for the pane to outlive a dropped connection for the grace this machine's link policy gives the asking machine (hosted_grace), so it can be reattached with resume. The reply carries resume_token and grace when one was given."},
-				{Name: "resume", Type: "object", Description: "Reattach a pane instead of starting one: {\"pane\": id, \"token\": resume_token, \"offset\": bytes of output already received}. What was missed is written after the reply, from the pane's 64 KB ring, and the pane is live again from there."},
-				{Name: "kitty_media", Type: "bool", Description: "Read the files that kitty graphics commands in the pane name (t=f, t=t, t=s) on this machine. Each command is answered here when the file may not be read, and replaced by a marker for pane-kitty-medium when it may. The reply carries kitty_media_token when the asking machine may read files here."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does, or with resumable until its grace runs out."},
-				{Name: "calls_token", Type: "string", Description: "The secret pane-calls takes. Present only when window was sent."},
-				{Name: "resume_token", Type: "string", Description: "The secret a reattach takes. Present only when resumable was asked and a grace was given."},
-				{Name: "grace", Type: "int", Description: "How many seconds the pane waits to be reattached after its connection drops."},
-				{Name: "resumed", Type: "bool", Description: "True on a reattach."},
-				{Name: "pixels", Type: "bool", Description: "resize-pane takes xpixel and ypixel."},
-				{Name: "kitty_media_token", Type: "string", Description: "The secret pane-kitty-medium takes. Present only when kitty_media was asked and the asking machine may read files here."},
-				{Name: "gap", Type: "bool", Description: "On a reattach, true when more output was missed than the ring holds: the whole ring is written, and the screen may need a redraw."},
-			},
-			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
-			handler:  (*Daemon).verbOpenPane,
-		},
-		"close-pane": {
-			description: "End a pane this machine runs for another machine at once: its process is killed and its connection closed. The owning daemon sends it when the window is closed on purpose, so a resumable pane does not wait out its grace.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane that was ended."},
-				{Name: "closed", Type: "bool", Description: "Always true."},
-			},
-			examples: []string{`{"id":1,"verb":"close-pane","params":{"pane":"f2c1"}}`},
-			handler:  (*Daemon).verbClosePane,
-		},
-		"link-peer": {
-			description: "Name the machine a link connection came from. tuios stdio-proxy sends it as the first line of every connection it opens for a link, and the daemon resolves that machine's link policy from the name. Accepted once per connection, before anything else, and only on a link socket. After the reply the connection is read from scratch, JSON or binary.",
-			params: []verbParam{
-				{Name: "peer", Type: "string", Description: "The machine's name: the one the hub gave for itself, or the one the proxy was pinned to with --as. Empty for none."},
-				{Name: "pinned", Type: "bool", Description: "The name came from stdio-proxy --as on this machine, not from the hub."},
-				{Name: "ssh_auth_sock", Type: "string", Description: "The SSH_AUTH_SOCK stdio-proxy runs with: the agent the link's ssh forwards. A client attached through the link uses it for ssh_agent = \"follow\"."},
-			},
-			returns: []verbParam{
-				{Name: "peer", Type: "string", Description: "The name the connection is held to."},
-			},
-			examples: []string{`{"id":1,"verb":"link-peer","params":{"peer":"laptop"}}`},
-			handler:  (*Daemon).verbLinkPeer,
-		},
-		"resize-pane": {
-			description: "Resize a pane this machine is running for another machine. It arrives on its own connection because the pane's connection carries raw bytes and has no room to say anything out of band.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
-				{Name: "width", Type: "int", Description: "The new width in cells."},
-				{Name: "height", Type: "int", Description: "The new height in cells."},
-				{Name: "xpixel", Type: "int", Description: "The new width in pixels, for programs that scale images to it. Omit to use the fallback cell size."},
-				{Name: "ypixel", Type: "int", Description: "The new height in pixels."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane that was resized."},
-				{Name: "width", Type: "int", Description: "The width it was set to."},
-				{Name: "height", Type: "int", Description: "The height it was set to."},
-			},
-			examples: []string{`{"id":1,"verb":"resize-pane","params":{"pane":"f2c1","width":120,"height":40}}`},
-			handler:  (*Daemon).verbResizePane,
-		},
-		"pane-cwd": {
-			description: "Where a pane this machine runs for another machine has its process. The machine with the process is the only one that can say: the daemon that owns the window reads a pid that means nothing there, and a shell may never announce its directory.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane asked about."},
-				{Name: "cwd", Type: "string", Description: "The directory the process is in, empty when it cannot be read."},
-			},
-			examples: []string{`{"id":1,"verb":"pane-cwd","params":{"pane":"f2c1"}}`},
-			handler:  (*Daemon).verbPaneCwd,
-		},
-		"pane-agent": {
-			description: "What a pane this machine runs for another machine has running in it. The machine with the process is the only one that can look: the daemon that owns the window reads a pid that means nothing there, so without this a pane on another machine is invisible to agent detection. This side reads the process; the side that owns the window decides what it means.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane asked about."},
-				{Name: "running", Type: "bool", Description: "Whether a foreground process could be read at all."},
-				{Name: "comm", Type: "string", Description: "The process name, as the kernel reports it."},
-				{Name: "argv", Type: "array", Description: "The full command line."},
-				{Name: "exe", Type: "string", Description: "The resolved binary, empty when it cannot be read."},
-				{Name: "pid", Type: "int", Description: "The foreground process, zero when none was resolved."},
-				{Name: "shell_pid", Type: "int", Description: "The pane's own shell, which is a fact about the pane rather than about what it runs."},
-			},
-			examples: []string{`{"id":1,"verb":"pane-agent","params":{"pane":"f2c1"}}`},
-			handler:  (*Daemon).verbPaneAgent,
-		},
 		"paste-image": {
 			description: "Write an image the person pasted to the machine where a pane's process runs, and answer with the path there. For a pane on another machine the image crosses the link and is written there. The client pastes the path into the pane as text. Only the person's attached client may call it: it needs that client's attach nonce and is refused from inside a pane. The file is readable by its owner only and is deleted after an hour, or when the daemon stops.",
 			params: []verbParam{
@@ -947,108 +755,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			examples: []string{`{"id":1,"verb":"paste-image","params":{"session":"work","window":"a1b2","content":"iVBORw0KGgo=","human_nonce":"<from the attach reply>"}}`},
 			handler:  (*Daemon).verbPasteImage,
-		},
-		"paste-pane-image": {
-			description: "Write an image for a pane this machine runs for another machine, and answer with the path here. Only the daemon that owns the window holds the token it needs. That daemon sends it for a paste-image the person made.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
-				{Name: "token", Type: "string", Required: true, Description: "The calls_token open-pane returned."},
-				{Name: "content", Type: "string", Required: true, Description: "The image, base64, at most 8 MB decoded."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane the image is for."},
-				{Name: "path", Type: "string", Description: "The image's path on this machine."},
-				{Name: "bytes", Type: "int", Description: "How many bytes were written."},
-			},
-			examples: []string{`{"id":1,"verb":"paste-pane-image","params":{"pane":"f2c1","token":"<from the open-pane reply>","content":"iVBORw0KGgo="}}`},
-			handler:  (*Daemon).verbPastePaneImage,
-		},
-		"pane-calls": {
-			description: "Open the report channel of a pane this machine runs for another machine. Only the daemon that owns the window holds the token. After the reply this machine writes one request line per report the pane's process sends naming its pane ({\"id\",\"verb\",\"params\"}: set-agent-state, set-agent-meta, set-agent-session, read-agent-messages, send-agent-message, or wait-for agent-message), and the owner answers each with {\"id\",\"result\"} or {\"id\",\"error\"}. The owner runs every request as its own window, whatever it says.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
-				{Name: "token", Type: "string", Required: true, Description: "The calls_token open-pane returned."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane whose channel this connection now is."},
-			},
-			examples: []string{`{"id":1,"verb":"pane-calls","params":{"pane":"f2c1","token":"<from the open-pane reply>"}}`},
-			handler:  (*Daemon).verbPaneCalls,
-		},
-		"pane-kitty-medium": {
-			description: "Turn this connection into the bytes of an image that a pane this machine runs for another machine named by path in a kitty graphics command (t=f, t=t or t=s). The pane's output holds a marker with the id in the command's place. Only the daemon that owns the window holds the token. After the reply the connection carries size bytes, as one flate stream when compressed is set, then closes. A temporary file or a shared memory object is deleted after it is read.",
-			params: []verbParam{
-				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
-				{Name: "token", Type: "string", Required: true, Description: "The kitty_media_token open-pane returned."},
-				{Name: "id", Type: "string", Required: true, Description: "The id in the marker."},
-			},
-			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The pane the image is from."},
-				{Name: "size", Type: "int", Description: "The image's bytes, before compression."},
-				{Name: "compressed", Type: "bool", Description: "The bytes come as one flate stream."},
-			},
-			examples: []string{`{"id":1,"verb":"pane-kitty-medium","params":{"pane":"f2c1","token":"<from the open-pane reply>","id":"<from the marker>"}}`},
-			handler:  (*Daemon).verbPaneKittyMedium,
-		},
-		"read-dir": {
-			description: "List a directory on this machine, as the rail's file section reads it. The machine with the process is the machine with the files, so a pane running here is listed here.",
-			params: []verbParam{
-				{Name: "dir", Type: "string", Description: "The directory to list."},
-				{Name: "max", Type: "int", Description: "At most this many names. Omit for the built-in cap."},
-			},
-			returns: []verbParam{
-				{Name: "dir", Type: "string", Description: "The directory listed."},
-				{Name: "entries", Type: "[]string", Description: "One entry per name, carrying the name and whether it is a directory. Directories first, then names, case insensitively."},
-				{Name: "capped", Type: "bool", Description: "The directory holds more names than were sent."},
-				{Name: "err", Type: "string", Description: "Why there is no listing, in words a person can act on."},
-			},
-			examples: []string{`{"id":1,"verb":"read-dir","params":{"dir":"/home/ubuntu"}}`},
-			handler:  (*Daemon).verbReadDir,
-		},
-		"wait-dir": {
-			description: "Wait until the names in a directory on this machine change: a file added, removed or renamed. The daemon that owns a window on another machine asks it, so the rail's file section can follow that machine's disk. It answers changed false when the timeout ends first.",
-			params: []verbParam{
-				{Name: "dir", Type: "string", Required: true, Description: "The directory to watch."},
-				{Name: "timeout", Type: "int", Description: "Milliseconds to wait. Omit for 30 seconds."},
-			},
-			returns: []verbParam{
-				{Name: "dir", Type: "string", Description: "The directory watched."},
-				{Name: "changed", Type: "bool", Description: "The names changed before the timeout ended."},
-			},
-			examples: []string{`{"id":1,"verb":"wait-dir","params":{"dir":"/tmp","timeout":1}}`},
-			handler:  (*Daemon).verbWaitDir,
-		},
-		"list-host-sessions": {
-			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
-			params: []verbParam{
-				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
-			},
-			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code; when the host answered before, it also carries the sessions it last gave, with stale true and fetched_at in unix seconds. Each session carries agent_state, the most urgent agent state among its panes, so a listing can say which sessions want a person without a second call, and space when it is filed under one on its host. events says how this daemon follows the host."},
-			},
-			examples: []string{
-				`{"id":1,"verb":"list-host-sessions"}`,
-				`{"id":1,"verb":"list-host-sessions","params":{"host":"build"}}`,
-			},
-			handler: (*Daemon).verbListHostSessions,
-		},
-		"list-host-agents": {
-			description: "List the agent panes of every session on this machine and on every configured host. Hosts are asked at once, so a slow one costs only its own entry.",
-			params: []verbParam{
-				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
-				{Name: "all", Type: "bool", Description: "List every window on each host, not just the panes identified as agents."},
-				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps only the rows it matches, on every host; a host term matches the entry's host. A host from before selectors sends no group, so a group term matches none of its rows."},
-			},
-			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying the agent rows of every session on it, each row naming its session. session is set only when every row is in one session. An entry that failed carries an error and a code; when the host answered before, it also carries the rows it last gave, with stale true and fetched_at in unix seconds. events says how this daemon follows the host: live, polling, or empty while the link is down."},
-				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
-			},
-			examples: []string{
-				`{"id":1,"verb":"list-host-agents"}`,
-				`{"id":1,"verb":"list-host-agents","params":{"host":"build"}}`,
-				`{"id":1,"verb":"list-host-agents","params":{"select":"harness:codex state:idle"}}`,
-			},
-			handler: (*Daemon).verbListHostAgents,
 		},
 		"session-info": {
 			description: "Report details about one session.",
@@ -2702,16 +2408,9 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.
 	maps.Copy(table, bufferVerbs())
-	// The file verbs, transfers, the drop folder and previews. See
-	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
+	// The file verbs and previews. See verb_files.go and verb_preview.go.
 	maps.Copy(table, fileVerbs())
-	maps.Copy(table, transferVerbs())
-	maps.Copy(table, dropVerbs())
 	maps.Copy(table, previewVerbs())
-	// The tree stream, the check-ahead and the link speed test. See
-	// transfer_tree.go and transfer_speed.go.
-	maps.Copy(table, treeVerbs())
-	maps.Copy(table, speedVerbs())
 	// search-panes, command-history and list-ports. See verb_find.go and
 	// verb_ports.go.
 	maps.Copy(table, findVerbs())
@@ -2853,15 +2552,6 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 	}
 	req.Params = params
 
-	// A report from a pane this machine runs for another machine goes to the
-	// machine that owns the pane's window. See hosted_calls.go.
-	if result, verr, handled := d.forwardHostedCall(cs, req.Verb, req.Params); handled {
-		if verr != nil {
-			return d.writeVerbError(cs, req.ID, req.Verb, verr)
-		}
-		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result})
-	}
-
 	result, verr := entry.handler(d, cs, req.Params)
 	replyFailed := cs.replyFailed
 	cs.replyFailed = nil
@@ -2911,18 +2601,9 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		return verbEntry{}, nil, verr
 	}
 
-	// A call from another machine is held to that machine's link policy
-	// before its handler runs. See link_policy.go.
-	if verr := d.checkLinkVerb(cs, verb); verr != nil {
-		return verbEntry{}, nil, verr
-	}
-	if verb != linkPolicyVerb {
-		markLinkServed(cs)
-	}
-
 	// A call from a pane is held to what the pane holds, and a connection
-	// that restricted itself is held to that too, before anything,
-	// forwarding included, sees the call. See pane_grants.go and
+	// that restricted itself is held to that too, before anything sees the
+	// call. See pane_grants.go and
 	// conn_scope.go.
 	// Follow the pane's own stale session name before a rename alias can
 	// expand it to another session. See session_rename.go.
@@ -2956,9 +2637,6 @@ func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbErr
 	entry, admitted, verr := d.admitVerb(cs, verb, raw)
 	if verr != nil {
 		return nil, verr
-	}
-	if result, verr, handled := d.forwardHostedCall(cs, verb, admitted); handled {
-		return result, verr
 	}
 	result, verr := entry.handler(d, cs, admitted)
 	cs.replyFailed = nil
@@ -3211,13 +2889,6 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"pid":            os.Getpid(),
 		"instance":       d.instance,
 		"sessions":       len(infos),
-		// load is this machine's load, which a linked daemon reads off the
-		// hello its heartbeat sends anyway. See machine_load.go.
-		"load": machineLoad(infos),
-		// link_policy says this daemon holds links to a policy, so a proxy
-		// must reach it on a link socket and never on this one. See
-		// DialForLink in link_dial.go.
-		"link_policy": true,
 		// pane_grants says this daemon holds calls from panes to their
 		// grants and takes a pane's token with pane-grants, which the CLI
 		// presents where the kernel cannot name the caller's pane.

@@ -260,11 +260,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, overlayKindBuffers, content, geo, rows)
 	}
 
-	if m.transfers.open {
-		content, geo, rows := m.renderTransfers()
-		layers = m.placeOverlayPanel(layers, overlayKindTransfers, content, geo, rows)
-	}
-
 	if m.navigator.open {
 		content, geo, rows := m.renderNavigator()
 		layers = m.placeOverlayPanel(layers, "navigator", content, geo, rows)
@@ -273,11 +268,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowLayoutPicker {
 		content, geo, rows := m.renderLayoutPicker()
 		layers = m.placeOverlayPanel(layers, "layout", content, geo, rows)
-	}
-
-	if m.ShowHostPicker {
-		content, geo, rows := m.renderHostPicker()
-		layers = m.placeOverlayPanel(layers, "hostpicker", content, geo, rows)
 	}
 
 	if m.ShowSettings {
@@ -415,11 +405,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.FilePromptOpen() {
 		content, geo, rows := m.renderFileDialog()
 		layers = m.placeOverlayPanel(layers, "filedialog", content, geo, rows)
-	}
-
-	if m.CopyDialogOpen() {
-		content, geo, rows := m.renderCopyDialog()
-		layers = m.placeOverlayPanel(layers, overlayKindCopyDialog, content, geo, rows)
 	}
 
 	if m.WorktreePromptOpen() {

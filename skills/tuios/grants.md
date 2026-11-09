@@ -16,9 +16,8 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
 | `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
-| `files` | Copy files with `tuios cp`, and see and control your own copies with `tuios transfers` |
 | `task` | Add, claim, finish, stage, block and release the task cards of your own session (`tuios task`). You claim only for yourself and change only the card you hold |
-| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan` and `task`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`,
@@ -37,21 +36,11 @@ name that is not yours answers `no_buffer`. A connection restricted to its own s
 (`tuios mcp` without `--scope all`) reaches no buffers, since every session
 shares them.
 
-The `files` grant reaches the copies that stay near your work. A copy may
-start when each end on this machine is inside your pane's folder. That is
-the session's worktree when tuios made it, else the folder the pane started
-in. A `cd` or an OSC 7 does not move it. Every file the copy reads or writes
-here stays inside it, and a link does not lead out. The home folder, the
-folders above it and a folder another user owns are never a pane's folder: start the pane in a project
-folder or a worktree. A pane without admin starts windows and agents only
-inside its folder, and types only into panes whose folder is inside its
-own. Each end on a host must be under its home folder, or be its receive folder
-(`HOST:`). A copy out of the project into the person's other folders, or into
-a host's system folders, needs the person. `files` sees, pauses, resumes,
-cancels, answers and clears only the copies your pane started, never the
-person's or another pane's. Every copy carries the name of the pane that
-started it, whatever the pane holds. A refusal is `forbidden`, and
-`tuios cp` exits 4.
+A pane without admin starts windows and agents only inside its folder. That
+is the session's worktree when tuios made it, else the folder the pane
+started in. A `cd` or an OSC 7 does not move it. The home folder, the
+folders above it and a folder another user owns are never a pane's folder:
+start the pane in a project folder or a worktree. A refusal is `forbidden`.
 
 `TUIOS_PANE_GRANTS` is what the pane held when its process started;
 `tuios pane-grants` is what it holds now.

@@ -270,9 +270,6 @@ func (d *Daemon) admitTaskParam(cs *connState, verb, session, id, nonce string, 
 		verr.Hint.Param = "task"
 		return verr
 	}
-	if verr := d.checkLinkVerb(cs, "claim-task"); verr != nil {
-		return nil, refused(verr)
-	}
 	raw, err := json.Marshal(map[string]string{"session": session})
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode the task's session")

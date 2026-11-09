@@ -5,7 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -199,28 +198,6 @@ func hasFileParts(parts []queuePart) bool {
 		}
 	}
 	return false
-}
-
-// linkFilesRefusal is the refusal of a message with blocks from a linked
-// machine whose policy here does not allow files.
-func linkFilesRefusal(peer string) *verbError {
-	from := "the machine at the other end of this link"
-	if peer != "" {
-		from = peer
-	}
-	return hintedVerbError(ErrVerbForbidden, "queue-prompt with pasted blocks from "+from+" is refused: a block can be written to a file here, and the link does not allow files", &VerbHint{
-		Detail: "Nothing was queued. Add files to allow in [hosts." + firstNonEmpty(peer, "<peer>") + "] on this machine, or send the message as text.",
-	})
-}
-
-// linkAllowsFiles reports whether the link that queued e may still put a
-// file on this machine.
-func (d *Daemon) linkAllowsFiles(peer string) bool {
-	var hosts linkPolicyTable
-	if t := d.linkPolicies.Load(); t != nil {
-		hosts = *t
-	}
-	return config.LinkPolicyFor(hosts, peer).Allows(config.LinkAllowFiles)
 }
 
 // composeQueued is how an entry in parts is typed, as one paste or several:

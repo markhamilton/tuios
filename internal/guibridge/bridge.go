@@ -88,9 +88,6 @@ type Options struct {
 	// before Session is looked at. With neither, the bridge attaches the
 	// session last active. Session ids survive a rename and a restore.
 	SessionID string
-	// Host attaches a session on that host's daemon, through this machine's
-	// daemon and its link. Empty is this machine.
-	Host string
 	// Resume is the stream position the renderer's emulator holds for each
 	// pane, from an earlier bridge. A pane listed here is caught up from that
 	// position instead of being sent a snapshot. See resume.go.
@@ -155,9 +152,6 @@ type Event struct {
 	PTY  string `json:"pty,omitempty"`
 	Seq  int64  `json:"seq,omitempty"`
 	Kept bool   `json:"kept,omitempty"`
-	// Hosts is set on "hosts" events: every machine in the [hosts] table,
-	// with its link, its round trip and its sessions. See hosts.go.
-	Hosts *Hosts `json:"hosts,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -295,10 +289,6 @@ type Window struct {
 	AgentMsg   string `json:"agent_message,omitempty"`
 	AgentKind  string `json:"agent_kind,omitempty"`
 	Cwd        string `json:"cwd,omitempty"`
-	// Host is the machine the pane's program runs on, for a pane this
-	// session holds for another machine. Empty for this session's own
-	// machine (wave 5: the explorer and a drop follow it).
-	Host string `json:"host,omitempty"`
 	// Foreground is what the pane runs, empty at a shell prompt.
 	Foreground string `json:"foreground,omitempty"`
 	// Harness is the agent harness that reported the state (claude, codex).
@@ -362,9 +352,6 @@ type Command struct {
 	// "verb_result" event with the same req. See verb.go.
 	Verb   string         `json:"verb,omitempty"`
 	Params map[string]any `json:"params,omitempty"`
-	// Host runs the verb on that machine's daemon, through this machine's
-	// daemon and its link, as `tuios --host` does. Empty is this machine.
-	Host string `json:"host,omitempty"`
 	// switch-session: Create makes the session when it is missing, and
 	// Restore restores it from its saved state first.
 	Create  bool `json:"create,omitempty"`
@@ -415,17 +402,13 @@ func Run(opts Options) error {
 	client.Served = true
 	// The renderer runs where the person is, so its agent socket is theirs.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
-	if opts.Host == "" {
-		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, hello); err != nil {
-			return fmt.Errorf("failed to connect to daemon: %w", err)
-		}
-	} else if _, err := client.ConnectThroughHost(opts.Host, opts.Version, opts.Cols, opts.Rows, hello); err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", opts.Host, err)
+	if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, hello); err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	cached := client.CachedSessions()
 	if opts.SessionID != "" {
 		// The handshake's listing can come after this point; ask.
-		if listed := listSessions(opts.Version, opts.Host); len(listed) > 0 {
+		if listed := listSessions(opts.Version); len(listed) > 0 {
 			cached = listed
 		}
 	}
@@ -440,7 +423,7 @@ func Run(opts Options) error {
 	}
 	// From the listing made before the attach, which clears the restored
 	// mark.
-	info := attachedInfo(cached, name, opts.Host)
+	info := attachedInfo(cached, name)
 	client.StartReadLoop()
 
 	osModel := newModel(app.OSOptions{
@@ -452,10 +435,9 @@ func Run(opts Options) error {
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     name,
-		AttachedHost:    opts.Host,
 	})
 	streams := &tap{out: out}
-	if len(opts.Resume) > 0 && (opts.Host != "" || opts.ResumePID == info.DaemonPID) {
+	if len(opts.Resume) > 0 && opts.ResumePID == info.DaemonPID {
 		streams.resume = opts.Resume
 	}
 	osModel.SetStreamTap(streams)
@@ -467,12 +449,11 @@ func Run(opts Options) error {
 	// that has left takes the renderer's size now, with no key typed.
 	reportResize(client)
 
-	// The model swaps its daemon client when it dials a dropped host link
-	// again. Input, the person nonce and the detach must use the one in
-	// force, or keys go to a closed connection after the link comes back.
+	// Input, the person nonce and the detach use the daemon client in
+	// force.
 	cur := &atomic.Pointer[session.TUIClient]{}
 	cur.Store(client)
-	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, host: opts.Host, tap: streams, client: cur, hostsWake: make(chan struct{}, 1)}
+	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, tap: streams, client: cur}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -504,7 +485,6 @@ func Run(opts Options) error {
 	stopFleet := make(chan struct{})
 	defer close(stopFleet)
 	go watchFleet(stopFleet, out, opts.Version)
-	go watchHosts(stopFleet, m.hostsWake, out, opts.Version)
 
 	go func() {
 		err := readCommands(opts.In, cur, program)
@@ -627,16 +607,12 @@ type model struct {
 	paletteKey  paletteInputs
 	// launcherWanted is set while a launcher command waits for its scan.
 	launcherWanted bool
-	// host is the machine the session is on, empty for this one, and tap
-	// the stream tap, which a switch-session hands its resume positions.
-	host string
-	tap  *tap
+	// tap is the stream tap, which a switch-session hands its resume
+	// positions.
+	tap *tap
 	// client is the daemon client in force, which readCommands writes
 	// input to. See Run.
 	client *atomic.Pointer[session.TUIClient]
-	// hostsWake tells watchHosts the daemon pushed a change to its hosts
-	// table or a link, so it reads list-hosts at once. See hosts.go.
-	hostsWake chan struct{}
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -755,12 +731,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if r, ok := msg.(ptyResizedMsg); ok {
 		m.refit(r)
 	} else {
-		if _, ok := msg.(app.HostsChangedMsg); ok {
-			select {
-			case m.hostsWake <- struct{}{}:
-			default:
-			}
-		}
 		next, c := m.os.Update(msg)
 		if o, ok := next.(*app.OS); ok {
 			m.os = o
@@ -927,9 +897,6 @@ func (m *model) handle(c Command) tea.Cmd {
 		// pane gets a "seq" event and a fresh snapshot, and streams on from
 		// there. ID is the pane's PTY id.
 		m.os.ResyncPaneStream(c.ID)
-	case "probe-host":
-		// The renderer typed into a pane on the host: probe it now.
-		pokeHost(c.Name)
 	case "quit":
 		return tea.Quit
 	}
@@ -1009,7 +976,7 @@ func (m *model) export() {
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
-			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, Reason: w.AgentReason, Queued: w.AgentQueued, DraftHeld: w.AgentDraftHeld, Settled: w.AgentSettled, AgentAt: w.AgentStateAt / int64(time.Millisecond),
+			Cwd: cwd, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, Reason: w.AgentReason, Queued: w.AgentQueued, DraftHeld: w.AgentDraftHeld, Settled: w.AgentSettled, AgentAt: w.AgentStateAt / int64(time.Millisecond),
 			Repo: repo, Branch: branch, StartedBy: startedByRef(w.StartedBySession, w.StartedByWindow),
 		})
 	}

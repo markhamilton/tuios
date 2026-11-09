@@ -48,7 +48,7 @@ var fuzzReadVerbs = []string{
 	"session-info", "list-windows", "get-window", "list-workspaces", "capture-pane",
 	"list-options", "get-option", "list-themes", "list-glyphs", "get-agent-state",
 	"explain-agent-screen", "list-agents", "list-attention", "peek-prompt",
-	"pane-grants", "list-hosts",
+	"pane-grants",
 }
 
 // captureConn is a net.Conn that keeps what the daemon writes.

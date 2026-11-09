@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -230,7 +229,6 @@ type ckFrameKey struct {
 	thread, editor       uint64
 	live, open, daemon   bool
 	keys                 *config.KeybindRegistry
-	hosts                uint64
 	depth                overlay.Depth
 	ascii, nerd, snoozes bool
 	// tml moves with every repaint of a surface, which the Artifacts tab
@@ -261,7 +259,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		marks: st.agents.marksGen, selectErr: st.selectErr, look: ck.lookGen,
 		w: w, h: h, top: top, bottom: res.Bottom, gen: ck.gen, inbox: st.Gen, mail: m.AgentMail.Gen,
 		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live, liveGen: ck.liveGen,
-		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
+		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry,
 		depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd, snoozes: st.life.ShowSnoozed,
 		tml: m.tml.gen + m.tml.setGen<<32, art: ck.art.gen,
 	}
@@ -515,33 +513,16 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		q := strings.TrimSpace(st.Select + " " + st.agents.query)
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: ckTrunc(q, sw-5), fg: pal.Fg})
 	default:
-		words := "Search agents, sessions, machines"
+		words := "Search agents and sessions"
 		if sw < 36 {
 			words = "Search"
 		}
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: words, fg: pal.FgMute})
 	}
 	ck.hits = append(ck.hits, ckHit{x0: sx, y0: top + y, x1: sx + sw, y1: top + y + 1, kind: ckHitAction, action: "search"})
-	// The machine scope, when there is more than one machine.
-	if len(m.FederationHosts) == 0 || len(m.ckMachines()) < 2 {
-		return
-	}
-	label := "All machines"
-	switch h := m.ckScope(); h {
-	case "":
-	case federation.LocalHostName:
-		label = m.ckMachine("")
-	default:
-		label = ckHostLabel(h)
-	}
-	segs := []ckSeg{{t: label + " ", fg: pal.FgDim}, {t: l.g(ckGlyphOpen), fg: pal.FgMute}}
-	if mx := sx - 3 - ckWidth(segs...); mx > x {
-		c.text(mx, y, sx-3, segs...)
-		ck.hits = append(ck.hits, ckHit{x0: mx, y0: top + y, x1: sx - 3, y1: top + y + 1, kind: ckHitAction, action: "scope"})
-	}
 }
 
-// drawFleet draws the fleet column: the groups, then the machines.
+// drawFleet draws the fleet column: the groups.
 func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	st := &m.Inbox
 	ck := &st.ck
@@ -549,13 +530,6 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	c.fill(0, y0, w, y1-y0, l.panel)
 	ck.fleetW = w
 	listTop, listBot := y0+1, y1
-	// The machines sit at the foot of the column when there is more than
-	// this one, and the list has room above them.
-	if ms := m.ckMachines(); len(ms) > 1 && y1-y0 >= len(ms)+12 {
-		my := y1 - len(ms) - 2
-		m.drawMachines(c, l, ms, w, my, top)
-		listBot = my - 1
-	}
 	colH := max(listBot-listTop, 1)
 	oneLine := w < 48
 	if !oneLine {
@@ -614,179 +588,12 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	}
 }
 
-// ckMachineRow is one machine at the foot of the fleet.
-type ckMachineRow struct {
-	host, name string
-	agents     int
-	// load is the one-minute load over the cores, when known.
-	load   float64
-	loadOK bool
-	up     bool
-	status string
-	// rtt is the round trip of the link's last hello, in milliseconds.
-	rtt int64
-}
-
-// ckMachines lists this machine, then every host, with its agents and load.
-// It is empty when no host is configured.
-func (m *OS) ckMachines() []ckMachineRow {
-	ck := &m.Inbox.ck
-	var out []ckMachineRow
-	var attached ckMachineRow
-	for _, h := range m.FederationHosts {
-		if h.Name == federation.LocalHostName {
-			continue
-		}
-		mr := ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
-			up: h.Status == string(federation.StatusUp), status: h.Status, rtt: h.RTTMillis}
-		if h.LoadOK {
-			mr.load, mr.loadOK = ckLoadShare(h.Load1, h.Cores)
-		}
-		if h.Name == m.AttachedHost {
-			// The machine the client is attached to is the local row.
-			attached = mr
-			continue
-		}
-		out = append(out, mr)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	// The local row is the machine the agents with no host run on: this
-	// one, with the load its daemon reports, or the machine the client is
-	// attached to, with the load of that host's link.
-	local := ckMachineRow{name: m.ckMachine(""), agents: ck.machines[""], up: true}
-	if m.AttachedHost != "" {
-		local.load, local.loadOK, local.rtt = attached.load, attached.loadOK, attached.rtt
-	} else {
-		if m.LocalLoad.Known() {
-			local.load, local.loadOK = ckLoadShare(m.LocalLoad.Load1, m.LocalLoad.Cores)
-		}
-	}
-	return append([]ckMachineRow{local}, out...)
-}
-
-// ckLoadShare is a load over the cores, held to 0..1, and whether it is
-// known.
-func ckLoadShare(load1 float64, cores int) (float64, bool) {
-	if cores <= 0 {
-		return 0, false
-	}
-	return min(max(load1/float64(cores), 0), 1), true
-}
-
-// drawMachines draws the machines block at y: a heading, then one row per
-// machine with its agents, its load and its link. A click on a machine
-// shows its agents alone.
-func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachineRow, w, y, top int) {
-	ck := &m.Inbox.ck
-	pal := l.pal
-	right := w - 2
-	end := c.text(2, y, right, ckSeg{t: "Machines", fg: pal.FgDim, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(len(ms)), fg: pal.FgMute})
-	c.hline(end+2, y, right-end-2, hzGlyph(), l.edgePanel)
-	scope := m.ckScope()
-	for i, mr := range ms {
-		yy := y + 1 + i
-		nameInk := pal.Fg
-		if !mr.up {
-			nameInk = pal.FgDim
-		}
-		if mr.host == scope && scope != "" || mr.host == "" && scope == federation.LocalHostName {
-			nameInk = pal.AccentBright
-		}
-		agents := strconv.Itoa(mr.agents) + " agent"
-		if mr.agents != 1 {
-			agents += "s"
-		}
-		c.text(2, yy, right, ckSeg{t: l.g(ckGlyphHost), fg: pal.FgMute}, ckSeg{t: "  " + ckPad(ckTruncMid(mr.name, 9), 10), fg: nameInk},
-			ckSeg{t: agents, fg: pal.FgDim})
-		link := "local"
-		if mr.host != "" {
-			link = "link up"
-			if mr.rtt > 0 {
-				link = strconv.FormatInt(mr.rtt, 10) + " ms"
-			}
-			if !mr.up {
-				link = "link " + strings.ReplaceAll(printableTitle(mr.status), "_", " ")
-			}
-		}
-		lx := c.textR(right, yy, ckSeg{t: link, fg: pal.FgMute})
-		if mr.loadOK && lx-2 > 34 {
-			load := min(max(mr.load, 0), 1)
-			filled := int(load*8 + 0.5)
-			barInk := pal.Busy
-			if load >= 0.7 {
-				barInk = pal.Warning
-			}
-			on, off := "■", "■"
-			if l.ascii {
-				on, off = "#", "."
-			}
-			c.text(26, yy, lx-2, ckSeg{t: strings.Repeat(on, filled), fg: barInk}, ckSeg{t: strings.Repeat(off, 8-filled), fg: l.edgePanel},
-				ckSeg{t: " " + ckPadLeft(strconv.Itoa(int(load*100+0.5))+"%", 4), fg: pal.FgMute})
-		}
-		target := mr.host
-		if target == "" {
-			target = federation.LocalHostName
-		}
-		ck.hits = append(ck.hits, ckHit{x0: 0, y0: top + yy, x1: w, y1: top + yy + 1, kind: ckHitAction, action: "scope:" + target})
-	}
-}
-
 // ckPadLeft right-aligns s in n cells.
 func ckPadLeft(s string, n int) string {
 	if d := n - ansi.StringWidth(s); d > 0 {
 		return strings.Repeat(" ", d) + s
 	}
 	return s
-}
-
-// ckScope is the machine the fleet is narrowed to by host:NAME, empty when
-// it shows every machine.
-func (m *OS) ckScope() string {
-	sel := m.Inbox.Select
-	if h, ok := strings.CutPrefix(sel, "host:"); ok && !strings.ContainsAny(h, " *?[") {
-		return h
-	}
-	return ""
-}
-
-// CockpitScope narrows the fleet to one machine, by host:NAME, or shows
-// every machine again for "". Any other selector is replaced; the search
-// stays.
-func (m *OS) CockpitScope(host string) {
-	st := &m.Inbox
-	if host == "" {
-		st.Select, st.selector = "", nil
-	} else {
-		home, _ := os.UserHomeDir()
-		sel, err := session.ParseSelector("host:"+host, home)
-		if err != nil {
-			return
-		}
-		st.Select, st.selector = sel.String(), sel
-	}
-	st.ck.scroll, st.ck.follow = 0, true
-	m.cockpitTouchRows()
-}
-
-// cockpitNextScope steps the machine scope: every machine, this one, then
-// each host, then every machine again.
-func (m *OS) cockpitNextScope() {
-	order := []string{"", federation.LocalHostName}
-	for _, h := range m.FederationHosts {
-		if h.Name != federation.LocalHostName {
-			order = append(order, h.Name)
-		}
-	}
-	cur := m.ckScope()
-	next := ""
-	for i, h := range order {
-		if h == cur {
-			next = order[(i+1)%len(order)]
-		}
-	}
-	m.CockpitScope(next)
 }
 
 // ckRowMark is the mark and colour of an agent's or an item's row.
@@ -895,7 +702,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		e := ck.agents[r.agent]
 		wt := m.ckWorktreeOf(e)
 		nr := right
-		if note := m.ckFanNote(e.Host, wt); note != "" {
+		if note := m.ckFanNote("", wt); note != "" {
 			nr = c.textR(right, y, ckSeg{t: note, fg: pal.FgMute}) - 2
 		}
 		c.text(x+2, y, nr, ckSeg{t: l.g(ckGlyphFan), fg: pal.AccentBright}, ckSeg{t: "  " + wt.group, fg: pal.Fg, attrs: ckBold},
@@ -941,7 +748,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	name, harness, place, wait := m.ckRowFacts(r, e)
 	g, gInk := m.ckRowMark(l, r, e)
 	nameInk := pal.Fg
-	down := e.Host != "" && m.ckLinkDown(e.Host)
+	down := false
 	if r.group == ckIdle || r.group == ckSettled || r.group == ckSnoozed || r.item.Stale || down {
 		nameInk = pal.FgDim
 	}
@@ -1055,16 +862,6 @@ func ckTree(l ckLook, last bool) string {
 // ckOn is the state of a button and a pill: at 16 colours, reverse video.
 var ckOn = overlay.RowState{Cursor: true, Focused: true}
 
-// ckLinkDown reports whether the link to a machine is down.
-func (m *OS) ckLinkDown(host string) bool {
-	for _, h := range m.FederationHosts {
-		if h.Name == host {
-			return h.Status != "up"
-		}
-	}
-	return false
-}
-
 // ckRowFacts are a row's name, harness, place and age.
 func (m *OS) ckRowFacts(r ckRow, e sidebarAgentEntry) (name, harness, place, wait string) {
 	now := time.Now()
@@ -1108,36 +905,9 @@ func ckHarness(h string) string {
 	return printableTitle(h)
 }
 
-// ckPlace is where an agent runs, as its row says it: the machine, with its
-// mark ("󰒋 build"), when there is more than one machine, else the session.
+// ckPlace is where an agent runs, as its row says it: the session.
 func (m *OS) ckPlace(e sidebarAgentEntry) string {
-	if !m.ckManyMachines() {
-		return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
-	}
-	return m.cockpitLook().g(ckGlyphHost) + " " + m.ckMachine(e.Host)
-}
-
-// ckManyMachines reports whether a host other than this machine is
-// configured.
-func (m *OS) ckManyMachines() bool {
-	for _, h := range m.FederationHosts {
-		if h.Name != federation.LocalHostName {
-			return true
-		}
-	}
-	return false
-}
-
-// ckMachine names a machine: the host's name, or for "" the machine the
-// client is attached to, this one unless it is attached to a host.
-func (m *OS) ckMachine(host string) string {
-	if host == "" {
-		host = m.AttachedHost
-	}
-	if host != "" {
-		return ckHostLabel(host)
-	}
-	return m.ckLocalLabel()
+	return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
 }
 
 // ckLocalLabel is this machine's name: its host name, or in Learn mode the
@@ -1439,13 +1209,13 @@ func (m *OS) ckBranch(e sidebarAgentEntry) string {
 //
 //go:noinline
 func (m *OS) ckWorktreeOf(e sidebarAgentEntry) ckWorktree {
-	if m.LearnMode && e.Host == "" {
+	if m.LearnMode {
 		// The tour's attempts are panes of its one session.
 		if w, ok := m.Inbox.ck.branches["\x00"+e.SessionID+"\x00"+e.WindowID]; ok {
 			return w
 		}
 	}
-	return m.Inbox.ck.branches[e.Host+"\x00"+e.SessionID]
+	return m.Inbox.ck.branches["\x00"+e.SessionID]
 }
 
 // ckAgentSession is the session an agent's row stands for in a fan: its
@@ -1465,7 +1235,7 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 	out := map[string]ckWorktree{}
 	for _, s := range m.BuildSessionTree().Sessions {
 		if w := s.Worktree; w != nil && w.Branch != "" {
-			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
+			out["\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
 				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot,
 				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID}
 		}
@@ -1568,8 +1338,7 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 		return []string{"Nothing needs you now.", m.inboxSnoozedNote()}
 	}
 	lines := []string{"No agents yet.",
-		"Start one with n, or run claude, codex or another agent in any pane. tuios finds it.",
-		"Agents on other machines show here after tuios hosts add."}
+		"Start one with n, or run claude, codex or another agent in any pane. tuios finds it."}
 	return lines
 }
 
@@ -1624,13 +1393,6 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 		right = strconv.Itoa(n) + " agent"
 		if n != 1 {
 			right += "s"
-		}
-		hosts := map[string]bool{}
-		for _, e := range m.Inbox.ck.agents {
-			hosts[e.Host] = true
-		}
-		if len(hosts) > 1 {
-			right += " on " + strconv.Itoa(len(hosts)) + " machines"
 		}
 	}
 	if m.Inbox.ck.cmp != nil {
@@ -1787,12 +1549,12 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 // else its session's. A pane on another machine has none here: the link
 // does not carry notes.
 func (m *OS) cockpitNote(r ckRow, e sidebarAgentEntry) string {
-	sessionName, windowID, host := e.SessionID, e.WindowID, e.Host
+	sessionName, windowID, host := e.SessionID, e.WindowID, ""
 	if r.agent < 0 {
 		if !r.hasItem {
 			return ""
 		}
-		sessionName, windowID, host = r.item.Session, r.item.Window, r.item.Host
+		sessionName, windowID, host = r.item.Session, r.item.Window, ""
 	}
 	if sessionName == "" || host != "" {
 		return ""
@@ -2089,7 +1851,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 		}
 		return tabs
 	}
-	if r.agent < 0 || e.Host != "" {
+	if r.agent < 0 {
 		return nil
 	}
 	checkpoints := "Checkpoints"
@@ -2218,12 +1980,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			// the folder.
 			e := st.ck.agents[r.agent]
 			p := m.ckWorktreeOf(e).path
-			switch {
-			case m.ckManyMachines() && p != "":
-				where = m.ckMachine(e.Host) + ":" + ckHomePath(p)
-			case m.ckManyMachines() && e.Host == "":
-				where = m.ckMachine("") + ":" + where
-			case p != "":
+			if p != "" {
 				where = ckHomePath(p)
 			}
 		}

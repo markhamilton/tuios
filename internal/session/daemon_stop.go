@@ -6,8 +6,6 @@ package session
 // one.
 func DaemonFiles(socketPath string) []string {
 	return []string{
-		LinkSocketPath(socketPath),
-		LinkHumanSocketPath(socketPath),
 		HerdrSocketPath(socketPath),
 		socketPath + ".pid",
 		socketPath,

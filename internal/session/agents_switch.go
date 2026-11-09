@@ -214,7 +214,7 @@ func (d *Daemon) notePaneCreator(cs *connState, window string) {
 // pane of this daemon, cannot be placed, or calls over a link.
 func (d *Daemon) callerPaneRef(cs *connState) *PaneRef {
 	pa := d.paneAuthority(cs)
-	if pa == nil || pa.hosted || pa.window == "" || pa.window == unplacedWindow {
+	if pa == nil || pa.window == "" || pa.window == unplacedWindow {
 		return nil
 	}
 	sess := d.sessionHoldingWindow(pa.window)

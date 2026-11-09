@@ -64,8 +64,6 @@ func (e errPaneNotMovable) Error() string { return e.why }
 // movableRefusal is why w cannot move to another session, "" when it can.
 func movableRefusal(w WindowState) string {
 	switch {
-	case w.Host != "":
-		return "the pane runs on " + w.Host + ", and only a pane on this machine can move to another session"
 	case w.Scratch:
 		return "the pane is a scratch pane, and a scratch pane stays in its session"
 	case w.Popup:
@@ -257,9 +255,7 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	pty := t.pty
 	s.ptysMu.Lock()
 	s.ptys[pty.ID] = pty
-	if pty.host == "" {
-		s.places.Store(pty.ID, pty)
-	}
+	s.places.Store(pty.ID, pty)
 	pty.home.Store(s)
 	s.ptysMu.Unlock()
 	// Whether a client shows the session was the source's. A viewer's fit

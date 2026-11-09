@@ -45,12 +45,7 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 			return nil, verr
 		}
 	}
-	if p.Host != "" && p.Host != localAttentionHost {
-		if verr := d.checkHostParam(p.Host); verr != nil {
-			return nil, verr
-		}
-	}
-	q := attentionQuery{session: p.Session, host: p.Host, snoozed: p.IncludeSnoozed}
+	q := attentionQuery{session: p.Session, host: "", snoozed: p.IncludeSnoozed}
 	for _, k := range p.Kinds {
 		if AttentionKindRank(k) == len(AttentionKindNames) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "kinds: "+echoName(k)+" is not an attention kind", &VerbHint{
@@ -89,7 +84,6 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 // fills them in when it knows the pane.
 func AttentionSelectorTarget(it AttentionItem) SelectorTarget {
 	t := SelectorTarget{
-		Host:    it.Host,
 		Session: it.Session,
 		Name:    it.Name,
 		Harness: it.Harness,
@@ -111,17 +105,17 @@ func (d *Daemon) selectAttention(items []AttentionItem, sel *Selector) []Attenti
 	kept := make([]AttentionItem, 0, len(items))
 	for _, it := range items {
 		t := AttentionSelectorTarget(it)
-		if it.Host == "" {
-			if sess := d.manager.GetSession(it.Session); sess != nil {
-				st := sess.GetState()
-				if st.Worktree != nil {
-					t.Group = st.Worktree.Group
-				}
-				if w, ok := findWindowState(st, it.Window); ok {
-					t.Cwd = w.Cwd
-				}
+
+		if sess := d.manager.GetSession(it.Session); sess != nil {
+			st := sess.GetState()
+			if st.Worktree != nil {
+				t.Group = st.Worktree.Group
+			}
+			if w, ok := findWindowState(st, it.Window); ok {
+				t.Cwd = w.Cwd
 			}
 		}
+
 		if sel.Match(t) {
 			kept = append(kept, it)
 		}
@@ -175,29 +169,7 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 	// Outside the queue's lock, since both take the session's. An item from
 	// another machine was only hidden here: its pane and its mail are on that
 	// machine, and nothing here marks them.
-	if it.Host != "" {
-		return map[string]any{
-			"type":      "attention_dismissed",
-			"id":        it.ID,
-			"kind":      it.Kind,
-			"session":   it.Session,
-			"host":      it.Host,
-			"dismissed": true,
-		}, nil
-	}
-	// Dismissing a machine's outbox discards what still waits for it: that is
-	// the person deciding the mail should not go.
-	if it.Kind == AttentionOutbox {
-		dropped := d.outbox.discard(it.ForHost)
-		return map[string]any{
-			"type":      "attention_dismissed",
-			"id":        it.ID,
-			"kind":      it.Kind,
-			"for_host":  it.ForHost,
-			"discarded": dropped,
-			"dismissed": true,
-		}, nil
-	}
+
 	if sess := d.manager.GetSession(it.Session); sess != nil {
 		switch it.Kind {
 		case AttentionFinished:

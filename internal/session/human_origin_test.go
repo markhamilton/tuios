@@ -4,7 +4,6 @@ package session
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,9 +15,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
-	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // The helper process these tests start: this test binary, run again with
@@ -38,129 +34,6 @@ const (
 
 // ppidAtStart is the helper's parent when the binary started.
 var ppidAtStart = os.Getppid()
-
-// TestHelperSocketCaller is not a test. It is the body of the helper process,
-// and skips when it is not one.
-func TestHelperSocketCaller(t *testing.T) {
-	sock := os.Getenv(helperSockEnv)
-	if sock == "" {
-		t.Skip("only runs as a helper process")
-	}
-	out := os.Getenv(helperOutEnv)
-	// A detached helper waits for the shell that started it to exit, so it
-	// dials as an orphan and not as that shell's child.
-	if os.Getenv(helperDetachEnv) != "" && ppidAtStart != 1 {
-		deadline := time.Now().Add(5 * time.Second)
-		for os.Getppid() == ppidAtStart && time.Now().Before(deadline) {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	var result string
-	switch os.Getenv(helperModeEnv) {
-	case "attach-host":
-		// args is "host session": attach to a session on another machine
-		// through the daemon at sock, the way tuios attach --host does.
-		host, sessName, _ := strings.Cut(os.Getenv(helperArgsEnv), " ")
-		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
-		if err != nil {
-			result = "dial: " + err.Error()
-			break
-		}
-		c := NewTUIClient()
-		c.conn = conn
-		if _, err := openHostConnectionOn(conn, c.reader(), host); err != nil {
-			result = "open: " + err.Error()
-			break
-		}
-		if err := c.handshake("test", 80, 24, nil); err != nil {
-			result = "handshake: " + err.Error()
-			break
-		}
-		if _, err := c.AttachSession(sessName, false, 80, 24); err != nil {
-			result = "attach: " + err.Error()
-			break
-		}
-		result = "nonce:" + c.HumanNonce()
-		_ = c.Close()
-	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold", "attach-late-probe":
-		mode := os.Getenv(helperModeEnv)
-		// The size the client attaches at, WxH, 80x24 when unset.
-		width, height := 80, 24
-		if size := os.Getenv(helperSizeEnv); size != "" {
-			_, _ = fmt.Sscanf(size, "%dx%d", &width, &height)
-		}
-		c := NewTUIClient()
-		c.Served = strings.HasPrefix(mode, "attach-served")
-		c.AllowNested = mode == "attach-force"
-		if strings.HasSuffix(mode, "-probe") {
-			// Written to this process's terminal, as a client writes it.
-			c.SetNestProbe(WriteNestProbe(os.Stdout))
-		}
-		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
-		if err != nil {
-			result = "dial: " + err.Error()
-			break
-		}
-		c.conn = conn
-		if err := c.handshake("test", width, height, nil); err != nil {
-			result = "handshake: " + err.Error()
-			break
-		}
-		if _, err := c.AttachSession(os.Getenv(helperArgsEnv), false, width, height); err != nil {
-			result = "attach: " + err.Error()
-			break
-		}
-		result = "nonce:" + c.HumanNonce()
-		if strings.HasSuffix(mode, "-probe") {
-			// The daemon does not wait for the probe, so a client can attach
-			// before its probe reaches a pane and be taken off after. Report
-			// the attach, then wait to be taken off, and report the reason to
-			// out.ended.
-			ended := make(chan string, 1)
-			c.OnSessionEnded(func(_, reason string) { ended <- reason })
-			c.StartReadLoop()
-			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
-				_ = os.Rename(out+".tmp", out)
-			}
-			select {
-			case reason := <-ended:
-				_ = os.WriteFile(out+".ended", []byte(reason+"|"+c.NestedRefusal()), 0o600)
-			case <-time.After(time.Minute):
-			}
-			return
-		}
-		if mode == "attach-hold" {
-			// Stays attached, so a later attach sees this client in the
-			// chain. The pane closing with its daemon ends it.
-			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
-				_ = os.Rename(out+".tmp", out)
-			}
-			time.Sleep(time.Minute)
-		}
-		_ = c.Close()
-	default:
-		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
-		if err != nil {
-			result = "dial: " + err.Error()
-			break
-		}
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-		if _, err := conn.Write([]byte(os.Getenv(helperArgsEnv) + "\n")); err != nil {
-			result = "write: " + err.Error()
-			break
-		}
-		line, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			result = "read: " + err.Error()
-			break
-		}
-		result = line
-		_ = conn.Close()
-	}
-	if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
-		_ = os.Rename(out+".tmp", out)
-	}
-}
 
 // helperCommand is the shell line that runs the helper with mode and args,
 // writing to out.
@@ -388,105 +261,100 @@ func TestPaneOriginOfThisProcess(t *testing.T) {
 	}
 }
 
-// startHubAndLinkedFar is startHubAndFar with the far side's proxy doing what
-// tuios stdio-proxy does: dial the link-human socket for a stream the hub
-// vouched for, and the plain link socket for any other.
-func startHubAndLinkedFar(t *testing.T) (*Daemon, *farSide) {
-	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	t.Cleanup(useResurrectionDir(t.TempDir()))
-	dir, err := os.MkdirTemp("", "far")
-	if err != nil {
-		t.Fatalf("temp dir: %v", err)
+// TestHelperSocketCaller is not a test. It is the body of the helper process,
+// and skips when it is not one.
+func TestHelperSocketCaller(t *testing.T) {
+	sock := os.Getenv(helperSockEnv)
+	if sock == "" {
+		t.Skip("only runs as a helper process")
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	far := &farSide{socket: filepath.Join(dir, "s")}
-	far.daemon = NewDaemon(&DaemonConfig{Version: "far-build", SocketPath: far.socket, DisableAutoRestore: true})
-	if err := far.daemon.Start(); err != nil {
-		t.Fatalf("start the far daemon: %v", err)
-	}
-	t.Cleanup(far.daemon.Stop)
-
-	dial := func(_ context.Context, _ federation.Host) (federation.Transport, error) {
-		hubR, remoteW, err := os.Pipe()
-		if err != nil {
-			return nil, err
+	out := os.Getenv(helperOutEnv)
+	// A detached helper waits for the shell that started it to exit, so it
+	// dials as an orphan and not as that shell's child.
+	if os.Getenv(helperDetachEnv) != "" && ppidAtStart != 1 {
+		deadline := time.Now().Add(5 * time.Second)
+		for os.Getppid() == ppidAtStart && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
 		}
-		remoteR, hubW, err := os.Pipe()
-		if err != nil {
-			return nil, err
+	}
+	var result string
+	switch os.Getenv(helperModeEnv) {
+	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold", "attach-late-probe":
+		mode := os.Getenv(helperModeEnv)
+		// The size the client attaches at, WxH, 80x24 when unset.
+		width, height := 80, 24
+		if size := os.Getenv(helperSizeEnv); size != "" {
+			_, _ = fmt.Sscanf(size, "%dx%d", &width, &height)
 		}
-		hub := &pipeTransport{r: hubR, w: hubW}
-		remote := &pipeTransport{r: remoteR, w: remoteW}
-		far.mu.Lock()
-		far.links = append(far.links, hub, remote)
-		far.dials++
-		far.mu.Unlock()
-		go func() {
-			_ = federation.ServeProxyFor(remote, remote, func(open federation.StreamOpen) (net.Conn, error) {
-				path := LinkSocketPath(far.socket)
-				if open.Human {
-					path = LinkHumanSocketPath(far.socket)
-				}
-				return net.DialTimeout("unix", path, 3*time.Second)
-			})
-			_ = remote.Close()
-		}()
-		return hub, nil
+		c := NewTUIClient()
+		c.Served = strings.HasPrefix(mode, "attach-served")
+		c.AllowNested = mode == "attach-force"
+		if strings.HasSuffix(mode, "-probe") {
+			// Written to this process's terminal, as a client writes it.
+			c.SetNestProbe(WriteNestProbe(os.Stdout))
+		}
+		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
+		if err != nil {
+			result = "dial: " + err.Error()
+			break
+		}
+		c.conn = conn
+		if err := c.handshake("test", width, height, nil); err != nil {
+			result = "handshake: " + err.Error()
+			break
+		}
+		if _, err := c.AttachSession(os.Getenv(helperArgsEnv), false, width, height); err != nil {
+			result = "attach: " + err.Error()
+			break
+		}
+		result = "nonce:" + c.HumanNonce()
+		if strings.HasSuffix(mode, "-probe") {
+			// The daemon does not wait for the probe, so a client can attach
+			// before its probe reaches a pane and be taken off after. Report
+			// the attach, then wait to be taken off, and report the reason to
+			// out.ended.
+			ended := make(chan string, 1)
+			c.OnSessionEnded(func(_, reason string) { ended <- reason })
+			c.StartReadLoop()
+			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
+				_ = os.Rename(out+".tmp", out)
+			}
+			select {
+			case reason := <-ended:
+				_ = os.WriteFile(out+".ended", []byte(reason+"|"+c.NestedRefusal()), 0o600)
+			case <-time.After(time.Minute):
+			}
+			return
+		}
+		if mode == "attach-hold" {
+			// Stays attached, so a later attach sees this client in the
+			// chain. The pane closing with its daemon ends it.
+			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
+				_ = os.Rename(out+".tmp", out)
+			}
+			time.Sleep(time.Minute)
+		}
+		_ = c.Close()
+	default:
+		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
+		if err != nil {
+			result = "dial: " + err.Error()
+			break
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := conn.Write([]byte(os.Getenv(helperArgsEnv) + "\n")); err != nil {
+			result = "write: " + err.Error()
+			break
+		}
+		line, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			result = "read: " + err.Error()
+			break
+		}
+		result = line
+		_ = conn.Close()
 	}
-	hub := NewDaemon(&DaemonConfig{
-		Version:            "hub",
-		DisableAutoRestore: true,
-		Hosts:              []federation.Host{{Name: "build", Addr: "unused"}},
-		HostDial:           dial,
-	})
-	if err := hub.Start(); err != nil {
-		t.Fatalf("start the hub daemon: %v", err)
-	}
-	t.Cleanup(hub.Stop)
-	return hub, far
-}
-
-// TestAHubVouchesOnlyForACallerOutsideItsPanes covers the link half of acting
-// as the person. The far daemon cannot see who on the hub asked for a
-// connection, so the hub says it in the stream's open frame. The person's
-// client, outside every pane, attaches with a nonce and its reply verifies. An
-// agent in one of the hub's panes that attaches to the same far session gets
-// no nonce, so it cannot verify a reply there either.
-func TestAHubVouchesOnlyForACallerOutsideItsPanes(t *testing.T) {
-	skipWithoutPeerPID(t)
-	hub, far := startHubAndLinkedFar(t)
-	_, a, _ := twoWindowSession(t, far.daemon, "far")
-	hubSess, _, hubPane := twoWindowSession(t, hub, "local")
-	waitForHostUp(t, hub, "build")
-
-	person, _ := connectThrough(t, "build", "far")
-	nonce := person.HumanNonce()
-	if nonce == "" {
-		t.Fatal("the person's attach through the hub was issued no nonce")
-	}
-	vc, _, err := DialVerbClientThroughHost("build", "test")
-	if err != nil {
-		t.Fatalf("dial through host: %v", err)
-	}
-	t.Cleanup(func() { _ = vc.Close() })
-	raw, err := vc.Call("send-agent-message", map[string]any{"session": "far", "to": a, "from": AgentInboxHuman, "text": "yes", "human_nonce": nonce})
-	if err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	var sent map[string]any
-	_ = json.Unmarshal(raw, &sent)
-	if sent["verified_human"] != true {
-		t.Errorf("the person's reply over the link was not verified: %v", sent)
-	}
-
-	hubSock, err := GetSocketPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := filepath.Join(t.TempDir(), "out")
-	runInPane(t, hub, hubSess, hubPane, helperCommand(t, hubSock, out, "attach-host", "build far"))
-	if got := waitHelper(t, out); got != "nonce:" {
-		t.Errorf("an attach from a hub pane through the link got %q, want no nonce", got)
+	if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
+		_ = os.Rename(out+".tmp", out)
 	}
 }

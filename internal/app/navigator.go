@@ -17,7 +17,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -106,15 +105,11 @@ func (p *navPane) setText(text []string) {
 
 // navSession is one session in the navigator.
 type navSession struct {
-	// Host is the machine the session is on. Empty is the machine this client
-	// is attached to.
-	Host  string
 	Name  string
 	Title string
 	// Current is the session this client shows.
 	Current bool
-	// Note says why the session's panes are not listed: its machine is not
-	// up, or it did not answer.
+	// Note says why the session's panes are not listed: it did not answer.
 	Note           string
 	WorkspaceNames map[int]string
 	Panes          []navPane
@@ -128,7 +123,7 @@ type navSession struct {
 }
 
 // key is the session's identity in the navigator.
-func (s *navSession) key() string { return s.Host + "\x00" + s.Name }
+func (s *navSession) key() string { return "\x00" + s.Name }
 
 // keepAgentMarks gives each pane of a session the load read on this machine
 // the agent state, the seen bit and the subagent count of its row in from,
@@ -335,18 +330,14 @@ func (m *OS) navigatorCursorToCurrent() {
 }
 
 // navigatorSessions is the tree as this client holds it now: the attached
-// session's panes from live state, the other sessions on the attached
-// machine from the rail's cached listing, and the sessions of every other
-// machine by name only.
+// session's panes from live state, and the other sessions from the rail's
+// cached listing.
 func (m *OS) navigatorSessions() []navSession {
 	var out []navSession
 	current := m.navigatorCurrentSession()
 	tree := m.BuildSessionTree()
 	seen := false
 	for _, n := range tree.Sessions {
-		if isRemoteNode(n) {
-			continue
-		}
 		if n.IsCurrent || n.ID == current.Name {
 			current.Title = n.Title
 			out = append(out, current)
@@ -376,22 +367,6 @@ func (m *OS) navigatorSessions() []navSession {
 	}
 	if !seen {
 		out = append([]navSession{current}, out...)
-	}
-	for _, h := range m.FederationHosts {
-		if h.Name == m.attachedMachine() {
-			continue
-		}
-		for _, fs := range h.Sessions {
-			title := fs.Name
-			if fs.DisplayName != "" {
-				title = fs.DisplayName
-			}
-			s := navSession{Host: h.Name, Name: fs.Name, Title: title, Count: fs.WindowCount}
-			if h.Status != string(federation.StatusUp) {
-				s.Note = h.Name + " is not reachable"
-			}
-			out = append(out, s)
-		}
 	}
 	return out
 }
@@ -490,33 +465,20 @@ func navLastLines(lines []string, n int) []string {
 // for every session but the current one, its panes with their folders and
 // commands, its workspace names, and each pane's last lines.
 //
-// Each machine is read in a goroutine of its own, so a slow machine costs its
-// own rows and not the others'. All of them share one deadline, navLoadBudget,
-// and a session not read by then is marked as not answering in time. Closing
-// the navigator cancels the load. A call that fails leaves its connection out
-// of step (see session.ErrVerbClientBroken), so the machine is dialled again
-// for the next session, once.
+// Every session shares one deadline, navLoadBudget, and a session not read by
+// then is marked as not answering in time. Closing the navigator cancels the
+// load. A call that fails leaves its connection out of step (see
+// session.ErrVerbClientBroken), so the daemon is dialled again for the next
+// session, once.
 func (m *OS) navigatorLoad() tea.Cmd {
 	gen := m.navigator.gen
 	build := m.DaemonClient.ClientVersion()
-	attached := m.attachedMachine()
-	byMachine := map[string][]navSession{}
-	var order []string
 	var jobs []navSession
 	for _, s := range m.navigator.sessions {
 		if s.Current || s.Note != "" {
 			continue
 		}
-		machine := s.Host
-		if machine == "" {
-			machine = attached
-		}
-		if _, ok := byMachine[machine]; !ok {
-			order = append(order, machine)
-		}
-		job := navSession{Host: s.Host, Name: s.Name}
-		byMachine[machine] = append(byMachine[machine], job)
-		jobs = append(jobs, job)
+		jobs = append(jobs, navSession{Name: s.Name})
 	}
 	if len(jobs) == 0 {
 		return func() tea.Msg { return NavigatorLoadedMsg{Gen: gen} }
@@ -532,84 +494,74 @@ func (m *OS) navigatorLoad() tea.Cmd {
 		var (
 			mu       sync.Mutex
 			done     = map[string]navSession{}
-			captures atomic.Int64
-			wg       sync.WaitGroup
+			captures int
 		)
-		for _, machine := range order {
-			wg.Add(1)
-			go func(machine string, sessions []navSession) {
-				defer wg.Done()
-				dial := func() *session.VerbClient {
-					var c *session.VerbClient
-					var err error
-					if machine == federation.LocalHostName {
-						c, err = session.DialVerbClientAs(build)
-					} else {
-						c, _, err = session.DialVerbClientThroughHost(machine, build)
-					}
-					if err != nil {
-						return nil
-					}
-					return c
+		finished := make(chan struct{})
+		go func() {
+			defer close(finished)
+			dial := func() *session.VerbClient {
+				c, err := session.DialVerbClientAs(build)
+				if err != nil {
+					return nil
 				}
-				c := dial()
-				defer func() { _ = c.Close() }()
-				parser := newNavParser(ink)
-				defer parser.Close()
-				for _, job := range sessions {
-					if ctx.Err() != nil {
-						return
-					}
-					if c == nil {
-						mu.Lock()
-						done[job.key()] = navSession{Host: job.Host, Name: job.Name, Note: "Could not reach this machine"}
-						mu.Unlock()
-						continue
-					}
-					s, ok, inStep := navLoadSession(ctx, c, job.Host, job.Name)
-					if !inStep {
-						_ = c.Close()
-						c = dial()
-					}
-					if !ok {
-						mu.Lock()
-						done[job.key()] = navSession{Host: job.Host, Name: job.Name, Note: "Could not read this session"}
-						mu.Unlock()
-						continue
-					}
-					if c == nil {
-						mu.Lock()
-						done[job.key()] = s
-						mu.Unlock()
-						continue
-					}
-					for i := range s.Panes {
-						if ctx.Err() != nil {
-							break
-						}
-						if captures.Add(1) > int64(maxCaptures) {
-							s.Panes[i].TextSkipped = true
-							continue
-						}
-						text, styled, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID, parser)
-						if !ok {
-							_ = c.Close()
-							c = dial()
-							if c == nil {
-								break
-							}
-						}
-						s.Panes[i].setText(text)
-						s.Panes[i].Styled = styled
-					}
+				return c
+			}
+			c := dial()
+			defer func() { _ = c.Close() }()
+			parser := newNavParser(ink)
+			defer parser.Close()
+			for _, job := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				if c == nil {
+					mu.Lock()
+					done[job.key()] = navSession{Name: job.Name, Note: "Could not reach the daemon"}
+					mu.Unlock()
+					continue
+				}
+				s, ok, inStep := navLoadSession(ctx, c, job.Name)
+				if !inStep {
+					_ = c.Close()
+					c = dial()
+				}
+				if !ok {
+					mu.Lock()
+					done[job.key()] = navSession{Name: job.Name, Note: "Could not read this session"}
+					mu.Unlock()
+					continue
+				}
+				if c == nil {
 					mu.Lock()
 					done[job.key()] = s
 					mu.Unlock()
+					continue
 				}
-			}(machine, byMachine[machine])
-		}
-		finished := make(chan struct{})
-		go func() { wg.Wait(); close(finished) }()
+				for i := range s.Panes {
+					if ctx.Err() != nil {
+						break
+					}
+					captures++
+					if captures > maxCaptures {
+						s.Panes[i].TextSkipped = true
+						continue
+					}
+					text, styled, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID, parser)
+					if !ok {
+						_ = c.Close()
+						c = dial()
+						if c == nil {
+							break
+						}
+					}
+					s.Panes[i].setText(text)
+					s.Panes[i].Styled = styled
+				}
+				mu.Lock()
+				done[job.key()] = s
+				mu.Unlock()
+			}
+		}()
 		select {
 		case <-finished:
 		case <-ctx.Done():
@@ -622,7 +574,7 @@ func (m *OS) navigatorLoad() tea.Cmd {
 				out = append(out, s)
 				continue
 			}
-			out = append(out, navSession{Host: job.Host, Name: job.Name, Note: "Did not answer in time"})
+			out = append(out, navSession{Name: job.Name, Note: "Did not answer in time"})
 		}
 		return NavigatorLoadedMsg{Gen: gen, Sessions: out}
 	}
@@ -690,7 +642,7 @@ func navMaxCapturesInForce() int {
 // ok is false when the panes could not be read. inStep is false when a call
 // failed in a way that leaves the connection out of step, and the caller dials
 // again before its next call.
-func navLoadSession(ctx context.Context, c *session.VerbClient, host, name string) (s navSession, ok, inStep bool) {
+func navLoadSession(ctx context.Context, c *session.VerbClient, name string) (s navSession, ok, inStep bool) {
 	raw, err := c.CallWithTimeout("list-windows", map[string]any{"session": name}, navCallTimeoutFor(ctx))
 	if err != nil {
 		return navSession{}, false, navInStep(err)
@@ -713,7 +665,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	if json.Unmarshal(raw, &list) != nil {
 		return navSession{}, false, true
 	}
-	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}, Shell: list.Shell}
+	s = navSession{Name: name, WorkspaceNames: map[int]string{}, Shell: list.Shell}
 	for _, w := range list.Windows {
 		if w.Scratch {
 			continue
@@ -798,9 +750,9 @@ func (m *OS) ApplyNavigatorLoaded(msg NavigatorLoadedMsg) {
 				s.Note = note
 				break
 			}
-			if loaded.Host == "" {
-				loaded.keepAgentMarks(s)
-			}
+
+			loaded.keepAgentMarks(s)
+
 			*s = loaded
 			s.Title = title
 			s.Note = note
@@ -934,13 +886,13 @@ func (m *OS) navigatorSearchRows() []navRow {
 	for si := range m.navigator.sessions {
 		s := &m.navigator.sessions[si]
 		if len(s.Panes) == 0 {
-			if r, ok := mt.Find(q, s.Title+" "+s.Name+" "+s.Host); ok {
+			if r, ok := mt.Find(q, s.Title+" "+s.Name+" "+""); ok {
 				hits = append(hits, scored{navRow{Kind: navRowSession, Session: si}, 2*r.Score + 1})
 			}
 			continue
 		}
 		for pi, p := range s.Panes {
-			fields := strings.Join([]string{p.Name, p.Title, p.Command, p.Cwd, s.Title, s.Host, s.WorkspaceNames[p.Workspace]}, " ")
+			fields := strings.Join([]string{p.Name, p.Title, p.Command, p.Cwd, s.Title, "", s.WorkspaceNames[p.Workspace]}, " ")
 			row := navRow{Kind: navRowPane, Session: si, Workspace: p.Workspace, Pane: pi}
 			// Scores are doubled so the field hit's tie break of one point
 			// cannot pass a text hit that scored one point more.
@@ -1101,14 +1053,7 @@ func (m *OS) NavigatorActivate(i int) {
 	m.CloseNavigator()
 	m.sidebarLeaveForJump()
 	if !s.Current {
-		if s.Host != "" && s.Host != m.attachedMachine() {
-			// Off the Update goroutine and in every link state, as the rail
-			// opens it. The workspace or pane the row names is focused when
-			// the switch lands. See host_open.go.
-			m.openRemoteSessionAt(s.Host, s.Name, workspace, paneID)
-			return
-		}
-		if !m.openSession(s.Host, s.Name) {
+		if !m.openSession(s.Name) {
 			return
 		}
 	}

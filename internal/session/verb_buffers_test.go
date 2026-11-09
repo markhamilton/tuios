@@ -138,7 +138,7 @@ func TestThePersonsShareSurvivesAFullPanePool(t *testing.T) {
 		}
 	}
 	// And the panes' line budget is taken whole.
-	panesFull, ok := d.readBudgetFor(&connState{viaLink: true}).acquire(peerBudgetBytes, time.Second)
+	panesFull, ok := d.readBudgetFor(&connState{paneOnly: true}).acquire(peerBudgetBytes, time.Second)
 	if !ok {
 		t.Fatal("could not take the panes' budget")
 	}

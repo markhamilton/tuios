@@ -18,8 +18,7 @@ tuios list-clients --json
   connection is detached. Your own `list-clients` call is in the list, with
   no session.
 - `pid` is the kernel's record of the peer process. It is `0` on Windows and
-  the BSDs. For an SSH or web client it is the local server process, not the
-  remote person.
+  the BSDs.
 - `tuios ls --json` says only whether a session has a client. Use
   `list-clients` to learn which session each client shows.
 
@@ -41,12 +40,11 @@ session. From outside, name the client's session with `-s` or the client with
 ```sh
 tuios switch-session api
 tuios switch-session --create --cwd /src/api api
-tuios switch-session build:api
 tuios switch-session -s work api
 ```
 
 `--create` makes the session when it is missing, and `--cwd` sets where its
-windows start. `HOST:` names a machine from `[hosts]`. It moves what the
+windows start. It moves what the
 person sees, so it needs the `admin` grant. Do not switch the person's client
 unless they asked for it.
 

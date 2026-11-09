@@ -154,9 +154,6 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a refused paste")
 		}
 	})
-	// A folder the daemon watches for the files section changed. See
-	// sidebar_files_watch.go.
-	client.OnDirChanged(m.fileWatch.remoteDirChanged)
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})

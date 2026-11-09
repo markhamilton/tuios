@@ -125,9 +125,7 @@ func (m *OS) notifSourceName(t *NotifTarget) string {
 		}
 		return "A pane"
 	}
-	if t.Host != "" {
-		return t.Host
-	}
+
 	return "A pane"
 }
 

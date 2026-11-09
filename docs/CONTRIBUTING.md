@@ -24,9 +24,8 @@ The `justfile` at the root holds the dev commands. Install [just](https://just.s
 
 | Recipe | What it does |
 |--------|--------------|
-| `just build` | Builds `tuios` and `tuios-web` into `.dev/bin`, stamped `dev+COMMIT`. |
-| `just install` | Installs both to `~/.local/bin` and keeps the old ones as `.bak`. |
-| `just deploy [host...]` | Installs this checkout here and on the `[hosts]` hosts, and restarts old daemons. The restart ends the programs in their panes. |
+| `just build` | Builds `tuios` into `.dev/bin`, stamped `dev+COMMIT`. |
+| `just install` | Installs it to `~/.local/bin` and keeps the old one as `.bak`. |
 | `just restart` | Restarts the live daemon. This ends the programs in every pane. |
 | `just sandbox [args]` | Runs tuios against a throwaway daemon. It does not touch your own daemon. |
 | `just run-debug` | Runs the TUI with `--debug` against a throwaway daemon. |
@@ -38,6 +37,6 @@ The `justfile` at the root holds the dev commands. Install [just](https://just.s
 | `just ci` | Runs the local part of CI: format, tidy, lint, unit tests and binary size. |
 | `just clean` | Stops the throwaway daemons and removes what the recipes built. |
 
-Only `install`, `install-ghostty`, `deploy`, `deploy-hosts` and `restart` touch the daemon you work in.
+Only `install`, `install-ghostty` and `restart` touch the daemon you work in.
 
 Use conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), keep commits focused, and run `go fmt` before committing. A commit message ends with its body: please add no trailers, such as `Co-authored-by:`. Security reports go through [SECURITY.md](../SECURITY.md), not the issue tracker.

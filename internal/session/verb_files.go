@@ -314,9 +314,6 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	}
 	// What a path is, or that it is there, is read like its bytes: a link
 	// may not look inside the folders it may not read.
-	if verr := d.checkLinkRead(cs, path); verr != nil {
-		return nil, verr
-	}
 	target := path
 	if p.Part {
 		target = partPath(path, p.PartID)
@@ -349,9 +346,6 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 	}
 	dir, verr := expandPath(p.Dir)
 	if verr != nil {
-		return nil, verr
-	}
-	if verr := d.checkLinkRead(cs, dir); verr != nil {
 		return nil, verr
 	}
 	limit := p.Limit
@@ -499,10 +493,7 @@ func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verb
 	if length <= 0 || length > fileReadMax {
 		length = fileReadMax
 	}
-	f, fi, verr, err := d.openLinkRead(cs, path)
-	if verr != nil {
-		return nil, verr
-	}
+	f, fi, err := openRegular(path)
 	if errors.Is(err, syscall.EISDIR) {
 		return nil, invalidParam("path", echoName(path)+" is a folder: list it with file-list")
 	}
@@ -525,51 +516,23 @@ func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verb
 }
 
 // verbFileMkdir makes a folder and its parents.
-func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileMkdir(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path    string `json:"path"`
-		Receive bool   `json:"receive"`
+		Path string `json:"path"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
-	}
-	if p.Receive {
-		// The receive folder: where the caller may write here when it
-		// names no folder. A daemon from before receive makes path, which
-		// a caller sets to ~.
-		dir, verr := d.receiveFolder(cs)
-		if verr != nil {
-			return nil, verr
-		}
-		// A receive folder that is there is not made again: it may be the
-		// home folder itself (files_roots = ["~"]), which a link may write
-		// under but not change.
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return map[string]any{"path": dir}, nil
-		}
-		p.Path = dir
 	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
 		return nil, verr
 	}
-	// A folder that is there is not made again, and nothing is written: a
-	// copy into the home folder itself (files_roots = ["~"]) asks for it,
-	// and a link may write under the home folder but not change it. That it
-	// is there is read like a stat.
-	if verr := d.checkLinkRead(cs, path); verr == nil {
-		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
-			return map[string]any{"path": path}, nil
-		}
+	// A folder that is there is not made again, and nothing is written.
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return map[string]any{"path": path}, nil
 	}
-	fsys, verr := d.linkWriteFS(cs, path)
-	if verr != nil {
-		return nil, verr
-	}
+	fsys := fileFS{}
 	defer fsys.Close()
-	if verr := d.claimLinkDirs(cs, fsys, fsys.confineDir(path)); verr != nil {
-		return nil, verr
-	}
 	if err := fsys.MkdirAll(fsys.confineDir(path), 0o755); err != nil {
 		return nil, fileError("make the folder", path, err)
 	}
@@ -601,16 +564,7 @@ func (d *Daemon) verbFileRename(cs *connState, params json.RawMessage) (any, *ve
 	if strings.HasPrefix(to+string(filepath.Separator), from+string(filepath.Separator)) {
 		return nil, invalidParam("to", "a folder cannot move into itself")
 	}
-	if cs != nil && cs.viaLink && (isPartName(filepath.Base(from)) || isPartName(filepath.Base(to))) {
-		// A part is the copy's own. A rename onto a part name could put a
-		// file the copy did not make, such as a hard link, where the copy
-		// writes, and one off it could move a copy's bytes in place unchecked.
-		return nil, newVerbError(ErrVerbForbidden, "move: "+echoName(filepath.Base(from))+" or "+echoName(filepath.Base(to))+" is a copy's part file, which a linked machine does not move")
-	}
-	fsys, verr := d.linkWriteFS(cs, from, to)
-	if verr != nil {
-		return nil, verr
-	}
+	fsys := fileFS{}
 	defer fsys.Close()
 	if !p.Replace {
 		if _, err := fsys.Lstat(fsys.confine(to)); err == nil {
@@ -639,10 +593,7 @@ func (d *Daemon) verbFileRemove(cs *connState, params json.RawMessage) (any, *ve
 	if home, err := os.UserHomeDir(); err == nil && (path == home || path == "/") {
 		return nil, invalidParam("path", "tuios does not remove "+echoName(path))
 	}
-	fsys, verr := d.linkWriteFS(cs, path)
-	if verr != nil {
-		return nil, verr
-	}
+	fsys := fileFS{}
 	defer fsys.Close()
 	var err error
 	if p.Recursive {
@@ -724,9 +675,6 @@ func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	if verr := d.checkLinkRead(cs, path); verr != nil {
-		return nil, verr
-	}
 	target := path
 	if p.Part {
 		target = partPath(path, p.PartID)
@@ -735,10 +683,7 @@ func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verb
 	if p.Length != nil {
 		length = *p.Length
 	}
-	f, _, verr, err := d.openLinkRead(cs, target)
-	if verr != nil {
-		return nil, verr
-	}
+	f, _, err := openRegular(target)
 	if err != nil {
 		return nil, fileError("hash", target, err)
 	}
@@ -799,10 +744,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 	switch p.Mode {
 	case "read", "":
-		f, fi, verr, err := d.openLinkRead(cs, path)
-		if verr != nil {
-			return nil, verr
-		}
+		f, fi, err := openRegular(path)
 		if err != nil {
 			return nil, fileError("read", path, err)
 		}
@@ -861,10 +803,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		}
 		// The destination is checked with the part, so a copy that file-commit
 		// would refuse is refused before its bytes move.
-		fsys, verr := d.linkWriteFS(cs, path, partPath(path, p.PartID))
-		if verr != nil {
-			return nil, verr
-		}
+		fsys := fileFS{}
 		defer fsys.Close()
 		dir := filepath.Dir(path)
 		if fi, err := fsys.Stat(fsys.confineDir(dir)); err != nil || !fi.IsDir() {
@@ -874,42 +813,29 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			return nil, fileError("write", dir, err)
 		}
 		part := partPath(path, p.PartID)
-		// The room is claimed before the part is made, so a write that
-		// does not fit leaves nothing behind.
 		confined := fsys.confine(part)
-		release, verr := d.claimLinkWrite(cs, fsys.confine(path), confined, p.Offset, p.Length)
-		if verr != nil {
-			return nil, verr
-		}
 		f, err := openPart(fsys, confined)
 		if err != nil {
-			release()
 			return nil, fileError("write", part, err)
 		}
-		d.transfers.parts.note(filepath.Dir(confined))
 		fi, err := f.Stat()
 		if err != nil {
-			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		if p.Offset > fi.Size() {
-			release()
 			_ = f.Close()
 			return nil, invalidParam("offset", "offset "+strconv.FormatInt(p.Offset, 10)+" is past the part's "+strconv.FormatInt(fi.Size(), 10)+" bytes")
 		}
 		if err := f.Truncate(p.Offset); err != nil {
-			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		if _, err := f.Seek(p.Offset, io.SeekStart); err != nil {
-			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		cs.takeover = func(br *bufio.Reader) {
-			defer release()
 			defer func() { _ = f.Close() }()
 			_ = cs.conn.SetReadDeadline(time.Time{})
 			var src io.Reader = br
@@ -941,10 +867,6 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 				reply["error"], reply["code"] = ve.Message, ve.Code
 			case n < p.Length:
 				reply["error"] = "the sender stopped after " + strconv.FormatInt(n, 10) + " of " + strconv.FormatInt(p.Length, 10) + " bytes"
-			default:
-				if p.Offset == 0 {
-					d.transfers.sums.put(confined, f, hex.EncodeToString(h.Sum(nil)))
-				}
 			}
 			line, _ := json.Marshal(reply)
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -1120,17 +1042,10 @@ func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *ve
 	default:
 		return nil, invalidParam("conflict", "conflict is replace, keep-both, skip or fail", "replace", "keep-both", "skip", "fail")
 	}
-	fsys, verr := d.linkWriteFS(cs, path, partPath(path, p.PartID))
-	if verr != nil {
-		return nil, verr
-	}
+	fsys := fileFS{}
 	defer fsys.Close()
 	target := fsys.confine(path)
-	known := d.transfers.sums.take(fsys, partPath(target, p.PartID))
-	final, sum, skipped, verr := commitPart(d.ctx, fsys, target, p.PartID, p.SHA256, p.Conflict, p.Perm, p.MTime, commitOpts{known: known, label: p.Label})
-	if _, err := os.Lstat(partPath(target, p.PartID)); err != nil {
-		d.linkFiles.partDone(cs, partPath(target, p.PartID))
-	}
+	final, sum, skipped, verr := commitPart(d.ctx, fsys, target, p.PartID, p.SHA256, p.Conflict, p.Perm, p.MTime, commitOpts{label: p.Label})
 	if verr != nil {
 		return nil, verr
 	}
@@ -1158,16 +1073,12 @@ func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 	part := partPath(path, p.PartID)
-	fsys, verr := d.linkWriteFS(cs, part)
-	if verr != nil {
-		return nil, verr
-	}
+	fsys := fileFS{}
 	defer fsys.Close()
 	err := fsys.Remove(fsys.confine(part))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fileError("remove the part of", path, err)
 	}
-	d.linkFiles.partDone(cs, fsys.confine(part))
 	return map[string]any{"path": path}, nil
 }
 
@@ -1341,10 +1252,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	root, verr := d.linkWalkRoot(cs, path)
-	if verr != nil {
-		return nil, verr
-	}
+	root := path
 	if p.Stream {
 		fi, err := os.Stat(root)
 		if err != nil {
@@ -1360,7 +1268,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 			var total int64
 			var skipped []SkippedItem
 			count, denied := 0, 0
-			err := walkTreeTo(root, fileWalkMax, countDenied(d.linkWalkDenied(cs), &denied), func(e WalkEntry) error {
+			err := walkTreeTo(root, fileWalkMax, countDenied(nil, &denied), func(e WalkEntry) error {
 				total += e.Size
 				return enc.Encode(e)
 			}, func(s SkippedItem) {
@@ -1383,7 +1291,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 		}
 		return map[string]any{"path": path, "stream": true}, nil
 	}
-	w, err := walkTree(root, fileWalkReplyMax, d.linkWalkDenied(cs))
+	w, err := walkTree(root, fileWalkReplyMax, nil)
 	if isWalkTooLarge(err) {
 		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error()+". Ask with stream for a larger folder")
 	}
@@ -1460,10 +1368,9 @@ func fileVerbs() map[string]verbEntry {
 			description: "Make a folder on this machine, with its parents.",
 			params: []verbParam{
 				pathParam("The folder."),
-				{Name: "receive", Type: "bool", Description: "Make the receive folder instead, and ignore path: where a copy from the caller lands when it names no folder. For a linked machine it is the first folder of its files_roots, else ~/Downloads/tuios."},
 			},
 			returns:  []verbParam{{Name: "path", Type: "string", Description: "The folder, made absolute."}},
-			examples: []string{`{"id":1,"verb":"file-mkdir","params":{"path":"~/new"}}`, `{"id":2,"verb":"file-mkdir","params":{"path":"~","receive":true}}`},
+			examples: []string{`{"id":1,"verb":"file-mkdir","params":{"path":"~/new"}}`},
 			handler:  (*Daemon).verbFileMkdir,
 		},
 		"file-rename": {

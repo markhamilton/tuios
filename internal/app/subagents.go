@@ -205,7 +205,7 @@ func (m *OS) paneSubagentList(sessionID, windowID string) []sessiontree.Subagent
 			}
 		}
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		return nil
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {

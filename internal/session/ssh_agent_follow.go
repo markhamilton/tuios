@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 	"github.com/google/uuid"
@@ -291,9 +290,6 @@ func keyName(key string) string {
 func agentSockOf(cs *connState) string {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if cs.viaLink {
-		return cs.linkAgentSock
-	}
 	if cs.hello != nil {
 		return cs.hello.SSHAuthSock
 	}
@@ -347,104 +343,6 @@ func (d *Daemon) agentNote(cs *connState, sock string, keys ...string) {
 		}
 		f.bySession[key] = list
 		d.relinkAgentLocked(key)
-	}
-}
-
-// linkSSHEnv is the environment the link ssh to h runs with. It is nil, the
-// daemon's own environment exactly, unless ssh_agent is follow and the link
-// to h forwards the agent. Then SSH_AUTH_SOCK names h's own link, which
-// follows the clients attached to a session on h, so the agent the link
-// forwards is the agent of the person working there. The link is made before
-// ssh starts, and moving it does the rest.
-//
-// A host that does not forward keeps the daemon's environment: its ssh may
-// sign in with the daemon's agent, and pointing it elsewhere would change how
-// the host authenticates.
-func (d *Daemon) linkSSHEnv(h federation.Host) []string {
-	if !d.sshAgentFollowing() || !d.hostForwardsAgent(h) {
-		return nil
-	}
-	key := hostAgentKey(h.Name)
-	d.agentEnsureSession(key)
-	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "SSH_AUTH_SOCK=") })
-	return append(env, "SSH_AUTH_SOCK="+d.agentLinkFor(key))
-}
-
-// hostForwardsAgent reports whether the link ssh to h forwards the agent:
-// forwardagent yes in what ssh -G prints for h's address with h's ssh_options,
-// which is ssh's own reading of the options, ~/.ssh/config and their
-// precedence. The answer is cached per host until the config changes. A
-// failed or timed-out ssh -G is not cached, and is asked again at the next
-// connect. A ForwardAgent that names a socket forwards that socket, not
-// SSH_AUTH_SOCK, so it counts as no.
-func (d *Daemon) hostForwardsAgent(h federation.Host) bool {
-	key := h.Addr + "\x00" + strings.Join(h.SSHOptions, "\x00")
-	f := &d.sshAgent
-	f.mu.Lock()
-	if c, ok := f.forwards[h.Name]; ok && c.key == key {
-		f.mu.Unlock()
-		return c.forwards
-	}
-	f.mu.Unlock()
-	fwd, ok := sshConfigForwards(h)
-	if !ok {
-		return false
-	}
-	f.mu.Lock()
-	if f.forwards == nil {
-		f.forwards = make(map[string]hostForward)
-	}
-	f.forwards[h.Name] = hostForward{key: key, forwards: fwd}
-	f.mu.Unlock()
-	return fwd
-}
-
-// forgetHostForwards drops the cached answers, on a config reload: the
-// [hosts] table or ~/.ssh/config may say something else now.
-func (d *Daemon) forgetHostForwards() {
-	d.sshAgent.mu.Lock()
-	d.sshAgent.forwards = nil
-	d.sshAgent.mu.Unlock()
-	federation.ForgetSSHConfig()
-}
-
-// sshConfigForwards asks ssh -G what it would do for h's address with h's
-// options, which CheckSSHOptions has passed. fwd is whether that is
-// forwardagent yes. ok is false when ssh -G failed or gave no answer.
-func sshConfigForwards(h federation.Host) (fwd, ok bool) {
-	c, ok := federation.ReadSSHConfig(h)
-	if !ok || c.ForwardAgent == "" {
-		return false, false
-	}
-	return strings.EqualFold(c.ForwardAgent, "yes"), true
-}
-
-// agentPruneHosts removes the link and the entries of every host that is not
-// in hosts, when the config drops one.
-func (d *Daemon) agentPruneHosts(hosts []federation.Host) {
-	keep := make(map[string]bool, len(hosts))
-	for _, h := range hosts {
-		keep[hostAgentKey(h.Name)] = true
-	}
-	f := &d.sshAgent
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	drop := func(key string) {
-		if !strings.HasPrefix(key, "host:") || keep[key] {
-			return
-		}
-		if _, linked := f.target[key]; linked {
-			_ = os.Remove(d.agentLinkFor(key))
-			delete(f.target, key)
-		}
-		delete(f.bySession, key)
-		delete(f.forwards, strings.TrimPrefix(key, "host:"))
-	}
-	for key := range f.bySession {
-		drop(key)
-	}
-	for key := range f.target {
-		drop(key)
 	}
 }
 

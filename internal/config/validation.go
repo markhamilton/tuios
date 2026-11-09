@@ -143,7 +143,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateWindowSize(cfg, result)
 	validateSSHAgent(cfg, result)
 	validateDisplay(cfg, result)
-	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
 	validatePasteBuffers(cfg, result)
@@ -828,7 +827,6 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"inbox", kb.Inbox},
 		{"inbox_peek", kb.InboxPeek},
 		{"mail", kb.Mail},
-		{"transfers", kb.Transfers},
 		{"copy_mode", kb.CopyMode},
 		{"review", kb.Review},
 		{"global", kb.Global},

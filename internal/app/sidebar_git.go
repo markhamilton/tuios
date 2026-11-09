@@ -113,7 +113,7 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 // such as on native Windows, it is the reported one.
 func (m *OS) gitWantDir() string {
 	w := m.GetFocusedWindow()
-	if w != nil && m.paneIsLocal(w) && !(m.filesView.Pinned && m.filesView.Origin == w.ID) {
+	if w != nil && !(m.filesView.Pinned && m.filesView.Origin == w.ID) {
 		if dir, ok := paneShellDir(w, false); ok {
 			return dir
 		}
@@ -241,9 +241,6 @@ func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sideb
 	}
 
 	indent := 0
-	if row.Kind == gitRowBranch {
-		indent = m.sidebarRowIndent()
-	}
 	name := sidebarStyle(rowBg, ink).Render(
 		overlay.Truncate(printableTitle(row.Name), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarGutter(false, "", rowBg, pal, &m.Settings)

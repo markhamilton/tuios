@@ -1309,10 +1309,8 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	if !w.DaemonMode || w.PTYID == "" || !m.SubscribedPTYs[w.PTYID] {
 		w.SetTitle(ws.Title)
 	}
-	adoptWindowHost(w, ws.Host)
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)
-	w.HostLink = ws.HostLink
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1544,10 +1542,8 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 		// The tap's renderer keeps the history; nothing reads this copy.
 		window.DiscardScrollback()
 	}
-	adoptWindowHost(window, ws.Host)
 	m.takeDaemonCwd(window, ws)
 	m.takeDaemonDnD(window, ws)
-	window.HostLink = ws.HostLink
 
 	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
@@ -2552,21 +2548,6 @@ func (m *OS) SendInputToDaemon(window *terminal.Window, data []byte) error {
 	}
 
 	return m.DaemonClient.WritePTY(window.PTYID, data)
-}
-
-// adoptWindowHost records which machine a window's process runs on.
-//
-// Unlike the directory beside it, this is taken from the daemon without
-// argument. A directory has two possible sources that can disagree, the
-// shell's own announcement and the daemon's reading of the process, and the
-// fresher one has to win. Where the process runs has one source: the daemon
-// that started it. Nothing on the client can learn it any other way and
-// nothing on the client may overrule it.
-func adoptWindowHost(w *terminal.Window, host string) {
-	if w == nil {
-		return
-	}
-	w.SetHost(host)
 }
 
 // startedByFromWire splits a window's started_by into its session and window,

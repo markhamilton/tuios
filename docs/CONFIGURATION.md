@@ -47,8 +47,8 @@ false` changes it while tuios runs.
 ## Split the config into several files
 
 You can keep part of the config in other files. Use this to share one
-config.toml between machines and keep the settings for one machine, such as
-its hosts, in a separate file. A Nix or home-manager setup can also put its
+config.toml between machines and keep the settings for one machine in a
+separate file. A Nix or home-manager setup can also put its
 settings in a file that it manages, and leave config.toml to tuios.
 
 There are two ways to add files. Use one or both.
@@ -56,7 +56,7 @@ There are two ways to add files. Use one or both.
 1. Put an `include` list at the top of config.toml, before the first table:
 
    ```toml
-   include = ["hosts.toml", "~/.config/tuios/local.toml", "?work.toml"]
+   include = ["theme.toml", "~/.config/tuios/local.toml", "?work.toml"]
    ```
 
    A relative path is relative to the file that has the `include` line. `~`
@@ -73,7 +73,7 @@ There are two ways to add files. Use one or both.
    ```
 
 2. Put `*.toml` files in a `config.d` directory next to config.toml. tuios
-   reads them in name order, so `10-theme.toml` comes before `50-hosts.toml`.
+   reads them in name order, so `10-theme.toml` comes before `50-local.toml`.
 
 ### Which value wins
 
@@ -100,8 +100,7 @@ question. A run with no terminal needs `--yes`.
 
 The files merge with these rules:
 
-- Tables merge key by key, at every depth. `[hosts.NAME]` tables merge by
-  name, so each file can add its own hosts.
+- Tables merge key by key, at every depth.
 - For a single value, the later file wins.
 - An array of values replaces the earlier array. It does not add to it.
 - An array of tables, such as `[[keybindings.command]]`, merges entry by entry.
@@ -158,7 +157,7 @@ it, if its directory exists.
 ### Where tuios writes a change
 
 The settings page, `tuios set-config`, the keybind manager,
-`tuios keybinds unbind`, `tuios hosts add` and `tuios plugins` write the config.
+`tuios keybinds unbind` and `tuios plugins` write the config.
 They write only the keys you changed, and never copy the other files into
 config.toml. A change made while a file changed on disk keeps the new values
 of that file. Each change goes to one file:
@@ -166,8 +165,7 @@ of that file. Each change goes to one file:
 - A key that a file sets goes to the last file that sets it. The look file,
   `config.d/look.toml`, is not a target: a change to a key that it sets goes
   to config.toml. See [Looks](THEMES.md#looks).
-- A new entry in a table of entries, such as a new `[hosts.NAME]`, goes to the
-  last writable file that has entries in that table.
+- A new entry in a table of entries goes to the last writable file that has entries in that table.
 - Any other new key goes to config.toml.
 - A removed key is removed from each file that sets it.
 
@@ -284,8 +282,6 @@ puts the URL on your clipboard.
   browser on the remote machine. tuios puts the URL on your clipboard. Set
   `$BROWSER` or `link_opener` to a command that forwards the URL, if you have
   one.
-- A remote client (`tuios ssh`, the web client) puts the URL on your
-  clipboard.
 - A Linux machine with no `DISPLAY` and no `WAYLAND_DISPLAY` has no desktop.
   tuios puts the URL on your clipboard.
 
@@ -413,7 +409,7 @@ A client that is larger than the session fills the space the session does not us
 
 To change the value of one session while it runs, use `tuios set-config daemon.window_size latest -s NAME`. The value is not saved to the config file. A change in the config file applies when the daemon starts again.
 
-`single_client` in `[daemon]` (default `false`) keeps one client for each session. When a client attaches, every other client of that session detaches. The newest attach wins. Each detached client exits with status 0 and prints "Another client attached to this session." The session continues to run. This is `tuios attach -d` on every attach. Two attaches do not detach the other clients: a view-only client, such as `tuios-web --read-only`, and the attach that tuios makes on its own to get a session back after a host link drops. A change in the config file applies to the next attach.
+`single_client` in `[daemon]` (default `false`) keeps one client for each session. When a client attaches, every other client of that session detaches. The newest attach wins. Each detached client exits with status 0 and prints "Another client attached to this session." The session continues to run. This is `tuios attach -d` on every attach. A change in the config file applies to the next attach.
 
 ```toml
 [daemon]
@@ -434,16 +430,10 @@ ssh_agent = "follow"
 - The daemon removes its links when it stops and when you set the option to `"off"`. At start, it removes the links that a stopped daemon left.
 - tuios uses the `SSH_AUTH_SOCK` of `tuios attach` and `tuios new` only. A client that runs inside a pane does not count. tuios finds such a client by its process, so a process that leaves its pane on purpose (for example, with `setsid` and a clean environment) can still move the link. This check stops mistakes and agents, not a local process that wants to get past it.
 - tuios resolves a symbolic link once, so `~/.ssh/agent.sock` and the 1Password agent work. The link then points at the real socket. The real socket must be a Unix socket that you own. Every folder above it must be owned by you or by root, and no other user can write to it, unless it is sticky like `/tmp`. tuios refuses other sockets.
-- A client of the tuios SSH server or of `tuios-web` has no agent socket, so it does not move the link. To follow your agent, ssh to the machine with `ssh -A` and run `tuios attach`.
-- The agent can follow you to a remote host too. Turn on `ssh_agent = "follow"` on both machines, and turn on agent forwarding for the link to that host. Use `ForwardAgent yes` for the host in `~/.ssh/config`, or `ssh_options = ["-A"]` under `[hosts.NAME]`. tuios does not forward the agent by default. The daemon keeps one link for each such host, `agent-link-<host>-<hash>.sock`. The host name is in lower case and cut to 32 characters, and the hash is of the exact name, so two hosts never share a link. It points at the agent of the person on this machine who attached a session on that host, or typed in one, last. A session of this machine does not move it. The daemon starts the link ssh to that host with `SSH_AUTH_SOCK` set to that link. On the host, the panes of a session you attach through the link use the forwarded agent.
-- tuios decides that a host forwards from what `ssh -G` prints for its address with its `ssh_options`. That is how ssh itself reads the options and `~/.ssh/config`. tuios asks again when the config changes, and when `ssh -G` failed the last time. A host that leaves the config takes its link with it.
-- Before any client attaches a session on a forwarding host, its link points at the daemon's own `SSH_AUTH_SOCK`. If the daemon has none, or its socket fails the checks above, the panes on that host have no agent until a client attaches. The link ssh to a host that does not forward starts with the environment of the daemon, unchanged. Without forwarding, the panes on the host use the `SSH_AUTH_SOCK` that their own login there sets: the agent of the daemon on the host, or one from keychain or gnome-keyring through PAM, or none.
-- If the link to a host shares an ssh master connection, ssh forwards the agent of that master.
-- Forward the agent only to a host you trust. Root on the host can use a forwarded agent to sign in to other machines as you while the link is up. If the host pins the hub with `restrict` in `authorized_keys`, add `agent-forwarding` to the options of that key.
 
 A change in the config file applies to the next attach. New panes get the link while the option is on.
 
-`display` in `[daemon]` (default `"follow"`) can be `"off"`. A daemon that started without a display has no `WAYLAND_DISPLAY` or `DISPLAY`. This happens when a host link starts the daemon over ssh. With `"follow"`, the panes of such a daemon get the display of the local client that attached to the session or used it last. Then `wl-copy`, `wl-paste`, `xclip` and image paste work in the panes when you attach from the desktop.
+`display` in `[daemon]` (default `"follow"`) can be `"off"`. A daemon that started without a display has no `WAYLAND_DISPLAY` or `DISPLAY`. This happens when the daemon starts from an ssh login. With `"follow"`, the panes of such a daemon get the display of the local client that attached to the session or used it last. Then `wl-copy`, `wl-paste`, `xclip` and image paste work in the panes when you attach from the desktop.
 
 ```toml
 [daemon]
@@ -456,7 +446,7 @@ display = "follow"
 - A new pane also gets `DISPLAY` and `XAUTHORITY` of the client. `DISPLAY` is a name, not a path, so a pane keeps the value it started with.
 - A shell that started before a desktop client attached has no display. To get the display in that shell, run this line. To get it in every shell, add it to your shell rc: `eval "$(tuios display-env 2>/dev/null)"`
 - When the client detaches, the session uses the display of the client before it. When no attached client has a display, tuios removes the link, and new panes get no display.
-- tuios uses the display of `tuios attach` and `tuios new` only. The client must run on this machine, as your user, and outside every pane. tuios ignores a client that comes through a host link, a client of the tuios SSH server and a client of `tuios-web`.
+- tuios uses the display of `tuios attach` and `tuios new` only. The client must run on this machine, as your user, and outside every pane.
 - `WAYLAND_DISPLAY` can be a full path or a name like `wayland-1`. tuios finds a name in the `XDG_RUNTIME_DIR` of the client, then in the one of the daemon, then in `/run/user/<uid>`. The client does not need `XDG_RUNTIME_DIR`.
 - The Wayland socket must be a Unix socket that you own. Every folder above it must be owned by you or by root, and no other user can write to it, unless it is sticky like `/tmp`.
 - `DISPLAY` must be a display on this machine, `:N` or `:N.S`. Its socket `/tmp/.X11-unix/XN` must be owned by you or by root. tuios ignores a forwarded display such as `localhost:10.0`.
@@ -597,7 +587,7 @@ A terminal window cannot tell which display it is on. With several displays,
 auto uses the highest rate among them.
 
 Auto looks only when tuios runs on the same machine as your desktop. Over SSH,
-in tuios-web and in the SSH server, auto uses 60, because the displays on the
+auto uses 60, because the displays on the
 machine are not the ones you see.
 
 ## Images on a terminal without graphics
@@ -1008,7 +998,6 @@ in these cases:
 
 - You came from a workspace with no pane.
 - You came from a scratch terminal.
-- The pane you came from runs on another machine.
 
 The start folder is the folder that `tuios new --cwd` gave.
 
@@ -1603,7 +1592,7 @@ component:
 [dock]
 left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
-right  = ["transfers", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
+right  = ["notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
 [dock.clock]
 format = "15:04"
@@ -1625,11 +1614,6 @@ middle of the terminal. A notification does not move it or shorten its
 minimized pane labels. On a crowded bar, the center moves left to keep the
 right-hand cells on the screen. Click a cut notification to read the full
 message.
-`transfers` shows the copies between machines. It shows nothing while no copy
-exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
-count and a percent, `3 copies 42%`. `waiting` means a link is down, and
-`1 failed` stays until you open the Copies panel. A click opens the panel. Add
-`transfers` to your own `right` list to see it there.
 `session` shows the session name, workspace and pane, `main 2:1`, and is in no
 default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `{pane}`) and the cell style keys `fg`, `bg`, `bold`, `cap_left` and
@@ -2268,8 +2252,7 @@ See [What a pane may do](#what-a-pane-may-do).
 Only you can change the switch: on the settings page, in config.toml, or with
 `tuios set-config` from a shell outside tuios. A process in a pane gets
 `forbidden`. `tuios mcp` started with the features off does not list the
-agent tools. An agent command aimed at another machine, such as
-`tuios list-agents -s build:work`, follows this machine's switch.
+agent tools.
 
 ## Approvals from the Inbox
 
@@ -2292,7 +2275,7 @@ an edit, an MCP tool or a long command is answered in the pane.
 asks in its pane after all: 120 when unset, kept between 10 and 300.
 
 The daemon reads the table when it starts and again when the file changes; a
-change applies to the next prompt. Like `[dock]` and `[hosts]`, it is not in
+change applies to the next prompt. Like `[dock]`, it is not in
 `list-options` and `tuios set-config` cannot change it. Turning it on gives no
 program the power to answer: only you, at an attached client, can. It also
 needs version 2 of the integration:
@@ -2318,8 +2301,7 @@ bell = "toast"   # or "forward", "both", "off"
 
 tuios sends the bell for every pane, also for the pane you are in. It sends
 at most one bell from each pane in 200 milliseconds. A client attached to the
-daemon sends the bell to its own terminal. Over `tuios ssh` and in tuios-web,
-the bell goes to that client, not to the machine that runs tuios.
+daemon sends the bell to its own terminal.
 
 The terminal decides what a bell does. In Ghostty, for example, set
 `bell-features` to choose a sound, an attention request or a title mark.
@@ -2378,8 +2360,7 @@ kinds that wait for you are on by default: `approval`, `plan`, `question` and
 `mail`, `errored` and `finished`.
 
 Each item sends one notification at most. A repeated state report, or a new
-line on the same item, sends nothing. An item from a linked host sends
-nothing here. That host sends its own.
+line on the same item, sends nothing.
 
 ### Providers
 
@@ -2424,7 +2405,7 @@ A change that turns notifications off, or changes the triggers, applies at
 once. A new address, or a new source for a secret, waits for
 `tuios config apply` from a terminal outside tuios, or a daemon restart. A
 program in a pane can write config.toml, and this stops it from sending your
-Inbox to another address. Like `[hosts]`, `[notify]` is not in
+Inbox to another address. `[notify]` is not in
 `list-options`, and `tuios set-config` cannot change it.
 
 Run `tuios notify test` to send a test notification through each provider.
@@ -2464,8 +2445,7 @@ close, so the phone can remove the notification. A phone gets `approval`,
 `quiet_active_seconds` and `cooldown_seconds` are for the other providers.
 `enabled = false` stops the pushes of new items. A phone still gets the close
 of an item, so it can remove a notification. `max_per_hour` applies to each
-phone. An item from another machine is not pushed. That machine pushes to its
-own phones.
+phone.
 
 A push of `approval`, `plan`, `ask` or `question` lives one hour on the push
 service. Other pushes live 120 seconds. tuios tries a failed push again after
@@ -2473,8 +2453,7 @@ service. Other pushes live 120 seconds. tuios tries a failed push again after
 or 410), tuios removes the phone and shows an Inbox item about it.
 
 Each registration shows an Inbox item named `phone NAME`. It says who
-registered the phone. Another machine can register a phone over a link with
-`respond`, but it can not replace a registered phone. Check the item. Remove
+registered the phone. Check the item. Remove
 a phone you do not know with `tuios notify push rm NAME`. The phones and the VAPID key are in
 the state directory, in `push/`, with mode 600.
 
@@ -2823,7 +2802,7 @@ Every pane holds grants that say what a process in it may do through tuios:
 `read` (its own session and fan group), `write` (type into its own session,
 into panes that hold nothing it does not), `fan` (write in its fan group and
 start agents), `respond` (answer prompts without you, and type into a pane
-waiting on one), `files` (copy files with `tuios cp`, see below) and `admin`
+waiting on one) and `admin`
 (everything else, as before grants). A pane started
 with `--grants` (`tuios start-agent`, `fan`, `new-window`) or given grants
 with `tuios set-pane-grants` holds those. Every other pane holds the default
@@ -2843,19 +2822,6 @@ nothing but the right to report about itself. Any other `mode` is read as
 warnings, and both fail toward less. `admin` never includes `respond`, and no
 default gives it, so listing `respond` here is how you let every pane answer
 prompts for you.
-
-`files` lets a pane copy files without `admin`. A copy may start when each
-end on this machine is inside the pane's folder (its worktree, else its
-working folder). Each end on a host must be under its home folder, or be its
-receive folder. The pane sees and controls only the copies it started.
-`admin` includes `files`. To let every pane copy near its work under
-`strict`, add it to the list:
-
-```toml
-[agents.permissions]
-mode = "strict"
-grants = ["read", "write", "fan", "files"]
-```
 
 `task` lets a pane add, claim and finish the task cards of its own session
 (`tuios task`) without `admin`. A pane claims only for itself and changes only
@@ -2881,223 +2847,3 @@ change it, so no pane can loosen it. The [paste buffers](#paste-buffers) hold
 what you copied, so a pane needs `read` to read them, `write` to change them,
 and both to paste one.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
-
-## Move between machines
-
-The `next_host` and `prev_host` keybind actions go to a session on the next or
-the previous machine: this machine first, then the `[hosts]` table. They have
-no default key. See
-[KEYBINDINGS.md](KEYBINDINGS.md#cycle-through-machines).
-
-```toml
-[keybindings.window_management]
-next_host = ["alt+."]
-prev_host = ["alt+,"]
-```
-
-## What another machine may do here
-
-A `[hosts.NAME]` table names a machine this one links to. Read on the machine
-a link arrives at, the same table also says what the machine of that name may
-do there:
-
-```toml
-[hosts.laptop]
-addr = "laptop"                  # optional: without it nothing is dialled
-allow = ["list", "mail", "open", "write", "respond"]
-hold_mail = true
-hosted_grace = "10m"
-
-[hosts."*"]                      # every machine with no table of its own
-allow = ["list", "mail"]
-```
-
-`allow` is the capabilities, and anything not in it is refused with
-`forbidden` and nothing done:
-
-| Capability | What it lets the other machine do here |
-| --- | --- |
-| `list` | Read: sessions, windows, captures, screenshots, agent state, the Inbox, prompts, waits and the event stream. It also gives a live stream of the bytes of any pane (`stream-pane`). |
-| `mail` | Send and read agent mail, and use the stash. |
-| `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
-| `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |
-| `respond` | Answer for the person: prompts, held approvals, `ask-human` questions, dismissing Inbox items, and passing on held mail. Also type into a pane that waits on a prompt, from a pane on the other machine. The person on the other machine, outside every pane, needs only `write` for that. |
-| `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. A write that arrives over the link lands only in the folders of `files_roots` (the receive folder unless you add more, see below), and the drop folder for dropped files, never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` and `files_roots` say. A read never returns keys or credentials. It also lets a window here that the other machine draws show kitty images that a program names by path (`kitten icat --transfer-mode=file`): this machine reads the file under the same read rules and `files_read_roots`, and sends the bytes. See [protocol.md](protocol.md#files-and-transfers). |
-
-With no table, a machine may `list`, `mail`, `open`, `write` and `files`,
-which is what every link could do before the policy existed. `respond` is
-opt-in. Relaying on to this machine's own hosts needs the five capabilities a
-link had before `files` (`list`, `mail`, `open`, `write`, `respond`), because
-the next machine sees the relay as coming from this one; a table written for an
-older tuios that allows those five still relays. A copy this machine runs for
-another one also needs `files`. A table that sets `allow` without `files` keeps
-that machine from the file verbs. An `allow` that is set replaces the inherited
-list; `allow = []` allows nothing but `hello`.
-
-**Where a link may write: `files_roots`.** A machine with `files` writes only
-under the folders `files_roots` names, plus the drop folder. Unset, it is one
-receive folder: `~/Downloads/tuios` on macOS and Windows, and
-`$XDG_DOWNLOAD_DIR/tuios` (or `~/Downloads/tuios`) on other systems. tuios
-makes it on first use. Widen it on purpose, per machine:
-
-```toml
-[hosts.laptop]
-allow = ["list", "files"]
-files_roots = ["~/Downloads/tuios", "~/dev"]
-```
-
-A path is absolute or starts with `~`. `files_roots = ["~"]` lets the machine
-write anywhere in your home folder; the deny list below still holds inside
-every root, so even then it cannot touch `~/.ssh`, a shell start file, or the
-config folders of the agent harnesses tuios integrates (Claude Code, Codex,
-Gemini CLI, opencode, Cursor and the others), which name commands those tools
-run. A write outside the roots is refused, and the refusal says where writes
-may land and which setting to change. A reload that widens `files_roots`, like
-one that widens `allow`, waits for `tuios config apply`.
-
-**The mode of a file a link writes.** A file that another machine writes here
-gets the sender's permission bits under this machine's umask, as `cp` and
-`scp` without `-p` do. It never gets group or world write. The execute bits
-stay, so a script stays runnable. This holds for a paired device too.
-
-**Where a link may read: `files_read_roots`.** Unset, a machine with `files`
-reads any file you can read, apart from the read deny list: keys, credentials
-(also the logins and API keys of agent tools such as Gemini CLI, opencode, Qwen
-Code, Kilo, Pi, oh-my-pi, Hermes, Amp and the Copilot CLI, Cursor's MCP servers, the sops age keys, atuin's
-key and history, Ollama's key, and the OCI, doctl and ngrok credentials),
-shell start files, `~/.gitconfig`, keyrings, shell histories, browser profiles,
-`/proc` and tuios's own state. A
-deny list can never name every secret on a machine. Set `files_read_roots` to
-hold reads to the folders you name, plus the folders the machine may write.
-That is the stronger choice:
-
-```toml
-[hosts.laptop]
-files_read_roots = ["~/share"]
-```
-
-The rule covers `file-read`, `file-preview`, `file-hash`, `file-walk`, a copy out, and the
-names and sizes `file-stat` and `file-list` show. The read deny list still
-holds inside every root. A file with more than one name (a hard link) is never
-read over a link, inside a root or outside one. Copy it to a new file to share
-it. A reload that removes or widens `files_read_roots`
-waits for `tuios config apply`. A reload that narrows it applies at once.
-
-**How much a link may write.** A write over a link must leave
-`files_min_free` free on its disk: `"1GiB"` unless you set it. The value is a
-whole number with `B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB` or `TiB`.
-`"0"` turns the check off, and a reload that lowers it waits for
-`tuios config apply`. A write that does not fit is refused as
-`disk_full` before a byte moves. One machine may have at most 8 write streams
-and 64 unfinished part files here at once. Past that, a write is `busy`, and
-a copy waits and tries again.
-
-A machine may also make at most `files_max_entries` new files and folders
-here in ten minutes: 20,000 unless you set it. An empty file uses no bytes,
-so `files_min_free` does not stop a machine from making millions of them.
-Past the bound, a new file or folder is `busy`, and a copy waits and goes on.
-The count goes down evenly over the ten minutes. A folder copy of 20,000 files
-lands at full speed, and a larger one goes on at about 33 files a second.
-`0` turns the bound off. A reload that raises it waits for `tuios config apply`. The drop folder holds at most 256 MiB for all
-drops together, and a machine writes there only inside a drop that
-`file-drop-dir` made.
-
-```toml
-[hosts."*"]
-files_min_free = "5GiB"
-files_max_entries = 50000
-```
-
-A copy that another machine starts here with `transfer-start` or `drop-files`
-is held to these rules too, also after tuios restarts. When a reload or a
-restart takes `files` away from that machine, its copies here stop.
-
-> **Trust.** A machine with `files` can write any file inside its roots and
-> read any file outside the deny list (or inside `files_read_roots`). A file copy is a way to run code: a
-> binary dropped on your `PATH`, a config a program reads. Give `files`, and a
-> wide `files_roots`, only to machines you trust as you trust your own.
-
-`hold_mail` holds mail from that machine to any agent here in your Inbox,
-marked `held for NAME`, until you pass it on with `p` there (or
-`release-agent-message`). Mail to you is yours already and is not held.
-
-`hosted_grace` is how long a pane this machine runs for the other one (a
-window opened with `--host` there) outlives a dropped link, still running and
-keeping its last 64 KB of output, waiting to be reattached: a Go duration,
-`"0"` to end it with the link as before, 10 minutes when unset, at most 24
-hours. See [Limits](SESSIONS.md#limits).
-
-Each field inherits from `[hosts."*"]`, which inherits from the default. The
-name is matched without regard to case. It is the one the other machine gives
-for itself, its host name up to the first dot, unless the ssh key it logs in
-with pins one:
-
-```
-command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...
-```
-
-Only a pinned name is a boundary: a key that may run any command can run a
-shell, and can claim any name. A table with a policy and no `addr` is not
-dialled and not listed by `tuios hosts`, and `[hosts."*"]` never is.
-
-The daemon follows the file. A change that gives a machine less applies to the
-next call on every link, including links already open. A change that gives a
-machine more, a new host, or a host that dials another way waits for
-`tuios config apply` from a terminal outside tuios, or a daemon restart.
-`tuios hosts add` applies its change that way, so from a pane it waits.
-`tuios hosts add` on a known name keeps these fields.
-
-`ssh_options` takes only options that cannot run code or write files on this
-machine, each written as `-o Keyword=value` with one plain value: for example
-`-p`, `-i`, `-l`, `-J`, `Port`, `User`, `HostName`, `HostKeyAlias`,
-`IdentityFile`, `StrictHostKeyChecking`, the `ServerAlive` options and the
-algorithm lists. `ProxyCommand`, `LocalCommand`, the known hosts files,
-`ControlPath`, socket forwards, `-F` and the like are refused. `-J` and
-`ProxyJump` take host names only. `addr` and `command` may not start with a
-dash. A host with a refused entry is ignored, and `tuios hosts` and the Inbox
-name the reason. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
-the verb by verb table.
-
-The daemon's links never ask for a password, a passphrase or a code. They
-run ssh with `BatchMode=yes`. A client that can ask you, such as tuios-gpui,
-signs in to a machine itself and keeps that connection open as an ssh master
-in the folder `cm` beside the daemon's socket. That folder is
-`$XDG_RUNTIME_DIR/tuios/cm`, `/run/user/<uid>/tuios/cm` when
-`XDG_RUNTIME_DIR` is not set, or `/tmp/tuios-<uid>/cm` when neither exists. When that folder and its parent exist, are not
-symbolic links, belong to you and only you can open them, each link and
-`tuios hosts test` run ssh with `-o ControlMaster=no` and `-o ControlPath=<folder>/%C`. The link then
-uses the master when one is open for that machine, and connects as usual when
-none is. A machine that needs a password or a second factor then works for
-as long as the master is open. No secret is stored.
-
-A link connects as usual and does not use the folder in these cases:
-
-- Your `~/.ssh/config` gives the host a `ControlPath`. The link uses the
-  master you open there.
-- The host forwards the agent (`ForwardAgent`). A connection through a master
-  gets the forwarding of the master, so the link would lose its agent.
-- A socket path in the folder is too long. The limit is 107 characters on
-  Linux and 103 on macOS. Set `XDG_RUNTIME_DIR` to a shorter folder.
-- tuios runs on Windows. Win32-OpenSSH has no `ControlMaster`.
-
-A master connection can outlive the network under it, for example when a
-laptop sleeps. The link's ssh then waits on it, and the link's keepalives do
-not reach it. The link pings its host when it carried nothing for 15 seconds.
-When the host does not answer, the link ends, and the next dial runs ssh with
-`-o ControlPath=none` and opens a connection of its own. The link does the
-same after this machine wakes from sleep, and after a dial that timed out. A machine that needs
-a password or a second factor fails that one dial, and the dial after it uses
-the master again.
-
-`%C` names a master by the local host, the remote host, the port and the
-user. It does not include a `ProxyCommand`, so a host reached through two
-different proxy commands shares one master. It includes the jump host only
-on OpenSSH 10.6 and later. On an earlier version, a host reached through two
-different jump hosts also shares one master.
-
-`tailscale_login` is the origin of a Headscale server that sends the Tailscale
-SSH check for this host, for example `"https://headscale.example"`. tuios
-shows and opens a sign-in link only on `login.tailscale.com`,
-`controlplane.tailscale.com` and this origin, over https, with the host matched
-exactly. Anything on the host can print the banner that carries the link. See
-[Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode).

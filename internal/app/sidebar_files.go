@@ -101,13 +101,7 @@ type fileViewState struct {
 	// from a link. Only an origin pane can be told to change directory, because
 	// only it is the one the user meant.
 	Origin string
-	// Host is the machine the listing was read from, empty for this one.
-	//
-	// It is part of what identifies a listing, alongside the directory. Two
-	// panes on two machines are very often in the same directory, because
-	// /home/ubuntu is /home/ubuntu everywhere, and comparing the path alone
-	// made moving between them leave the first machine's files on screen.
-	Host string
+
 	// Pinned says the user steered the listing somewhere of their own, so it
 	// stops following the origin pane's cwd. Cleared when the focus moves to
 	// another pane, because the listing is then about a different pane.
@@ -247,21 +241,8 @@ func (m *OS) filesWantDir() string {
 	return m.paneDir(window)
 }
 
-// paneIsLocal reports whether a pane's process runs on this client's machine.
-// Only then can the client read the process, or judge the host an OSC 7 report
-// names against its own.
-func (m *OS) paneIsLocal(w *terminal.Window) bool {
-	return w != nil && w.Host == "" && m.AttachedHost == ""
-}
-
-// paneDir is the directory a pane of this client's session is in. A pane on
-// another machine has only the daemon's answer: the pid the client holds for
-// it is a pid on that machine, and reading it here reads some other process or
-// none.
+// paneDir is the directory a pane of this client's session is in.
 func (m *OS) paneDir(w *terminal.Window) string {
-	if w != nil && !m.paneIsLocal(w) {
-		return w.Cwd
-	}
 	return paneDir(w)
 }
 
@@ -371,14 +352,11 @@ func (m *OS) filesSyncRoot() tea.Cmd {
 		return nil
 	}
 	window := m.GetFocusedWindow()
-	origin, host := "", ""
+	origin := ""
 	if window != nil {
-		origin, host = window.ID, window.Host
+		origin = window.ID
 	}
-	// The directory and the machine together. The same path on two machines is
-	// two different directories, and the section following the focus between
-	// them has to ask again rather than keep the answer it has.
-	if want == m.filesView.Want && host == m.filesView.Host && !filesShouldRetry(m.filesView, want) {
+	if want == m.filesView.Want && !filesShouldRetry(m.filesView, want) {
 		return nil
 	}
 	return m.requestFileList(want, origin, false)
@@ -400,7 +378,6 @@ func (m *OS) showElsewhere(w *terminal.Window) {
 		// is no path, so it never matches one.
 		Want:      "elsewhere:" + w.CwdHost,
 		Origin:    w.ID,
-		Host:      w.Host,
 		Elsewhere: w.CwdHost,
 	}
 	m.syncFileWatch()
@@ -491,10 +468,7 @@ func (m *OS) readFileList(dir, origin string, pinned bool) tea.Cmd {
 	dir = filepath.Clean(dir)
 	m.filesView.Want = dir
 	m.filesView.Origin = origin
-	m.filesView.Host = ""
-	if w := m.windowByID(origin); w != nil {
-		m.filesView.Host = w.Host
-	}
+
 	m.filesView.Pinned = pinned
 	m.filesView.Elsewhere = ""
 	m.filesView.Loading = true
@@ -515,7 +489,7 @@ func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd 
 	pgid, wasSpoofed := 0, m.filesView.Spoofed
 	if !pinned && origin != "" {
 		wasSpoofed = false
-		if w := m.windowByID(origin); w != nil && spoofCheckApplies(m.AttachedHost) {
+		if w := m.windowByID(origin); w != nil {
 			pgid = w.ShellPgid
 		}
 	}
@@ -531,9 +505,9 @@ func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd 
 	// both, so there is nothing for the two to disagree about, and the daemon is
 	// also the only side that can say whether the pane announced a directory its
 	// shell is not in.
-	client, host := m.DaemonClient, m.AttachedHost
+	client := m.DaemonClient
 	read := func() fileListMsg {
-		return readListing(client, host, origin, dir, pinned, pgid, wasSpoofed)
+		return readListing(client, origin, dir, pinned, pgid, wasSpoofed)
 	}
 	return func() tea.Msg {
 		msg := read()
@@ -546,7 +520,7 @@ func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd 
 // is one, and answers with an unstamped fileListMsg. It runs off the update
 // goroutine: the list view's reads and the tree's reads of open folders both
 // call it, so the two cannot disagree about where a folder is read from.
-func readListing(client *session.TUIClient, host, origin, dir string, pinned bool, pgid int, wasSpoofed bool) fileListMsg {
+func readListing(client *session.TUIClient, origin, dir string, pinned bool, pgid int, wasSpoofed bool) fileListMsg {
 	if client != nil {
 		listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
 		switch {
@@ -566,14 +540,8 @@ func readListing(client *session.TUIClient, host, origin, dir string, pinned boo
 				Dir: dir, Entries: entries,
 				Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
 			}
-		case host != "":
-			// A daemon on another machine that cannot answer is the end of
-			// it. Falling through to read this machine's disk would list a
-			// directory with nothing to do with the pane, which is the bug
-			// this replaced rather than a fallback.
-			return fileListMsg{Dir: dir, Err: "That machine could not list it."}
 		}
-		// A local daemon that could not answer falls through: a build older
+		// A daemon that could not answer falls through: a build older
 		// than this message answers with an error, and reading the disk here
 		// is the same disk it would have read.
 	}
@@ -604,29 +572,6 @@ func readListing(client *session.TUIClient, host, origin, dir string, pinned boo
 	})
 	return fileListMsg{Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
 }
-
-// spoofCheckApplies reports whether this client can honestly run the spoof
-// check on a pane of the session it is attached to.
-//
-// A window's ShellPgid is filled from the daemon's WindowState.ShellPID for
-// every pane, including one attached from another machine. On such a pane that
-// number is a pid on that machine, and reading it here asks the local operating
-// system about whatever process happens to hold the same number. On Linux that
-// is usually nothing, which is harmless. On macOS, where the read goes through
-// the process table rather than /proc, it can be an unrelated live process, and
-// the answer is then a comparison between a remote shell's announced directory
-// and some local program's working directory.
-//
-// A check like this is allowed to answer "no evidence"; cwdIsSpoofed is built
-// around that and says so. It is not allowed to answer using a fact from the
-// wrong computer. So the check is for panes this client's own daemon owns, and
-// a session attached from another machine simply does not get it.
-//
-// The protection is not lost, it is misplaced: the daemon that owns the pane
-// holds both the announcement and the kernel's answer, so that is where this
-// belongs for a remote pane. Until it is asked for there, an attached session
-// on another machine is treated as unverified rather than as verified-clean.
-func spoofCheckApplies(attachedHost string) bool { return attachedHost == "" }
 
 // cwdIsSpoofed reports whether /proc says the pane's shell is somewhere other
 // than the folder the pane named over OSC 7.
@@ -767,7 +712,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 // it (filesClearElsewhere).
 func (m *OS) recordWindowCwd(windowID, raw string) {
 	w := m.windowByID(windowID)
-	if w == nil || !m.paneIsLocal(w) {
+	if w == nil {
 		return
 	}
 	dir, host, ok := session.ParseCwdAnnouncement(raw)
@@ -1186,7 +1131,7 @@ func (m *OS) takeDaemonCwd(w *terminal.Window, ws *session.WindowState) {
 		return
 	}
 	w.CwdHost = ws.CwdHost
-	if w.CwdAnnounced && m.paneIsLocal(w) {
+	if w.CwdAnnounced {
 		adoptWindowCwd(w, ws.Cwd)
 		return
 	}

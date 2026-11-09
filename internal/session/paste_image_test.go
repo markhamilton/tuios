@@ -2,7 +2,6 @@ package session
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -217,48 +216,6 @@ func TestPasteImageIsThePersonsAct(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Dir(path))
 	if len(entries) != 1 {
 		t.Errorf("the paste directory holds %d files, want the one accepted paste", len(entries))
-	}
-}
-
-// TestAPastedImageForAPaneOnAnotherMachineIsWrittenThere drives the far half
-// through a hosted pane: the owner's paste crosses on its own connection and
-// the far daemon writes it, and only the owner's token is taken.
-func TestAPastedImageForAPaneOnAnotherMachineIsWrittenThere(t *testing.T) {
-	_, socketPath := startTestDaemon(t)
-	fed := &socketFederation{socketPath: socketPath}
-	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh"}, Window: "w1"})
-	if p.callsToken == "" {
-		t.Fatal("the far daemon gave the pane no token")
-	}
-	data := testPNG("for the far pane")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	path, err := p.pasteImage(ctx, data)
-	if err != nil {
-		t.Fatalf("paste to the far pane: %v", err)
-	}
-	got, err := os.ReadFile(path)
-	if err != nil || !bytes.Equal(got, data) {
-		t.Fatalf("the far file %s holds %q (%v), want the pasted bytes", path, got, err)
-	}
-
-	conn := dialVerb(t, socketPath)
-	for name, token := range map[string]string{"no token": "", "a wrong token": "not-the-token"} {
-		params := map[string]any{"pane": p.id, "content": base64.StdEncoding.EncodeToString(data)}
-		if token != "" {
-			params["token"] = token
-		}
-		resp := callPaste(t, conn, "paste-pane-image", params)
-		if code := errCode(t, resp); code != ErrVerbForbidden && code != ErrVerbInvalidParams {
-			t.Errorf("paste-pane-image with %s: %s, want it refused", name, code)
-		}
-	}
-
-	// A pane from a daemon that gave no token cannot be pasted into.
-	old := &remotePane{host: p.host, id: p.id, fed: p.fed}
-	if _, err := old.pasteImage(ctx, data); err == nil {
-		t.Error("a pane with no token took a paste")
 	}
 }
 

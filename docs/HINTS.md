@@ -125,8 +125,7 @@ that ends.
 
 `Ctrl` and a label opens the text:
 
-- A URL opens in your browser. A remote client (`tuios ssh`, the web client)
-  copies the URL. It cannot open a browser on your machine.
+- A URL opens in your browser.
 - A path or a `file://` URL opens in a new pane with `$EDITOR`. tuios removes
   a `:line:col` at the end. A relative path starts in the pane's directory.
 - Other text is copied.
@@ -134,9 +133,6 @@ that ends.
 tuios opens a file only when the file is on this machine. It copies the path
 and tells you why in these cases:
 
-- The pane runs on another machine.
-- The session runs on another machine (`tuios attach` to a host).
-- The client is remote (`tuios ssh`, the web client).
 - The pane runs `ssh`, `autossh`, `mosh`, `et`, `telnet`, `tsh`, `kitten`
   (for example `kitten ssh`), `docker`, `kubectl` or `podman`.
 - The shell reported a folder on another machine.

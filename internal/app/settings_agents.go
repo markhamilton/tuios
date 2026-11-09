@@ -175,7 +175,7 @@ func (m *OS) applyAgentsOverview(msg agentsOverviewMsg) {
 func (m *OS) agentPanesUnnoticed() map[string]bool {
 	var out map[string]bool
 	for _, w := range m.Windows {
-		if w != nil && w.AgentHarness != "" && w.Host == "" && !m.agentsPage.panesSeen[w.AgentHarness] {
+		if w != nil && w.AgentHarness != "" && !m.agentsPage.panesSeen[w.AgentHarness] {
 			if out == nil {
 				out = map[string]bool{}
 			}
@@ -195,9 +195,7 @@ func (m *OS) noticeAgentIntegrations(names map[string]bool) {
 		return
 	}
 	for _, w := range m.Windows {
-		// A pane on another machine runs that machine's harness, whose
-		// integration is not the one installed here.
-		if w == nil || w.AgentHarness == "" || w.Host != "" || p.panesSeen[w.AgentHarness] || !names[w.AgentHarness] {
+		if w == nil || w.AgentHarness == "" || p.panesSeen[w.AgentHarness] || !names[w.AgentHarness] {
 			continue
 		}
 		if p.panesSeen == nil {

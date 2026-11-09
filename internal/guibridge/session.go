@@ -45,10 +45,7 @@ func (m *model) switchSession(c Command) error {
 		m.tap.setResume(nil)
 		return err
 	}
-	info := Attached{Host: m.host, SessionID: m.sessionID(name)}
-	if m.host == "" {
-		info.DaemonPID = session.GetDaemonPID()
-	}
+	info := Attached{SessionID: m.sessionID(name), DaemonPID: session.GetDaemonPID()}
 	m.out.JSON(Event{Type: "attached", Message: name, Attached: &info})
 	return nil
 }

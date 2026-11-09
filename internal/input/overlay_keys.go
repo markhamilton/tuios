@@ -44,10 +44,7 @@ func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 		out, cmd = handleSettingsInput(msg, o)
 	case o.ShowLayoutPicker:
 		out, cmd = handleLayoutPickerInput(msg, o)
-	case o.ShowHostPicker:
-		// A letter typed into the machine picker is a search and must not
-		// reach the shell or a binding.
-		out, cmd = handleHostPickerInput(msg, o)
+
 	default:
 		return o, nil, false
 	}

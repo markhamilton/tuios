@@ -49,7 +49,7 @@ type replyEditorDoneMsg struct {
 func (m *OS) replyHistoryTarget(sessionID, windowID string) string {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
-			if w == nil || w.ID != windowID || w.AgentHarness == "" || !m.paneIsLocal(w) {
+			if w == nil || w.ID != windowID || w.AgentHarness == "" {
 				continue
 			}
 			if dir := m.paneDir(w); dir != "" {

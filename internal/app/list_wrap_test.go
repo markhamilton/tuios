@@ -100,16 +100,6 @@ func wrapCases(t *testing.T) []wrapCase {
 			first:  0, last: 2,
 		},
 		{
-			name: "machine picker",
-			setup: func(m *OS) {
-				m.HostPickerItems = []HostPickerItem{{Name: "", Label: "here"}, {Name: "b", Label: "b"}, {Name: "c", Label: "c"}}
-			},
-			move:   (*OS).HostPickerMove,
-			cursor: func(m *OS) int { return m.HostPickerSelected },
-			set:    func(m *OS, i int) { m.HostPickerSelected = i },
-			first:  0, last: 2,
-		},
-		{
 			name: "quit menu",
 			setup: func(m *OS) {
 				m.QuitMenuItems = []QuitMenuItem{{Label: "a"}, {Label: "b"}, {Label: "c"}}

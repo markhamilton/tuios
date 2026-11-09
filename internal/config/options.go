@@ -469,11 +469,6 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
-		Path: "appearance.global_session", Type: OptionBool, Section: "appearance",
-		Description: "Offer a session in the rail that holds panes from several machines, once a second one is reachable",
-		Default:     "true",
-	},
-	{
 		Path: "appearance.niri_click_reveals", Type: OptionBool, Section: "appearance",
 		Description: "In the scrolling layout, clicking a column that is partly off the edge brings all of it on screen",
 		Default:     "true",

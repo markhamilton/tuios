@@ -20,7 +20,7 @@ matches the build.
   agent reports it through a hook tuios installs, and tuios falls back to
   reading the process, the screen and the title when nothing reports.
 - **One place to look.** The Inbox (`ctrl+b i`) lists everything waiting for
-  you in every session on every machine: approvals, questions, mail, errors,
+  you in every session: approvals, questions, mail, errors,
   finished turns and conversations to resume. `ctrl+b o` jumps to the oldest.
   You answer from there: a digit, `a` or `d` on a prompt, `1`, `2` or `3` on an
   approval the Inbox holds, `r` on mail.
@@ -31,10 +31,8 @@ matches the build.
 - **Fleets.** `tuios fan` starts one prompt in several agents, each in its own
   git worktree. `tuios start-agent` starts one helper beside you. Selectors
   address a whole group.
-- **Other machines.** Agents, worktrees and the Inbox work across `tuios hosts`,
-  and `tuios worktree pull` brings the work back.
 - **Limits you set.** Pane grants say what an agent's pane may do through
-  tuios. Link policy says what another machine may do here.
+  tuios.
 - **Other ways in.** `tuios mcp` serves the same surface as MCP tools, the tmux
   shim runs tools that only know tmux (such as Claude Code agent teams), and
   `tuios subscribe` streams every change.
@@ -161,8 +159,7 @@ Those scripts send herdr's protocol to `HERDR_SOCKET_PATH`.
 | Let agents talk to each other | [Agents talking to agents](#agents-talking-to-agents) |
 | Run a fleet of agents | [Fleets](#fleets), [Selectors](#selectors), [Headless agents over a protocol](#headless-agents-over-a-protocol) |
 | Bring a conversation back after a restart | [Resuming after a restart](#resuming-after-a-restart) |
-| Run agents on other machines | [Other machines](#other-machines), [SESSIONS.md](SESSIONS.md#agents-and-worktrees-on-another-machine) |
-| Limit what an agent may do | [What a pane may do](#what-a-pane-may-do), [Who can act as the person](#who-can-act-as-the-person), [CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here) |
+| Limit what an agent may do | [What a pane may do](#what-a-pane-may-do), [Who can act as the person](#who-can-act-as-the-person) |
 | Get alerts, or reach a phone | [Alerts](#alerts), [HOOKS.md](HOOKS.md) |
 | Drive tuios from an agent | `tuios --skill`, [The MCP server](#the-mcp-server), [TMUX_SHIM.md](TMUX_SHIM.md), [protocol.md](protocol.md) |
 | Look up a command | [CLI_REFERENCE.md](CLI_REFERENCE.md) |
@@ -203,19 +200,6 @@ A prompt that cannot be typed because the agent is stuck on a first-run choice
 turns into an Inbox question after 30 seconds. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-fan) for the flags and
 `tuios --skill fleet` for the agent's view.
-
-## Other machines
-
-With `tuios hosts add NAME ADDR`, the daemon keeps an ssh link to that machine.
-Its agents appear on the rail and in `list-agents --all-hosts`, what waits there
-is in your Inbox, `-s HOST:SESSION` and `-w HOST:SESSION:WINDOW` reach it from
-any command, and `fan`, `worktree` and `start-agent` take `--host`.
-`tuios worktree pull HOST:SESSION` brings a worktree's commits and uncommitted
-work into a new worktree here. Mail to a machine whose link is down waits and is
-sent when it is back. Each machine's `[hosts]` table decides what the others
-may do there; answering prompts is off by default. See
-[SESSIONS.md](SESSIONS.md#windows-on-another-machine) and
-[A pane on another machine](#a-pane-on-another-machine).
 
 ## Reference
 
@@ -311,11 +295,8 @@ pane that shows none of this is stalled: `ask-agent` fails with
 answers `prompt_status: stalled`. See
 [protocol.md](protocol.md).
 
-`start-agent` starts one agent in a new pane, here or on another machine with
-`-s HOST:SESSION`, and types its first prompt through the same wait and the
-same check. On another machine the agent runs there and reports there: its
-state is that machine's, and reaches this one the way every host's agents do,
-in the rail, `list-agents --all-hosts` and the Inbox.
+`start-agent` starts one agent in a new pane and types its first prompt
+through the same wait and the same check.
 
 State is daemon-owned per-window state. It rides the same versioned state sync
 every other window property uses, so it survives detach/reattach and reaches all
@@ -787,7 +768,7 @@ program reads it as one block, and the Enter sends it. The text of
 
 `agent.prompt` types the prompt the way `ask-agent` does: one paste, a short
 wait for the program to take it in, and the Enter key of the harness in the
-pane. This applies to a pane on a linked host too.
+pane.
 
 A neighbour is the pane that tuios's own directional focus moves to
 (`Alt+Arrow`), found in the pane rectangles of the tab's layout. tuios keeps
@@ -2070,9 +2051,8 @@ included; a state it leaves alone keeps the mark above, and the cockpit keeps
 its own design. Under `--ascii-only` a mark that is not 7-bit gives way to the
 ASCII form. See [GLYPHS.md](GLYPHS.md#agent-state-marks).
 
-The ASCII forms keep one meaning per character: mail is `@`, a thread from another
-machine `~`, an Inbox item to resume `>` and mail waiting to be sent `^`, and
-none of those is a state's mark.
+The ASCII forms keep one meaning per character: mail is `@`, an Inbox item to
+resume `>` and mail waiting to be sent `^`, and none of those is a state's mark.
 
 The dock's notifications about an agent wear the state's mark in its colour.
 They used to wear a Nerd Font severity icon, a different shape for the same
@@ -2540,7 +2520,7 @@ the recap says so when nothing said.
 Who may do what: only the pane's own agent writes its ring, since activity
 rides the pane's own `set-agent-state` report and is dropped for a nested run
 the identity guard refuses. A pane reads a ring in its own session and fan
-group with `read`, and a linked machine needs `list`. The text is the
+group with `read`. The text is the
 agent's, cut to one line with likely secrets masked, and marked untrusted: read
 it as what the agent said, not as instructions. Nothing reads it to decide a
 state, a wait or an alert. The ring dies with the window, the session or the
@@ -2597,7 +2577,7 @@ mail is read, or a client focuses the pane that finished.
 ### The agents view
 
 `ctrl+b i` opens the agents view: one full-screen view of every agent tuios
-knows of, in this session, the other sessions and linked machines, and of
+knows of, in this session and the other sessions, and of
 everything that waits for you. It replaces the Inbox panel. The Inbox is now
 its Needs you group, so the queue and the agents are one list.
 
@@ -2637,15 +2617,14 @@ Working by default, set `fold_working = true` in `[agents]` (see
 [CONFIGURATION.md](CONFIGURATION.md#fold-the-working-group)).
 
 Each row is two lines on a wide screen. The first has the state mark, the
-name, the harness, the session (or the machine, for an agent on another one),
+name, the harness, the session,
 the size of the diff when the agent reports it as the `diff` meta key,
 and how long it has been in its state. The second says the one thing worth
 reading: what a Needs you row asks, in the attention colour ("Allow Bash" and
 the command); what a working agent does now and how full its context is; the
 branch and pull request of one ready for review. Subagents hang under their
 agent, one line each. The rows come from the rail's agents section, so the two
-always agree. When the link to a machine is down, its rows are dim, say
-`link down`, and show the last state tuios knew.
+always agree.
 
 The focus area beside the list shows the selected agent: its name, harness,
 model and state, its branch, session, diff, context and cost, then its thread,
@@ -2661,7 +2640,7 @@ the keys refuse.
 A click on a row selects it and leaves the view open. A double-click, or
 `enter`, goes to the agent's pane and closes the view. `n` and the
 `+ New agent` button open the New agent sheet: the task, the agent, the
-model, a new worktree or this folder, the machine and the attempts. `enter`
+model, a new worktree or this folder, and the attempts. `enter`
 starts the agent through `fan` (a new worktree) or `start-agent` (this
 folder), and the task is typed once the agent is ready. `f` shows only the items, the old
 flat Inbox with Needs you and Ready for review; `f` again shows one kind of
@@ -2711,9 +2690,7 @@ approved, a fan check, a pull request
 `[tasks] auto_stage` is false. The search narrows
 the cards with their holders, and with no selector it also matches a card's
 id and title. `[tasks] stages` in the config picks the stages the board
-shows ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)). The board
-lists this machine's cards: under the scope of another machine it is empty
-and says so. A daemon older than the board says so too, and the agents view
+shows ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)). A daemon older than the board says so too, and the agents view
 works as before.
 
 The Artifacts tab lists what the agent has shown you, newest first: the TML
@@ -2734,7 +2711,7 @@ At 170 columns and wider a side column sits beside the focus:
   third time as the picture-in-picture view is, and only while the box is
   on screen. A pane of this session on another workspace is fetched once the
   cursor rests on it, and kept streamed while it is shown. A pane of another
-  session or machine, or one that closed, says so, and `ctrl+]` opens it.
+  session, or one that closed, says so, and `ctrl+]` opens it.
 - **Last turn**: each file the last turn changed, with its added and removed
   lines and a bar of their share.
 - **Checkpoints**: the turn checkpoints of the agent's work tree, newest
@@ -2794,8 +2771,8 @@ the marked agents the list shows: one in a folded group, or one the search
 hides, is left out. Closing the view clears the marks. With marks:
 
 - `r` opens one reply editor, and `enter` queues the same message to each
-  marked agent, at most 32. An agent that waits on a prompt, or runs on
-  another machine, is left out, and the dock says which. `esc` and `ctrl+]`
+  marked agent, at most 32. An agent that waits on a prompt is left out, and
+  the dock says which. `esc` and `ctrl+]`
   keep the draft, and the next `r` with marks opens it again.
 - `3` rejects every approval the marked agents wait on.
 - `1` lists each approval it would allow, whole, and `enter` allows them once
@@ -2812,7 +2789,7 @@ hides, is left out. Closing the view clears the marks. With marks:
   approval, is left out.
 - `y` resumes every marked Resume row: it types each conversation's resume
   command into its pane. The view stays open, the marks clear, and the dock
-  says how many resumed. A Resume row on another machine is left out.
+  says how many resumed.
 
 A key that `send-keys` typed does none of these.
 
@@ -2877,7 +2854,6 @@ Inside the agents view:
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
 | `y` | On a Resume row: type the conversation's resume command into its pane. The view stays open, and the row says `Resuming` until the agent is back. With marks, resume every marked Resume row. `enter` goes to the pane. |
-| `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |
 | `z` | Snooze the item, then `1` 15 minutes, `2` an hour, `3` until 9:00 tomorrow, `4` until it changes. The footer shows the four while it waits for the digit; any other key cancels. On a snoozed item, wake it. See [Snoozing, undo and unread](#snoozing-undo-and-unread). |
 | `u` | Undo the last dismiss or snooze made in the last 10 seconds. Again, the one before. |
@@ -2946,14 +2922,12 @@ is gone either way. Any other failure of `d` is shown.
 
 The rail's agents header counts the Inbox while the client is connected to it:
 approvals, questions, asks and errored items are `blocked`, finished items are
-`done`, over every session on every machine, or only this session when the
-filter says `here`. An item of a machine whose link is down is not counted.
-Without the Inbox (an older daemon, or while reconnecting) the header counts its
+`done`, over every session, or only this session when the
+filter says `here`. Without the Inbox (an older daemon, or while reconnecting) the header counts its
 rows, as it did before.
 
 The daemon can also send an Inbox item to your phone, through ntfy, Pushover
-or a webhook. It sends the item when nobody is at an attached client, and the
-link in the notification opens tuios-web on the item. See
+or a webhook. It sends the item when nobody is at an attached client. See
 [Push notifications to your phone](CONFIGURATION.md#push-notifications-to-your-phone).
 
 ### Questions an agent asks you
@@ -3005,44 +2979,7 @@ A question and each answer are one line of printable text, at most 160 and 60
 bytes, shown exactly as written. For anything longer, the agent writes you mail
 and asks the short question here. Questions do not survive a daemon restart.
 
-### Other machines
-
-With hosts in the `[hosts]` table, the Inbox is the whole fleet's. The daemon
-follows each linked host's Inbox and agents over the link as they change (see
-[Following linked hosts](protocol.md#following-linked-hosts)), so an agent
-that blocks on `build` is a row here, reading `build:api` on the right, and
-raises the same dock message, notification and sound a local one does, naming
-the machine. Enter on it attaches that session on `build` in this client and
-lands on the pane; on mail it opens the thread there. The prefix then `o`
-visits it like any other. `tuios list-attention` lists it as
-`build:api/claude`, with the id `build:17`.
-
-When a host's link drops, its rows stay, drawn in the muted ink, with
-`seen 3m ago` in place of the wait. They are what that machine said last, so
-they raise no alert, are not counted, are skipped by `o`, and enter on one says
-the machine cannot be reached rather than trying. The rail keeps the host's
-sessions under its header the same way, muted with no agent glyph, and the
-header says `seen 3m ago` where it used to say `offline`. On a narrow rail the
-header keeps the mail count (`3 queued`) when mail waits for the machine, and
-otherwise a `✕` mark (`x` in ASCII), so a down machine never reads like one
-that is up. A machine that is connecting gets no mark. A host that answers
-and refuses keeps its reason (`no daemon`, `no tuios`, `version`). When the
-link comes back the stream resumes where it stopped and the marks clear.
-
-Dismissing a row of another machine with `d` hides it here and marks nothing
-on that machine: whether you have dealt with something is a fact about you,
-and a second hub, or a client attached on that machine, still sees it. It
-comes back when that agent changes it.
-
-The rail no longer polls a host the daemon streams. The daemon pushes each
-change to the attached clients, and the rail lists the hosts again on the
-push, with one listing a minute as a backstop. While the client is attached
-to a session on another machine the push goes to that machine's daemon, not
-to this client, so the rail keeps polling every 5 seconds with the rail open
-and 30 without. A host whose tuios is too old
-to stream its agents is polled as before, every 5 seconds with the rail open
-and 30 without, and `tuios hosts` names it with what to update; what waits on
-it is not in the Inbox until it is updated.
+### Who can clear the Inbox
 
 Who can clear it: `dismiss-attention` needs the nonce the daemon issued in a
 client's attach reply, which the Inbox sends and an agent in a pane does not
@@ -3054,12 +2991,6 @@ the list the person reads to find out what the agents want. Reading the
 person's inbox with `read-agent-messages -w human` marks the mail read, and
 the mail item follows it, but only from outside every pane: from a pane that
 read is a peek.
-
-What it does not do yet: a client attached to a session on another machine
-sees this machine's Inbox and cannot dismiss or answer from it, and the Inbox
-does not answer an item of a linked host, with the peek or with `1`, `2` and
-`3`. `tuios peek-prompt` and `tuios respond` reach a pane on another machine
-by `HOST:SESSION:WINDOW`.
 
 ## Selectors
 
@@ -3082,7 +3013,6 @@ match.
 | `needs:you` | A pane a person has to act on: `needs_input` or `errored`. |
 | `session:` | The session name, a glob. |
 | `group:` | The fan-out group of the pane's session, the branch stem `fan` used, a glob. A session outside a fan-out has none. |
-| `host:` | The machine: `local` (or this machine's own name), or a host from `[hosts]`, a glob. |
 | `name:` | The window's name, a glob. |
 | `cwd:` | The pane's directory, or any directory under it. `~` is the home directory. |
 | `task:` | A task card the pane holds, by id, a glob. |
@@ -3091,14 +3021,13 @@ match.
 A glob is `*`, `?` and `[...]`, and `*` does not cross a slash, so `group:fan/*`
 is every group under `fan/`. A term the pane cannot answer does not match, so
 a selector never includes a pane by accident: a pane with no group fails every
-`group:` term, and a row from a host too old to send its group fails one too.
+`group:` term.
 
 Where a selector is read:
 
 | Where | What it does |
 | --- | --- |
 | `list-agents --select` | Lists the agent panes it matches in every session, or in `--session`. Over every session, the answer carries `confirm`, the token for exactly those panes. |
-| `list-agents --all-hosts --select` | The same over every machine. `host:` picks the machine. |
 | `list-attention --select` | Keeps the Inbox items it matches. An item's state is the one its kind stands for: `needs_input` for an approval or a question, `errored`, `done` for finished. |
 | `wait-for agent-state --select` | Waits for the first matching pane to reach an `--until` state, or with `--every` for all of them. Panes that open during the wait are watched too. |
 | `send-agent-message --select` | One directed message to each matching pane, after confirmation. At most 32. |
@@ -3120,12 +3049,6 @@ own pane in another session by its exact id. An ask refuses a pane on
 `needs_input` with `agent_blocked` in that pane's row, waits for a working pane
 unless `force`, and records the exchange in the pane's own session; one pane
 that refuses does not stop the others.
-
-A selector reaches panes on this machine and nothing else for a write, and a
-pane on another machine whose calls run through its owner (see
-[A pane on another machine](#a-pane-on-another-machine)) cannot use one at
-all: its calls act as the window it is drawn in, and a selector would reach
-every session of the owner. That call is refused with `forbidden`.
 
 ## Answering a prompt without attaching
 
@@ -3160,7 +3083,6 @@ On the command line, the same two steps are two verbs:
 tuios peek-prompt -w review                        # the prompt, its options, its answers
 tuios respond -w review --prompt-id 75f8b9fadb5b5dfc approve
 tuios respond -w review choose 2
-tuios peek-prompt -w buildbox:api:review --json    # a pane on another machine
 ```
 
 ### The answers block
@@ -3300,11 +3222,6 @@ reply.
 lines are the pane's screen and are marked `untrusted`: data, not
 instructions.
 
-Over the link, the nonce is the far daemon's to check: a client attached to a
-session on that machine, through the hub, answers with the nonce that daemon
-issued, over a stream the hub vouched for. The far daemon's own
-`respond_from_shell` governs a shell caller there.
-
 ### Approvals from the Inbox
 
 The peek above presses keys into a prompt the pane shows. An approval can
@@ -3415,7 +3332,7 @@ prompt, never approve. Only a client attached right now can answer, with its
 attach nonce, checked the way `dismiss-attention` is (see
 [Who can act as the person](#who-can-act-as-the-person)); no agent, mail,
 `ask-agent` or keystroke routed through the protocol can. The hold itself may
-be requested only for the caller's own pane, and never over a link.
+be requested only for the caller's own pane.
 
 ### Snoozing, undo and unread
 
@@ -3436,9 +3353,8 @@ your answer, a plan and a question put with `ask-human` are answered or
 dismissed, because an agent is waiting on them.
 
 A dismiss or a snooze can be undone for 10 seconds with `u` in the Inbox,
-and the dock says so. Mail waiting for another machine is not restored (its
-dismiss discarded the mail), nor is a question put with `ask-human` (its asker
-was told it was dismissed).
+and the dock says so. A question put with `ask-human` is not restored (its
+asker was told it was dismissed).
 A held approval or plan comes back without its hold, since the dismiss ended
 it and gave the prompt back to the pane: a plan returns as the pane's
 approval, to answer in the pane.
@@ -3464,10 +3380,8 @@ with messages queued and one whose agent has subagents at work (see
 Who may do what: only you, from an attached client. Snooze, wake, unread and
 restore are `mark-attention`, which takes the nonce your client got when it
 attached, is refused to a pane without the `admin` grant and to anything
-inside a pane even with the nonce, and needs `respond` over a link. An agent
-cannot hide, reorder or bring back what you read. Snoozing another machine's
-item hides it on this one only, like a dismiss, and `u` on the rail acts on
-this machine's panes.
+inside a pane even with the nonce. An agent
+cannot hide, reorder or bring back what you read.
 
 Attached to an older daemon, one whose `list-verbs` has no `mark-attention`,
 the client finds that out once per attach and leaves these keys out: the
@@ -3514,8 +3428,7 @@ of the state with the clock it already ticks while it is open.
 
 The settle is the daemon's, a field on the pane (`agent_settled` in the
 window state, `settled` in `list-agents` and `get-agent-state`). Every client
-draws the same shelf: a second terminal, `tuios-web`, and the agents view of
-another machine linked with `tuios hosts`. The rail folds a settled agent
+draws the same shelf, a second terminal included. The rail folds a settled agent
 into its `+N at rest` line. Only the person can settle, with
 `mark-attention` `settle` and `unsettle` and the attach nonce, as for a
 snooze. The `after-settle` hook runs a command for each settle (see
@@ -3742,8 +3655,7 @@ only in its own session and fan group; writes notes and queues messages only
 with `write`, and only into a pane that holds nothing it does not and is not
 waiting on a prompt unless it holds `respond`; runs a check in a fan only with
 `fan`; and never keeps a fan or changes the Inbox, which only you can, with the
-nonce your attached client holds. Over a link, a diff needs `write` because it
-carries file contents, and changing the Inbox needs `respond`. Every verb is
+nonce your attached client holds. Every verb is
 built; until a piece of the TUI lands its keys do what they did before they
 were bound. [protocol.md](protocol.md#agent-review-triage-and-queue-verbs)
 has the table.
@@ -3813,9 +3725,6 @@ starting with `-`, at most 256 bytes, or it is never typed. That is what keeps
 an id a pane reported from being read by any shell as anything but one
 argument: the command is built from the manifest and the stored id only, and
 nothing from the old command line, its prompt or its environment is replayed.
-
-A pane that ran on another machine comes back on this one without its id,
-since the conversation is on that machine.
 
 #### Kept flags
 
@@ -3984,10 +3893,8 @@ reads a `notify` payload, so a hand-wired `notify` reports `done`.
 
 The settings page has an Agents tab with the report `tuios doctor agents`
 prints. Open it with `ctrl+b A`, or with `Agents: settings, install and update
-integrations` in the command palette. The tab is only there for a terminal on
-this machine. It is not there when `[agents] enabled = false`, or on a client
-that `tuios ssh` or `tuios-web` serves, since the integrations on the server are
-not the remote person's to change.
+integrations` in the command palette. It is not there when
+`[agents] enabled = false`.
 
 Each row is one harness. It shows whether the harness is on PATH, and one of
 these states:
@@ -4302,7 +4209,7 @@ The pane is taken from, in order:
    session: the first ancestor that is a pane's shell names the pane.
 
 Steps 3 and 4 are what keep a harness or a sandbox that scrubs the environment
-reported for. Only panes on the daemon's own machine are matched.
+reported for.
 
 ### Nested and foreign events
 
@@ -4398,8 +4305,7 @@ the one that owns the pane. These filters keep those events off the pane:
   place. The pane's state, its row and its activity stay as they were. A pane
   chosen with `--window` by a harness whose environment names another pane, or
   none, is the caller's choice and is taken. A report with no `harness_pid`, a
-  call over a link, a pane on another machine, a harness that has already
-  exited and a platform with no process reader (Windows) are not checked.
+  harness that has already exited and a platform with no process reader (Windows) are not checked.
 
 ### Session identity
 
@@ -4573,7 +4479,7 @@ images_source       = "not measured"
 ```
 
 `images` says how the harness takes an image you attach to a reply from the
-Inbox. The daemon writes the image to a file on the pane's machine when it
+Inbox. The daemon writes the image to a file when it
 types the reply, then:
 
 - `path_paste`: pastes the text before the image, then the file's path in a
@@ -4733,9 +4639,6 @@ connection, never from a parameter, and `list-queued` shows it as `by`:
   the target again, and a message they no longer cover is dropped, logged, and
   never typed. A pane can queue only as itself: `from` naming another window
   is refused.
-- `link:HOST`: a machine linked to this one, which needs `write` in its
-  `[hosts]` policy. The policy is read again when the message is typed, so
-  taking `write` away drops what that machine queued.
 - `shell`: a process outside every pane, such as your own shell or a script.
   It is held to nothing new, now or when typed.
 
@@ -4744,14 +4647,11 @@ checked for `needs_input` right before the message is typed, so a queued
 message can never answer an approval or a question.
 
 `cancel-queued` drops messages before they are typed. You, with the nonce, may
-drop any. A pane may drop only what it queued, a linked machine only what it
-queued, and a shell every message but yours. A message being typed cannot be
-dropped. Dropping a stalled message closes its Inbox question and lets the
-ones behind it be typed at the pane's next rest, one reached after the stalled
-message was typed, since its text may still sit in the input box. Linked
-machines are told apart by the name their link gave; two that gave none each
-drop only what they queued on the same connection. A pane on another machine,
-whose calls arrive through its report channel, may neither queue nor drop.
+drop any. A pane may drop only what it queued, and a shell every message but
+yours. A message being typed cannot be dropped. Dropping a stalled message
+closes its Inbox question and lets the ones behind it be typed at the pane's
+next rest, one reached after the stalled message was typed, since its text may
+still sit in the input box.
 
 ### Replying to an agent
 
@@ -4800,8 +4700,6 @@ in as its path from the pane's folder, such as `api/client.go`. A folder goes
 in with a slash and keeps the list open, so you can walk into it. Nothing is
 copied: the agent reads the file with its own tools. A pane whose folder
 tuios does not know, or whose shell runs on another machine, offers no files.
-A client in a browser or over the SSH server offers no files: they are on the
-machine that serves it, and you are not.
 
 #### Images
 
@@ -4827,12 +4725,10 @@ removes when you close the view. `esc` goes back to the draft.
 A message takes 8 images of at most 8 MB each, and 8 MB in all. The same
 image twice is refused: `Image #1 is already in the message.` `backspace`
 removes the selected image, and undo brings it back. The bytes stay in the
-client's memory until the reply is sent. A client that runs on another
-machine (`tuios ssh`, the browser) cannot read your clipboard image, and
-`ctrl+v` pastes the text.
+client's memory until the reply is sent.
 
 When the reply is typed, the daemon writes each image to a file in the paste
-folder on the pane's machine. The harness's `[input] images` says where the
+folder. The harness's `[input] images` says where the
 path goes (see [Typing a prompt](#typing-a-prompt)). For Claude Code, Codex,
 OpenCode and Crush the path goes in a paste of its own, where the image was,
 so the agent attaches it as an image. An agent whose manifest says
@@ -4841,7 +4737,7 @@ the image to send.`
 
 #### Large pastes
 
-When the reply is typed, the daemon on the pane's machine decides how each
+When the reply is typed, the daemon decides how each
 block reaches the agent. A message of 12 KB or less goes in one paste, with
 each block's text in its place. A larger one puts each block in a file and
 types a label that names the file in its place:
@@ -4899,11 +4795,7 @@ typed the moment the agent comes to rest. From the rail the Inbox opens with
 the editor and closes again when you send or close it. On a pane waiting on a
 prompt, or with an `ask-human` question open (the rail draws both as waiting
 on you), `r` says so and opens nothing: `api is waiting on a prompt. Answer it
-first (space to peek).` A reply to an agent on a linked machine goes to this
-machine's daemon, which passes it over the link. That machine queues it as its
-link's, writes any paste or image file there, and types it when the agent
-comes to rest. Its `[hosts]` policy for this machine must allow `write`, and
-`files` for a paste block or an image.
+first (space to peek).`
 
 `x` on a rail row with messages queued drops the newest one still waiting
 (`cancel-queued`), and the dock says `Dropped 1 queued message to api. u
@@ -4949,8 +4841,8 @@ new count.
   mail, as its connection proved it, not the `from` the message claims. A
   pane that may not type into the recipient cannot wake it, and the queue
   checks again right before it types. A connection restricted to `read_only`
-  (`tuios mcp` without `--write`) and a pane on another machine wake nothing,
-  as `queue-prompt` refuses them.
+  (`tuios mcp` without `--write`) wakes nothing, as `queue-prompt` refuses
+  it.
 - **At rest** means `idle` or `done`, and `unknown` only for a harness that
   can never show idle. A pane on `none` gets no wake, because its prompt line
   belongs to a shell. A pane on `needs_input` gets its line once it is at rest
@@ -4999,11 +4891,7 @@ store as well, on every review. A diff stops at 400 files,
 listed with their counts only (`truncated`). Binary files have counts only.
 All the git calls of one diff are bounded at 10 seconds together, and nothing
 runs until a diff is asked for. The repository is read on the machine the
-daemon runs on. Reviewing a session on a linked machine is not supported yet:
-`tuios review HOST:SESSION` is refused before anything is dialled, and a pane
-of a session here whose process runs on another machine is refused with
-`not_repo`. Attach to that machine and review there, or bring the work here
-with `tuios worktree pull HOST:SESSION` and review that.
+daemon runs on.
 
 **Programs the repository names.** tuios runs git for checkpoints, reviews,
 counts, diffs and new worktrees with no hooks. A filter, textconv or diff
@@ -5061,14 +4949,12 @@ reading of the connection, never a parameter, as for the queue:
 - `human` only with the nonce of a client attached now. A process in a pane
   can never use one, so a pane cannot write a note that reads as yours, and
   the message says "from the person" only when you sent it. From a pane it
-  says "from pane NAME", from a linked machine "from a caller on HOST", and
-  from a shell "from a script".
+  says "from pane NAME", and from a shell "from a script".
 - A note written by someone other than the sender carries its author under
   its place in the message: "(written by pane NAME, not by the person)" when
   you send a pane's note. Each note is also typed with its author's authority
   as it is now: a note by a pane that may not type into the agent's pane now
-  (it holds more than the pane), or whose pane is gone, and one by a linked
-  machine that may no longer write, is withheld, not sent and not marked
+  (it holds more than the pane), or whose pane is gone, is withheld, not sent and not marked
   sent. Edit such a note to make it yours, or remove it.
 - A pane without `admin` reads a diff only in its own session and fan group
   (`read`), and `against` names a session it must reach too. It writes notes
@@ -5078,12 +4964,9 @@ reading of the connection, never a parameter, as for the queue:
   does not and is not on `needs_input` unless it holds `respond`, and the
   queue checks its grants again when the message is typed.
 - A note is changed or removed only by whoever may speak for its author: you
-  any note, a pane or a linked machine only the notes it wrote, and a shell
-  every note but yours. `clear` removes what the caller may remove and keeps
-  the rest, and says how many it kept.
-- Over a link, all three need `write`, because a diff carries file contents
-  and the other two write. A pane on another machine, whose calls arrive
-  through its report channel, may neither write notes nor send them.
+  any note, a pane only the notes it wrote, and a shell every note but yours.
+  `clear` removes what the caller may remove and keeps the rest, and says how
+  many it kept.
 
 The diff is the repository's text and the notes are whoever wrote them, so
 `review-diff` marks its answer `untrusted`.
@@ -5165,9 +5048,6 @@ Who acts:
   delivery queue and never types over a prompt, `verify-fan` opens its windows
   with no grants, and `keep-fan` leaves an attempt with uncommitted work in
   place and the dock says which.
-- Reviewing a pane on another machine, or from a client attached to another
-  machine's session, is refused in the dock before anything is asked: attach
-  there and review it there.
 
 ## Turn checkpoints
 
@@ -5216,8 +5096,7 @@ taken. The caps of `review-diff` apply.
 at a time, with a limit of 30 seconds each. On a work tree of 50,000 files a
 checkpoint takes about 100 ms. Each pane keeps the newest 50 checkpoints.
 Removing a worktree with `worktree rm` or `fan keep` deletes the checkpoints
-taken in it. Checkpoints of a pane on another machine are not available here.
-Attach to that machine to use them.
+taken in it.
 
 ```toml
 [agents.checkpoints]
@@ -5245,7 +5124,7 @@ tuios fan keep api-fan-retry-2 --merge      # keep one attempt, merge it, remove
 The verbs are `ship-commit`, `ship-merge`, `ship-push`, `ship-pr` and
 `ship-status` ([protocol.md](protocol.md#ship-commit)). The pane is found as
 for `review-diff`. A call from inside a pane that names no pane is about that
-pane. A pane on another machine is refused.
+pane.
 
 **Your identity.** git runs in the daemon with your environment. Your name,
 email, signing setup and hooks make the commit. tuios sets no identity and
@@ -5280,7 +5159,7 @@ needs your yes in the Inbox. The question pops up on the client
 that shows the pane: `Push feat/retry (abc1234) to origin?`, with `allow` and
 `deny`. The call waits for your answer, two minutes by default. When the wait
 ends first, the call fails with `not_ready` and the question stays. Call
-again with `request_id` to wait for it. Over a link, a push is refused.
+again with `request_id` to wait for it.
 
 **The pull request on the rail.** `ship pr` and `ship status --refresh`
 record the branch's pull request on the worktree session. The agent rows of
@@ -5356,46 +5235,6 @@ a shell prompt on such a terminal, set `notification_method = "osc9"` under
 `[tui]` in `~/.codex/config.toml`. It sends OSC 9 wherever Codex runs, which
 terminals that do not know it ignore.
 
-### A pane on another machine
-
-A window whose process runs on another machine (`tuios new-window NAME --host
-HOST`) exports `TUIOS_PANE_ID`, the window's id on the machine that holds the
-window, and `TUIOS_PANE_HOSTED=1`, and no `TUIOS_SOCKET` or `TUIOS_SESSION`.
-Hooks and shims work there unchanged: `tuios agent-hook` and `tuios
-set-agent-state -w "$TUIOS_PANE_ID"` reach the daemon on the machine the
-process runs on, which sends the report to the daemon that holds the window
-over the link, and that window takes the state, its Inbox row and its alerts.
-Reading and sending mail as the pane, and `wait-for agent-message` on it, work
-the same way. See [Reports from a pane on another
-machine](protocol.md#reports-from-a-pane-on-another-machine).
-
-What limits it:
-
-- Only a process in that pane is forwarded for, judged by the pid the kernel
-  gives for its connection: the pane's process, what it started, or a process
-  on the pane's terminal. Any other caller naming the pane is refused with
-  `forbidden`.
-- The daemon holding the window runs each report as that window and nothing
-  else. It ignores the session and window the report names, drops the
-  transcript path and harness pid (they name things on the other machine),
-  refuses a send from anyone but the window, and treats the caller as inside a
-  pane, so it can never speak as the person.
-- A message the pane sends can attach only a file in the session's stash, the
-  rule a sender on the link is held to. A path it names is a file on the
-  machine holding the window, which its process cannot see, so any other path
-  is refused before that machine looks at it. Use `tuios stash put -s
-  HOST:SESSION FILE` and attach the path it prints.
-- A `wait-for agent-message` runs on the machine holding the window for at
-  most an hour, and ends when the link to that machine drops. The pane's
-  reports come back as soon as the link does, whatever waits were running.
-- A machine holding the window from before this sends no window id, the pane
-  gets no `TUIOS_PANE_ID`, and a report naming the pane is answered with
-  `protocol_mismatch`. The agent is still detected from the side that holds the
-  window, as before.
-- A machine running the pane from before this refuses the window id. The
-  machine holding the window then opens the pane without it, so the window
-  still opens there, as before, with no `TUIOS_PANE_ID` and no reports.
-
 ## Alerts
 
 A state change can raise a notification, an audible cue or a bell, a clickable
@@ -5406,15 +5245,14 @@ and [HOOKS.md](HOOKS.md) for the command contract.
 
 Two things are worth knowing here rather than there. The notification is an
 in-band escape sequence written into the same stream the interface is drawn
-through, so it reaches whatever terminal is in front of you even when the session
-is on another machine; a desktop notification raised by tuios would appear on the
-host running the daemon, which under `tuios ssh` is not where you are. The
+through, so it reaches whatever terminal is in front of you even when you
+attach over an ssh login; a desktop notification raised by tuios would appear
+on the host running the daemon, which is then not where you are. The
 audio cue is different. The client plays it through a system audio player on
-the machine where the client runs. Under `tuios ssh` and `tuios-web`, the
-client runs on the server, so the cue plays there and not where you sit, and
-tuios says so in a config warning when the client starts. Set `sound_mode = "bell"` to ring your own
-terminal instead. With `tuios attach --host`, the client runs on your machine,
-so the cue plays there. And alerts are raised by an attached client, so a session nobody is attached to
+the machine where the client runs. When you run `tuios attach` over an ssh
+login, the client runs on the server, so the cue plays there and not where you
+sit. Set `sound_mode = "bell"` to ring your own
+terminal instead. And alerts are raised by an attached client, so a session nobody is attached to
 announces nothing unless some client is attached to another session on the same
 daemon: that client hears about it through the Inbox (see
 [The Inbox](#the-inbox)). With no client attached anywhere, the daemon-side
@@ -5430,46 +5268,6 @@ cooldown apply as usual. A burst of items arriving together, which is what a
 fan of agents produces, is one dock message ("5 agents need you in fan-1,
 fan-2, fan-3 and 2 more"), one notification and one sound. A single item's dock
 message names its session: `fan-3: claude needs approval · approve Bash: go test`.
-
-### Mail waiting for another machine
-
-Mail to a session on a machine whose link is down (`tuios send-agent-message
--s build:api ...`) waits on this machine and goes when the link is back, in
-the order it was sent. The Inbox has one row per machine under **Waiting to
-send**, `for build` on the right: `2 messages wait for the link to build`.
-The rail's header for that machine says `2 queued` beside `seen 3m ago`, and
-`tuios hosts` says so below its table. The row closes when everything went.
-
-A send also waits when the link is up but the other machine did not answer in
-time (10 seconds), or had no room for another stream, and when earlier mail for
-that machine still waits, so it cannot overtake it. With the link up the daemon
-tries again at once, then after 1 second, doubling to 30 seconds between tries,
-rather than waiting for the link to drop and come back.
-
-If the other machine refuses a message when it arrives (its session is gone,
-or its link policy does not let this machine mail), the message is dropped and
-the row says so, with the reason, until you dismiss it. `d` on the row also
-discards what still waits. Enter says what will happen; the row is not a pane
-and goes nowhere. It raises no alert and `o` skips it: it waits on a network,
-not on you. The queue is on disk, so a restart of this daemon keeps it, and it
-holds at most 64 messages per machine.
-
-### Mail held from another machine
-
-With `hold_mail = true` in the `[hosts]` table for a machine (see [What another
-machine may do here](CONFIGURATION.md#what-another-machine-may-do-here)), mail
-that machine sends to an agent here does not reach the agent. It lands in your
-Inbox as mail to you, and the row says so in words: `[held for api, p passes
-on]`, then the subject. Read it with enter. `p` passes it on: the agent gets it
-as a new message with the sender and the machine it came from, marked
-`released_from`, and the row closes. Reading it and doing nothing drops it: the
-agent never sees it.
-
-Only you can pass it on. `release-agent-message` needs the nonce of a client
-attached right now, like dismissing, and over a link it needs `respond` too.
-The sender is told `held: true` and `held_for`, so an agent on the other machine
-knows the answer will wait on a person. Mail to you from that machine is yours
-already and is not held.
 
 ## Who can act as the person
 
@@ -5495,8 +5293,7 @@ An agent running in a pane of this daemon, as the same user, that can run any
 command, call any verb on the socket, start `tuios attach`, and send keys to
 the person's client with `send-keys` or `run-command`. It may be following
 instructions it read in a file, a web page, a tool result or another agent's
-message. An agent on another machine joined by a link, and an agent in a pane
-on the hub of that link, are the same adversary one hop away.
+message.
 
 Out of scope: another user (the socket is `0700`), root, a changed tuios binary,
 and a process of the same user that deliberately leaves its pane, for example
@@ -5546,12 +5343,6 @@ proof, as before.
 | `send-keys` or `send-text` into another pane's approval menu, to answer it | Refused with `forbidden` for a pane without `admin` unless it holds `respond`: typing into a pane on `needs_input` answers its prompt. |
 | `send-keys` or `run-command` driving the person's Inbox peek, to press `a` | The peek sends no answer for a routed key and says why. |
 | `reply-approval` from a pane, to approve its own or another agent's call | Refused with `not_human` on the same check. `request-approval` from a pane may hold only that pane's prompt, and returns only what the person answered about it. |
-| An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
-| An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
-| A hub from before this check | It vouches for nothing, so no attach through it verifies here. |
-| An agent in a pane on another machine reporting through the link | It reaches only its own window: the machine holding the window rewrites every report to that window and runs it as a caller inside a pane, so `from human` is refused and reading the person's mail is a peek. An attachment outside the session's stash is refused before its path is looked at, so the pane cannot attach, or learn about, a file on the machine holding the window. |
-| A process on the far machine reporting as a hosted pane it is not in | Refused with `forbidden` there, by the pid the kernel gives. The channel the reports travel on needs a token only the machine holding the window saw. |
-| A linked host writing Inbox items into this machine | Items are only displayed. Their text is cleaned and cut, a host holds at most 256 rows apart from this machine's, and nothing it sends runs a command, types into a pane or marks anything here. Dismissing one hides it here only. |
 
 ### What this does not cover
 
@@ -5584,8 +5375,8 @@ proof, as before.
 ### What the person notices
 
 Everything the person does from a client started outside tuios is unchanged.
-A client started inside a tuios pane of the same daemon, a nested `tuios
-attach`, or `tuios-web` or the SSH server started from a pane, counts as inside
+A client started inside a tuios pane of the same daemon, such as a nested
+`tuios attach`, counts as inside
 a pane: its mail replies are refused with `forbidden`, its reads of the
 mailbox do not mark mail read, its Inbox cannot dismiss an item, and it cannot
 type into another pane that waits on a prompt unless the pane it runs in holds
@@ -5608,7 +5399,7 @@ every pane, are held to nothing new.
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)), and type into a pane waiting on a prompt |
-| `files` | Copy files with `tuios cp`, inside the pane's own folder, and see and control its own copies |
+| `files` | Nothing on its own. It is kept so a config that names it still parses |
 | `task` | Add, claim, finish, stage, block and release the task cards of its own session (`tuios task`). It claims only for itself and changes only the card it holds |
 | `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
 
@@ -5720,13 +5511,6 @@ read the pid, the CLI presents `TUIOS_PANE_ID` and `TUIOS_PANE_TOKEN` on
 every connection it opens from a pane, and the daemon holds that connection to
 the pane the token proves. A process there that strips both from its
 environment is treated as the person.
-
-A pane on another machine is held by that machine, and a call over a link by
-the link's policy (see [CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here)).
-A process in a pane this machine runs for another machine has no session
-here: a call it makes to this machine's daemon directly holds this machine's
-default and reaches no session, so under `strict` it can only ask what it
-holds. Its reports travel to the machine that owns the pane as before.
 
 ### What grants do not cover
 

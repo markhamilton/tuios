@@ -39,13 +39,11 @@ import (
 
 // dropSource is what a drop carries: one file or folder.
 type dropSource struct {
-	// Path is absolute, on Host.
+	// Path is absolute.
 	Path string
 	// Name is what the label calls it.
 	Name string
 	Dir  bool
-	// Host is the machine the file is on, empty for this one.
-	Host string
 }
 
 // dropVerdict is what a drop of one source on one pane would do.
@@ -109,7 +107,6 @@ func (m *OS) armFileDrag(hit sidebarRowHit) bool {
 			Path: filepath.Join(t.Dir, t.Name),
 			Name: t.Name,
 			Dir:  t.IsDir,
-			Host: m.filesView.Host,
 		},
 	}
 	return true
@@ -200,7 +197,7 @@ func (m *OS) SidebarFileInsert() {
 		m.ShowNotification("No pane has the focus. Select a pane first.", "warning", m.Settings.NotificationDuration)
 		return
 	}
-	src := dropSource{Path: filepath.Join(dir, e.Name), Name: e.Name, Dir: e.Dir, Host: m.filesView.Host}
+	src := dropSource{Path: filepath.Join(dir, e.Name), Name: e.Name, Dir: e.Dir}
 	m.deliverDrop(m.judgeDrop(w, src), src, false)
 }
 
@@ -221,10 +218,6 @@ func (m *OS) dropTargetAt(x, y int) *terminal.Window {
 // judgeDrop works out what a drop of src on w does: the text it pastes, or
 // why it pastes nothing.
 func (m *OS) judgeDrop(w *terminal.Window, src dropSource) dropVerdict {
-	if src.Host != "" {
-		return dropVerdict{Window: w.ID, Pane: pipPaneName(w),
-			Refusal: "The file is on " + src.Host + ". tuios cannot paste a path from another machine yet."}
-	}
 	path := src.Path
 	if src.Dir && filepath.Separator == '/' && !strings.HasSuffix(path, "/") {
 		// A folder ends in a slash, so the next word typed can be a name in it.
@@ -238,13 +231,6 @@ func (m *OS) judgeDrop(w *terminal.Window, src dropSource) dropVerdict {
 // host, is not ssh or the like, and is not in copy mode. It returns the
 // program that reads the paste, and the refusal when there is one.
 func (m *OS) paneTakesDrop(w *terminal.Window) (program, refusal string) {
-	if !m.paneIsLocal(w) {
-		host := w.Host
-		if host == "" {
-			host = m.AttachedHost
-		}
-		return "", "This pane is on " + host + ". The file is on this machine."
-	}
 	if w.CwdHost != "" {
 		return "", "The shell in this pane is on " + w.CwdHost + ". The file is not there."
 	}
@@ -396,15 +382,10 @@ func paneProgram(w *terminal.Window) string {
 	return strings.ToLower(w.ForegroundCmd)
 }
 
-// paneDialect is how the program in w reads a quoted path. Only a pane on
-// this machine can be asked, through the process table. A pane elsewhere has
-// the daemon's ForegroundCmd, which is empty at a shell prompt, and then gets
-// POSIX quoting.
+// paneDialect is how the program in w reads a quoted path, asked through the
+// process table.
 func (m *OS) paneDialect(w *terminal.Window) pasteDialect {
-	if m.paneIsLocal(w) {
-		return pasteDialectOf(paneProgram(w))
-	}
-	return pasteDialectOf(strings.ToLower(w.ForegroundCmd))
+	return pasteDialectOf(paneProgram(w))
 }
 
 // pasteDialect is how a program reads a quoted path.

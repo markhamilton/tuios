@@ -1,11 +1,9 @@
 package session
 
 import (
-	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // DaemonConfigFromUser maps the parts of the user's config file the daemon
@@ -49,11 +47,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.SSHAgent = uc.Daemon.SSHAgent
 	cfg.Display = uc.Daemon.Display
 	cfg.History = ResolveHistoryPolicy(uc.Daemon.PersistScrollback, uc.Daemon.PersistScrollbackLines, uc.Daemon.PersistScrollbackKB)
-	cfg.Hosts = HostsFromConfig(uc)
-	// The same table says what each machine linked to this one may do here.
-	cfg.LinkPolicies = uc.Hosts
-	// The path, not the table, is what lets the daemon follow later edits to
-	// [hosts]. Every real starter goes through here, so every real daemon
+	// The path is what lets the daemon follow later edits to the file. Every real starter goes through here, so every real daemon
 	// watches the file; a daemon built from a hand-made config in a test does
 	// not, and neither does one whose config file could not be loaded at all.
 	// LoadUserConfig writes a default file when there is none, so the machine
@@ -113,31 +107,4 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// way to reach the person, so it sends the push notifications.
 	cfg.Notify = uc.Notify
 	return cfg
-}
-
-// HostsFromConfig turns the [hosts] config table into the daemon's host list.
-// Nothing is validated here; the federation table does that and reports what it
-// dropped, so the reason reaches 'tuios hosts' rather than only the log.
-func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
-	if cfg == nil || len(cfg.Hosts) == 0 {
-		return nil
-	}
-	out := make([]federation.Host, 0, len(cfg.Hosts))
-	for name, h := range cfg.Hosts {
-		// [hosts."*"] and an entry with a policy and no address say what a
-		// machine linking in may do here. Neither is a machine to dial, so
-		// neither is reported as a host with no addr.
-		if name == config.LinkPolicyDefaultName || (strings.TrimSpace(h.Addr) == "" && h.HasLinkPolicy()) {
-			continue
-		}
-		out = append(out, federation.Host{
-			Name:           name,
-			Addr:           h.Addr,
-			ConnectTimeout: time.Duration(h.ConnectTimeout) * time.Second,
-			Command:        h.Command,
-			SSHOptions:     h.SSHOptions,
-			TailscaleLogin: h.TailscaleLogin,
-		})
-	}
-	return out
 }

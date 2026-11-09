@@ -25,14 +25,13 @@ and a comma gives alternatives.
 | `needs:you` | a pane on `needs_input` or `errored` |
 | `session:` | the session name, a glob |
 | `group:` | the fan-out group, the branch stem `fan` used, a glob |
-| `host:` | the machine: `local`, or a host name, a glob |
 | `name:` | the window's name, a glob |
 | `cwd:` | the directory or anything under it; `~` is the home directory |
 | `task:` | a task card the pane holds, by id, a glob (`tuios --skill tasks`) |
 | `stage:` | the stage of a task card the pane holds |
 
 A glob's `*` does not cross a slash. A term the pane cannot answer does not
-match. `list-agents --all-hosts --select` reads every machine.
+match.
 
 `wait-for agent-state --select` watches every matching pane, including panes
 that open during the wait, and ends on the first to reach an `--until` state.
@@ -175,8 +174,7 @@ fan group, `review-note` and `send-review` need `write`, and you may change or
 remove only the notes you wrote. You may add notes only on a pane you could
 type into (one that holds nothing you do not). The message says it is from
 your pane, never from the person, and when the person sends your note it is
-labelled as written by your pane. Review works on this machine's sessions
-only: for a session on another machine, use `tuios worktree pull HOST:SESSION`.
+labelled as written by your pane.
 
 The person reviews the same diff and the same notes in the client (`ctrl+b v`,
 or `v` in the Inbox), and compares a fan's attempts there. Notes they leave or
@@ -261,6 +259,3 @@ The branch is never deleted. `tuios fan keep <session>` (the `keep-fan` verb)
 applies the same rule to every sibling of the session you keep, and leaves a
 dirty sibling in place. Only the person or a pane with `admin` may keep a fan.
 Nothing here runs `git worktree prune`.
-
-Agents and worktrees on another machine, and `worktree pull`, are in
-`tuios --skill hosts`.

@@ -117,8 +117,6 @@ func FuzzSelector(f *testing.F) {
 				target.Session = v
 			case SelectorGroup:
 				target.Group = v
-			case SelectorHost:
-				target.Host = v
 			case SelectorName:
 				target.Name = v
 			case SelectorTask:

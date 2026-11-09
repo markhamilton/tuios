@@ -73,7 +73,7 @@ type (
 // nil when the client should quit instead: a client of another machine, a
 // served client, a deliberate quit, or a wait already under way.
 func (m *OS) beginDaemonReconnect() tea.Cmd {
-	if m.QuitRequested || m.AttachedHost != "" || m.Client != ClientLocal || m.RemoteClient ||
+	if m.QuitRequested || m.Client != ClientLocal || m.RemoteClient ||
 		!m.IsDaemonSession || m.SessionName == "" || m.daemonReconnect != nil || m.DaemonClient == nil {
 		return nil
 	}

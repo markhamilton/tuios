@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -140,42 +139,18 @@ func (m *OS) OpenPathPicker() tea.Cmd {
 	p := &pathPicker{windowID: w.ID, hidden: hidden, gen: gen, hover: -1, loading: true}
 	m.pathPicker = p
 
-	local := m.paneIsLocal(w)
-	pgid, cwd, cached := w.ShellPgid, w.Cwd, ""
-	if local {
-		cached = w.CWD()
-	}
-	client, host := m.DaemonClient, m.AttachedHost
+	pgid, cwd, cached := w.ShellPgid, w.Cwd, w.CWD()
+	client := m.DaemonClient
 	origin := w.ID
 	return func() tea.Msg {
-		homeCh := make(chan string, 1)
-		go func() { homeCh <- pathPickerHome(local, client, origin) }()
-		base := pathPickerBase(local, pgid, cwd, cached)
+		home, _ := os.UserHomeDir()
+		base := pathPickerBase(pgid, cwd, cached)
 		if base == "" {
 			return pathPickerListMsg{gen: gen, err: "tuios cannot tell which folder this pane is in."}
 		}
-		msg := readListing(client, host, origin, base, true, 0, false)
-		return pathPickerListMsg{gen: gen, dir: base, base: base, home: <-homeCh, entries: msg.Entries, err: msg.Err}
+		msg := readListing(client, origin, base, true, 0, false)
+		return pathPickerListMsg{gen: gen, dir: base, base: base, home: home, entries: msg.Entries, err: msg.Err}
 	}
-}
-
-// pathPickerHome is the home folder on the pane's machine. A pane on another
-// machine asks its daemon to list "~" with room for one name: the daemon
-// expands it to its own home and names the folder it listed. A daemon too old
-// to expand it names "~" back, and the title then keeps the full path.
-func pathPickerHome(local bool, client *session.TUIClient, origin string) string {
-	if local {
-		home, _ := os.UserHomeDir()
-		return home
-	}
-	if client == nil {
-		return ""
-	}
-	listing, err := client.ReadDir(origin, "~", 1, true)
-	if err != nil || listing == nil || !filepath.IsAbs(listing.Dir) {
-		return ""
-	}
-	return filepath.Clean(listing.Dir)
 }
 
 // homeShort writes a path under home as ~/..., the way a shell prompt shows
@@ -193,14 +168,11 @@ func homeShort(path, home string) string {
 	return path
 }
 
-// pathPickerBase is the folder the picker opens on. For a local pane it is
-// the shell's folder as the kernel holds it, spelled the way the pane's OSC 7
-// report spells it when the two are the same folder. It runs off the update
-// goroutine, because it reads the process table.
-func pathPickerBase(local bool, pgid int, cwd, cached string) string {
-	if !local {
-		return cwd
-	}
+// pathPickerBase is the folder the picker opens on: the shell's folder as the
+// kernel holds it, spelled the way the pane's OSC 7 report spells it when the
+// two are the same folder. It runs off the update goroutine, because it reads
+// the process table.
+func pathPickerBase(pgid int, cwd, cached string) string {
 	if dir, ok := terminal.ShellCWD(pgid); ok && dir != "" {
 		if cwd != "" && sameDir(dir, cwd) {
 			return cwd
@@ -468,9 +440,9 @@ func (m *OS) pathPickerRead() tea.Cmd {
 	p.loading = true
 	p.hover = -1
 	dir, gen, origin := p.listDir(), p.gen, p.windowID
-	client, host := m.DaemonClient, m.AttachedHost
+	client := m.DaemonClient
 	return func() tea.Msg {
-		msg := readListing(client, host, origin, dir, true, 0, false)
+		msg := readListing(client, origin, dir, true, 0, false)
 		return pathPickerListMsg{gen: gen, dir: dir, entries: msg.Entries, err: msg.Err}
 	}
 }

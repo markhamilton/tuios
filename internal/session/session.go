@@ -112,25 +112,6 @@ type WindowState struct {
 	PreZoomY int `json:"pre_zoom_y,omitempty"`
 	PreZoomW int `json:"pre_zoom_w,omitempty"`
 	PreZoomH int `json:"pre_zoom_h,omitempty"`
-	// Host names the machine this window's process runs on, and it is empty for
-	// every window whose process is on the daemon that owns the session, which
-	// is every window unless someone asked otherwise.
-	//
-	// A session holding one of these is what a global session is. There is no
-	// second kind of session and no flag that says so: the field is on the
-	// window because the machine is a property of the process, not of the
-	// session it is grouped under, and that is what lets `tuios ls`, the verbs,
-	// the mailbox and hooks keep working on such a session with no special
-	// case. The zero value is a window on this machine, which is what every
-	// older client and every older state file reads as.
-	Host string `json:"host,omitempty"`
-	// HostLink is the state of the link a window on another machine runs
-	// over, empty while it is up: "reconnecting" while the link is lost and
-	// the far machine keeps the process for its grace. HostLinkUntil is when
-	// that grace ends, in unix seconds. Both are live facts, filled into every
-	// snapshot and never stored. See remote_pane.go.
-	HostLink      string `json:"host_link,omitempty"`
-	HostLinkUntil int64  `json:"host_link_until,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -938,12 +919,8 @@ type PTY struct {
 	// probeJoin is scanNestProbes' scratch for the tail and the start of the
 	// next chunk, so a join costs no allocation.
 	probeJoin [2 * nestProbeMax]byte
-	// host is the machine the process is on, empty for this one. It is what
-	// tells the two halves of exit detection apart: a pane here has an
-	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.
-	host string
-	pty  paneIO
-	cmd  *exec.Cmd
+	pty       paneIO
+	cmd       *exec.Cmd
 	// proc is the pane's process: cmd's for a pane started here, and one
 	// found by its pid for a pane adopted across an exec, which has no
 	// exec.Cmd. Nil for a pane on another machine. See monitorExit.
@@ -1688,11 +1665,6 @@ type Session struct {
 	graphicsMu    sync.RWMutex
 	kittyGraphics bool
 	sixelGraphics bool
-	// linkedViewer says a client attached over a link, from another machine,
-	// is drawing this session. Read from the VT callback, so it is atomic
-	// rather than behind a lock that callback could wait on. See
-	// kittyQueryResponse.
-	linkedViewer atomic.Bool
 	// kittyAnimation says the attached client's host edits image frames. Read
 	// from the VT callback, so it is atomic. See SetKittyAnimation.
 	kittyAnimation atomic.Bool
@@ -1703,14 +1675,6 @@ type Session struct {
 	// kittyAdvertised says a kitty image a pane draws will be shown. Read
 	// from the VT callback, so it is atomic. See SetKittyAdvertised.
 	kittyAdvertised atomic.Bool
-	// fed is the link manager a window on another machine is opened over. It is
-	// nil unless the daemon installed one, and every reader checks. See
-	// remote_pane.go.
-	fed paneFederation
-	// onRemotePane is told of every window this session opens on another
-	// machine, so the daemon can hold the pane's report channel. Guarded by
-	// ptysMu, like fed. See hosted_calls.go.
-	onRemotePane func(windowID string, p *remotePane)
 	// hostShown reports whether the session is on a screen. See
 	// SetHostShownProbe.
 	hostShown atomic.Pointer[func() bool]
@@ -2006,7 +1970,7 @@ func isLocalDir(dir string) bool {
 // its paths mean nothing here. It does not fall back to the focused pane,
 // which on the workspace the client just switched to is no pane at all.
 func (s *Session) cwdFrom(id string) string {
-	if win, ok := findWindowState(s.GetState(), id); id != "" && ok && win.Host == "" {
+	if _, ok := findWindowState(s.GetState(), id); id != "" && ok {
 		if cwd := s.windowCwd(id); cwd != "" {
 			return cwd
 		}
@@ -2391,7 +2355,6 @@ type ptySpawn struct {
 	command  []string
 	// env is the caller's KEY=VALUE pairs. See createPTY.
 	env        []string
-	host       string
 	restored   *restoreSpec
 	onExit     func(ptyID string)
 	stdout     *os.File
@@ -2435,10 +2398,10 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// keeps what it was given, even when its last process has already gone
 	// and taken its entry in the grant table with it. Read before ptysMu is
 	// taken, so the two locks are never held together here.
-	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
+	if sp.grants == nil && sp.windowID != "" {
 		sp.grants = s.recordedGrants(sp.windowID)
 	}
-	if sp.restored == nil && sp.host == "" && sp.windowID != "" && !sp.noStartDir {
+	if sp.restored == nil && sp.windowID != "" && !sp.noStartDir {
 		dir := s.StartDir()
 		if sp.cwd != "" {
 			if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
@@ -2454,7 +2417,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	if sp.host == "" && sp.windowID != "" && s.config != nil && s.config.grants != nil {
+	if sp.windowID != "" && s.config != nil && s.config.grants != nil {
 		table := s.config.grants
 		table.add(sp.windowID, id, s.Name(), sp.grants)
 		exit := sp.onExit
@@ -2484,67 +2447,51 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	//
 	// The command is rebuilt per attempt, because an exec.Cmd that failed to
 	// start cannot be started again.
-	// A window on another machine takes the same path from here down. Only the
-	// two lines that produce the handle differ: the process is started over a
-	// link instead of here, so there is no exec.Cmd to wait on and no local pid
-	// to read. Everything below is the code a local pane runs, which is the
-	// point of the paneIO seam.
 	var (
 		ptyInstance paneIO
 		cmd         *exec.Cmd
 		err         error
 	)
-	if sp.host != "" {
-		ptyInstance, err = s.openRemotePaneFor(sp.windowID, sp.host, width, height, sp.cwd, sp.command)
-		if err != nil {
-			cancel()
-			return nil, err
+	ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
+		var cmd *exec.Cmd
+		if len(sp.command) > 0 {
+			//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
+			cmd = exec.Command(sp.command[0], sp.command[1:]...)
+		} else {
+			//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
+			cmd = exec.Command(shell)
 		}
-		if rp, ok := ptyInstance.(*remotePane); ok && s.onRemotePane != nil {
-			s.onRemotePane(sp.windowID, rp)
+		cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
+		// The pane's terminal, so a tuios client can tell whether it runs
+		// on it or only inherited the pane's variables. See
+		// nested_attach.go.
+		if tty != "" {
+			cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
 		}
-	} else {
-		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
-			var cmd *exec.Cmd
-			if len(sp.command) > 0 {
-				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
-				cmd = exec.Command(sp.command[0], sp.command[1:]...)
-			} else {
-				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
-				cmd = exec.Command(shell)
-			}
-			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
-			// The pane's terminal, so a tuios client can tell whether it runs
-			// on it or only inherited the pane's variables. See
-			// nested_attach.go.
-			if tty != "" {
-				cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
-			}
-			if sp.stdout != nil {
-				cmd.Stdout = sp.stdout
-			}
-			if len(sp.extraFiles) > 0 && runtime.GOOS != "windows" {
-				cmd.ExtraFiles = sp.extraFiles
-			}
-			// Start the shell in cwd when one was named and still exists; otherwise
-			// fall back to the shell's default (inherited) directory.
-			//
-			// The restored flag used to gate this too, which meant a caller that
-			// asked a fresh window for a directory was answered with a shell
-			// somewhere else and no indication of it. Restoration and placement are
-			// separate questions: the flag still decides the banner, because that
-			// is what it is about.
-			if sp.cwd != "" {
-				if info, statErr := os.Stat(sp.cwd); statErr == nil && info.IsDir() {
-					cmd.Dir = sp.cwd
-				}
-			}
-			return cmd
-		}, debugLog)
-		if err != nil {
-			cancel()
-			return nil, err
+		if sp.stdout != nil {
+			cmd.Stdout = sp.stdout
 		}
+		if len(sp.extraFiles) > 0 && runtime.GOOS != "windows" {
+			cmd.ExtraFiles = sp.extraFiles
+		}
+		// Start the shell in cwd when one was named and still exists; otherwise
+		// fall back to the shell's default (inherited) directory.
+		//
+		// The restored flag used to gate this too, which meant a caller that
+		// asked a fresh window for a directory was answered with a shell
+		// somewhere else and no indication of it. Restoration and placement are
+		// separate questions: the flag still decides the banner, because that
+		// is what it is about.
+		if sp.cwd != "" {
+			if info, statErr := os.Stat(sp.cwd); statErr == nil && info.IsDir() {
+				cmd.Dir = sp.cwd
+			}
+		}
+		return cmd
+	}, debugLog)
+	if err != nil {
+		cancel()
+		return nil, err
 	}
 
 	// Create VT emulator for persistent terminal state
@@ -2579,14 +2526,13 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
 	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
 	// remote pane runs on a real PTY at the far end and keeps it.
-	if sp.host == "" && ptyspawn.HostIsConPTY() {
+	if ptyspawn.HostIsConPTY() {
 		terminal.DisableKittyKeyboardProtocol()
 	}
 
 	pty := &PTY{
 		ID:          id,
 		sessionID:   s.ID,
-		host:        sp.host,
 		pty:         ptyInstance,
 		cmd:         cmd,
 		ctx:         ctx,
@@ -2603,7 +2549,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		respWake:    make(chan struct{}, 1),
 		onExit:      sp.onExit,
 		exitedAlone: s.notePaneExitedAlone,
-		ownShell:    len(sp.command) == 0 && !sp.closeOnExit && sp.host == "",
+		ownShell:    len(sp.command) == 0 && !sp.closeOnExit,
 		debug:       debugEnabled(),
 		rawLog:      newPTYLogger(id),
 		spawnedAt:   time.Now(),
@@ -2611,9 +2557,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()
 	}
-	if sp.host == "" {
-		pty.gate = newReadGate(ptyInstance)
-	}
+	pty.gate = newReadGate(ptyInstance)
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
 	// ID. It routes through the session's event sink so events reach the daemon's
@@ -2654,16 +2598,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		},
 		// Recorded, not applied: this fires with the terminal lock held, and
 		// the record is two atomics plus one branch read on its own goroutine.
-		//
-		// A pane on another machine keeps the plain record, for the session's
-		// label. Its shell reports a folder on that machine, which this side
-		// would read as a shell that went somewhere else; the machine running
-		// it says where it is instead (remotePane.Cwd).
 		WorkingDirectory: func(raw string) {
-			if _, remote := pty.pty.(*remotePane); remote {
-				pty.place.setCwd(raw)
-				return
-			}
 			if pty.place.announce(raw) {
 				pty.owner().publishPlaceMove()
 			}
@@ -2698,7 +2633,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		// and an answer from here would be a second one. See
 		// dnd_registration.go.
 		PrivateOSC: func(cmd int, data []byte) {
-			if cmd != dnd.Code || sp.host != "" || !s.dragAndDrop() {
+			if cmd != dnd.Code || !s.dragAndDrop() {
 				return
 			}
 			if reply := pty.dnd.note(data); reply != nil {
@@ -2714,25 +2649,20 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	// responses. All other commands flow through the raw PTY broadcast.
 	// The daemon reads only the control keys, so it does not decode the
 	// payload of a frame that only the clients draw.
-	remotePane := sp.host != ""
 	terminal.SetKittyHeaderOnly(true)
-	// A file a pane on another machine names for an upload is a path over
-	// there. Checked here, the answer would tell that pane what files this
-	// machine has.
-	terminal.SetKittyFilesElsewhere(remotePane)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
-			if response := pty.owner().kittyQueryResponse(cmd, remotePane); response != nil {
+			if response := pty.owner().kittyQueryResponse(cmd); response != nil {
 				terminal.WriteResponse(response)
 			}
 			return
 		}
-		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
+		if response := kittyAnimationRefusal(cmd, pty.owner().kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
 		}
 		// With no client attached to this pane, nothing will read the object
 		// a shared memory frame names. See kitty_medium.go.
-		if !remotePane && pty.subscriberCount.Load() == 0 {
+		if pty.subscriberCount.Load() == 0 {
 			releaseUnreadKittyMedium(cmd)
 		}
 	})
@@ -2760,9 +2690,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	// Before the goroutines start, so the emulator needs no lock yet.
 	terminal.SetReportColors(s.reportFg, s.reportBg, s.reportPal)
 	s.ptys[id] = pty
-	if sp.host == "" {
-		s.places.Store(id, pty)
-	}
+	s.places.Store(id, pty)
 
 	return pty
 }
@@ -2983,50 +2911,6 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		}
 	}
 
-	// A window on another machine whose link is lost says so, and until
-	// when the far machine keeps its process. Nothing stored holds this: it
-	// is true only while it is true, so whatever a client pushed back is
-	// cleared first.
-	for i := range state.Windows {
-		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil = "", 0
-	}
-	for id, link := range s.liveHostLinks() {
-		for i := range state.Windows {
-			if state.Windows[i].PTYID == id {
-				state.Windows[i].HostLink = link.state
-				state.Windows[i].HostLinkUntil = link.until
-			}
-		}
-	}
-}
-
-// hostLinkFact is one remote pane's link state for a snapshot.
-type hostLinkFact struct {
-	state string
-	until int64
-}
-
-// liveHostLinks is the link state of every window on another machine whose
-// link is not up, by PTY id.
-func (s *Session) liveHostLinks() map[string]hostLinkFact {
-	s.ptysMu.RLock()
-	defer s.ptysMu.RUnlock()
-	var out map[string]hostLinkFact
-	for id, pty := range s.ptys {
-		rp, ok := pty.pty.(*remotePane)
-		if !ok {
-			continue
-		}
-		state, until := rp.linkState()
-		if state == "" {
-			continue
-		}
-		if out == nil {
-			out = make(map[string]hostLinkFact)
-		}
-		out[id] = hostLinkFact{state: state, until: until.Unix()}
-	}
-	return out
 }
 
 // placeFact is what a pane's shell reported about where it is.
@@ -3059,11 +2943,9 @@ func (s *Session) livePaneFacts() map[string]paneFact {
 		var fact paneFact
 		fact.title = pty.Title()
 		fact.dnd = pty.dnd.fact()
-		if _, remote := pty.pty.(*remotePane); !remote {
-			fact.place = placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
-			if fact.place.cwd == "" {
-				fact.place.seed = pty.place.Cwd()
-			}
+		fact.place = placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
+		if fact.place.cwd == "" {
+			fact.place.seed = pty.place.Cwd()
 		}
 		if fact.title != "" || fact.place != (placeFact{}) || fact.dnd.accepts || fact.dnd.offers {
 			out[id] = fact
@@ -5016,14 +4898,6 @@ func (p *PTY) Close() error {
 // The second return is false when it cannot be determined (process gone, or an
 // unsupported platform). Used to capture cwd for session resurrection.
 func (p *PTY) ProcessCwd() (string, bool) {
-	// A pane on another machine has no process here to read. The machine
-	// running it is the only one that can say where it is, so the answer is
-	// the one that machine last gave, and asking for a fresher one is started
-	// here rather than waited for: this is called from GetState, which is on
-	// the render path.
-	if rp, ok := p.pty.(*remotePane); ok {
-		return rp.Cwd()
-	}
 	if p.proc == nil {
 		return "", false
 	}
@@ -5143,15 +5017,6 @@ func (p *PTY) readOutput() {
 		n, err := p.pty.Read(buf)
 		if err != nil {
 			p.readMu.Unlock()
-			// A pane on another machine ends here. Its stream stopping is the
-			// only notice that crosses: the far side closes the connection
-			// when the process exits, when the owner hangs up and when the
-			// link drops, and none of those leaves anything here to wait on.
-			// Without this the window stayed open around a pane that had
-			// nothing behind it, because monitorExit had returned at once.
-			if p.host != "" {
-				p.noteExit(0)
-			}
 			return
 		}
 

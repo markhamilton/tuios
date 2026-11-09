@@ -223,10 +223,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.GotoPickerSelect(idx)
 	case overlayKindBuffers:
 		m.BufferChooserSelect(idx)
-	case overlayKindTransfers:
-		m.TransfersSelect(idx)
-	case overlayKindCopyDialog:
-		m.CopyDialogSelect(idx)
 	case overlayKindPluginApproval:
 		m.PluginApprovalSelect(idx)
 	case overlayKindIntegrationAsk:
@@ -237,8 +233,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.AggregateViewSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
-	case "hostpicker":
-		m.HostPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	case "sessionclose":
@@ -315,14 +309,10 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.GotoPickerMove(wheelDelta(up))
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
-	case overlayKindTransfers:
-		m.TransfersMove(wheelDelta(up))
 	case "navigator":
 		m.NavigatorMove(wheelDelta(up))
 	case "layout":
 		m.LayoutPickerMove(wheelDelta(up))
-	case "hostpicker":
-		m.HostPickerMove(wheelDelta(up))
 	case "aggregate":
 		// The one list overlay the wheel did nothing on.
 		m.AggregateViewMove(wheelDelta(up))
@@ -503,15 +493,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.GotoPickerActivate()
 	case overlayKindBuffers:
 		return m.BufferChooserActivate(row.Idx)
-	case overlayKindTransfers:
-		// A click puts the cursor on the copy; a copy that waits for an
-		// answer opens its question.
-		m.TransfersSelect(row.Idx)
-		if r, ok := m.selectedTransfer(); ok && r.State == "conflict" {
-			m.TransfersAnswer()
-		}
-	case overlayKindCopyDialog:
-		return m.CopyDialogActivate(row.Idx)
 	case overlayKindPluginApproval:
 		return m.PluginApprovalActivate(row.Idx)
 	case overlayKindIntegrationAsk:
@@ -534,9 +515,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
-	case "hostpicker":
-		m.HostPickerSelected = row.Idx
-		return m.hostPickerActivate(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
@@ -651,10 +629,6 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseGotoPicker()
 	case overlayKindBuffers:
 		m.CloseBufferChooser()
-	case overlayKindTransfers:
-		m.CloseTransfers()
-	case overlayKindCopyDialog:
-		m.CloseCopyDialog()
 	case overlayKindPluginApproval:
 		// Click-away is not now: the plugin keeps waiting.
 		m.ClosePluginApproval()
@@ -674,8 +648,6 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseScreenshotPreview(false)
 	case "layout":
 		m.ShowLayoutPicker = false
-	case "hostpicker":
-		m.CloseHostPicker()
 	case "accent":
 		m.CloseAccentPicker()
 	case "aggregate":

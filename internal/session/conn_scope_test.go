@@ -108,7 +108,6 @@ func TestRestrictConnectionOwnScopeReachesOnlyTheCallersSession(t *testing.T) {
 	// the caller's own.
 	wantForbidden(t, "mail to another machine", callP(c, t, "send-agent-message", map[string]any{"host": "build", "session": "a", "to": a2, "text": "out"}))
 	// The link and held-mail verbs are not for a restricted caller.
-	wantForbidden(t, "close-pane", callP(c, t, "close-pane", map[string]any{"pane": "f2c1"}))
 	// The shell and ask-human verbs: run is typing, ask-human asks only as
 	// the caller's own pane, and answering for the person is never allowed.
 	wantForbidden(t, "run in b", callP(c, t, "run", map[string]any{"session": "b", "window": b1, "command": "true"}))

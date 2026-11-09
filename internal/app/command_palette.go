@@ -238,15 +238,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		{
-			Name:     "New window on another machine",
-			Shortcut: "",
-			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenHostPicker()
-				return m, nil
-			},
-		},
+
 		{
 			Name:     "Close window",
 			Shortcut: "prefix+x",
@@ -1041,27 +1033,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		{
-			// The machines in the rail's order, as next_host and prev_host
-			// step through them. Neither has a default key, so the palette
-			// is where a person finds them before binding one.
-			Name:     "Next machine",
-			Bind:     "next_host",
-			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.CycleHost(1)
-				return m, nil
-			},
-		},
-		{
-			Name:     "Previous machine",
-			Bind:     "prev_host",
-			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.CycleHost(-1)
-				return m, nil
-			},
-		},
+
 		{
 			// The agent mailbox: the messages agents leave for each other and
 			// for the person, and the place to answer one.
@@ -1089,15 +1061,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		{
-			// The copies between machines: the Copies panel.
-			Name:     "Copies between machines",
-			Shortcut: "prefix+u",
-			Category: "Files",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenTransfers()
-			},
-		},
+
 		{
 			Name:     "Agents: go to the oldest waiting",
 			Shortcut: "prefix+o",

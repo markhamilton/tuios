@@ -425,52 +425,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	}
 }
 
-// TestDisplayFollowIgnoresAHostLinkClient joins a hub and a remote daemon,
-// neither with a display. A client on the hub attaches the far session
-// through the link with a valid Wayland socket. Its values name a display on
-// the hub's machine, so neither daemon takes them. A client attached to the
-// far daemon directly with the same socket does: that is the positive half.
-//
-// Negative controls: see NEGATIVE_CONTROLS.md, "The display follow".
-func TestDisplayFollowIgnoresAHostLinkClient(t *testing.T) {
-	noDisplay(t)
-	base, remote, ssh := hubWithHost(t, "")
-	sock := fakeWayland(t, privateDir(t, "wl", 0o700), "wayland-h", "TOKEN-H")
-
-	term := startIn(t, base, startOpts{
-		args: []string{"attach", "--host", "build", "far-agent"},
-		env:  []string{"WAYLAND_DISPLAY=" + sock, "TUIOS_SSH=" + ssh},
-	})
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰──") }, bootTimeout); err != nil {
-		t.Fatalf("the client never drew the far session: %v\n%s", err, term.Snapshot())
-	}
-	// Typing counts as use, which is the other way a client is followed.
-	if err := term.SendKeys("echo TYPED-$((6*7))\r"); err != nil {
-		t.Fatalf("type: %v", err)
-	}
-	if err := term.WaitForText("TYPED-42", uiTimeout); err != nil {
-		t.Fatalf("the keys never reached the far pane: %v\n%s", err, term.Snapshot())
-	}
-	time.Sleep(1500 * time.Millisecond)
-	far := readDisplayEnv(t, remote, "far-agent")
-	if len(far.Env) != 0 || far.Target != "" {
-		t.Fatalf("a client over a host link gave the far session the display %+v", far)
-	}
-	if target, err := os.Readlink(far.Link); err == nil {
-		t.Fatalf("a client over a host link made the far link point at %s", target)
-	}
-	if hub := readDisplayEnv(t, base, "home"); len(hub.Env) != 0 {
-		t.Fatalf("a client over a host link gave the hub's session the display %+v", hub)
-	}
-	saveArtifact(t, term, artifactDir(t), "display-host-link")
-
-	direct := displayClient(t, remote, "far-agent", "WAYLAND_DISPLAY="+sock)
-	waitLinkTo(t, far.Link, sock, "after a local client attached the far session directly")
-	if err := direct.Close(); err != nil {
-		t.Logf("close the direct client: %v", err)
-	}
-}
-
 // TestDisplayFollowLeavesADaemonWithADisplayAlone starts the daemon with a
 // WAYLAND_DISPLAY of its own, as one started from the desktop has. A client
 // with another socket attaches. Nothing follows it, and a new pane sees the

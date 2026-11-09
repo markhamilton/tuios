@@ -45,8 +45,8 @@ import (
 //
 // Every path that runs the TUI calls this, including the daemon-attached one,
 // tape play and the mermaid live view (--watch and --demo), as do the
-// long-running commands (the daemon, the ssh server, the gui bridge, mcp,
-// stdio-proxy, pair, subscribe and agent-proto).
+// long-running commands (the daemon, the gui bridge, mcp,
+// subscribe and agent-proto).
 // Profiling an attached client is the only way to see the compositor under a
 // real multi-pane session, which is where the interesting contention lives.
 func startPprofServer() {
@@ -83,8 +83,8 @@ var (
 // The commands that run until they are told to stop call this and defer
 // stopCPUProfile, so the profile is complete when the command ends by its
 // signal or the end of its input: the standalone TUI (runLocal, before it
-// starts the pprof server), the attached client, the daemon, the ssh server,
-// pair, agent-proto, mcp, stdio-proxy, gui-bridge, tape play and the mermaid
+// starts the pprof server), the attached client, the daemon,
+// agent-proto, mcp, gui-bridge, tape play and the mermaid
 // live view, each of the others right after its startPprofServer call.
 // subscribe serves --pprof but writes no profile. While a profile runs,
 // /debug/pprof/profile answers 500, as the runtime allows one CPU profile at a

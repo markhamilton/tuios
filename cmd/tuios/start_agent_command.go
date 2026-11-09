@@ -17,7 +17,7 @@ func newStartAgentCommand() *cobra.Command {
 	var sessionName, name, cwd, repo, prompt, protocol, task string
 	var env, grants []string
 	var workspace, readyTimeout int
-	var focus, clone, jsonOutput bool
+	var focus, jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "start-agent <agent> [-- args...]",
 		Short: "Start an agent in a new pane and return once it is ready",
@@ -35,13 +35,6 @@ harness manifest recognises is ready only once it reports a state itself.
 The pane opens in the session -s names, which is created when it does not
 exist. It starts in --cwd, or the main checkout of the repository --repo
 names, or else the focused pane's directory.
-
--s HOST:SESSION starts it on another machine from the [hosts] table. PATH is
-not sent then, and the agent is looked up on that machine's PATH. --env there
-is refused, since env does not cross machines. The agent starts in that
-machine's checkout of the repository the current directory is in, found by
-its origin URL under [hosts.NAME] repos_root, and --clone clones it there when
-the host has none. --cwd or --repo name a directory on the host instead.
 
 The pane is not focused unless you pass --focus. --name gives it the name
 list-agents shows and -w takes, so you can address it as 'reviewer'.
@@ -79,9 +72,6 @@ task claim needs. It is checked before anything starts.`,
   # A reviewer that may read its session and nothing else
   tuios start-agent claude --name reviewer --grants read
 
-  # Claude Code on host build, in its checkout of this repository
-  tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
-
   # An agent for task card t3, which it holds from the start
   tuios start-agent claude --name t3-worker --task t3 --prompt 'Take task t3: tuios task get t3.'
 
@@ -102,7 +92,7 @@ task claim needs. It is checked before anything starts.`,
 			}
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
-				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
+				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus,
 				grants: grants, task: task,
 			}, jsonOutput)
 		},
@@ -111,7 +101,6 @@ task claim needs. It is checked before anything starts.`,
 	cmd.Flags().StringVar(&name, "name", "", "The pane's name, which list-agents shows and -w takes")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the focused pane's)")
 	cmd.Flags().StringVar(&repo, "repo", "", "A directory inside a repository: the agent starts in its main checkout")
-	cmd.Flags().BoolVar(&clone, "clone", false, "On another machine, clone this repository there when it has no checkout")
 	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
@@ -140,51 +129,32 @@ type startAgentOptions struct {
 	// only the PATH the CLI adds on its own.
 	explicitEnv             bool
 	workspace, readyTimeout int
-	focus, clone            bool
+	focus                   bool
 	// grants is --grants, nil when it was not passed.
 	grants []string
 }
 
-// startAgentEnv is the env start-agent sends to a target on host ("" for
-// this machine). The PATH the CLI adds on its own is this machine's, so it is
-// not sent to another machine: the far daemon refuses env over a link, and
-// the agent is found on that machine's own PATH. An --env the person asked
-// for is always sent, so a remote target refuses it plainly rather than the
-// CLI dropping it quietly.
-func startAgentEnv(o startAgentOptions, host string) map[string]string {
-	if host != "" && !o.explicitEnv {
-		return nil
-	}
-	return o.env
-}
-
-// startAgentPlace is where the agent starts, as verb params, for the daemon
-// on host, "" for this machine. On this machine it is --cwd, made absolute
-// since the daemon is not in this shell's directory, or the checkout --repo
-// names, or nothing, for the focused pane's directory. On a host it is --cwd
-// or --repo as a directory there, or else this repository by its origin URL.
-func startAgentPlace(host string, o startAgentOptions) (map[string]any, error) {
+// startAgentPlace is where the agent starts, as verb params: --cwd, made
+// absolute since the daemon is not in this shell's directory, or the checkout
+// --repo names, or nothing, for the focused pane's directory.
+func startAgentPlace(o startAgentOptions) (map[string]any, error) {
 	switch {
-	case o.cwd != "" && (o.repo != "" || o.clone):
-		return nil, errors.New("--cwd names the directory, and --repo and --clone name a repository. Pass one")
-	case o.cwd != "" && host == "":
+	case o.cwd != "" && o.repo != "":
+		return nil, errors.New("--cwd names the directory, and --repo names a repository. Pass one")
+	case o.cwd != "":
 		abs, err := filepath.Abs(o.cwd)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"cwd": abs}, nil
-	case o.cwd != "":
-		return map[string]any{"cwd": o.cwd}, nil
-	case host == "" && o.repo == "" && !o.clone:
-		return map[string]any{}, nil
-	case host == "" && o.repo != "" && !o.clone:
+	case o.repo != "":
 		abs, err := filepath.Abs(o.repo)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"repo": abs}, nil
 	}
-	return repoParams(host, o.repo, o.clone)
+	return map[string]any{}, nil
 }
 
 func runStartAgent(o startAgentOptions, jsonOutput bool) error {
@@ -196,7 +166,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		return err
 	}
 	defer t.Close()
-	place, err := startAgentPlace(t.host, o)
+	place, err := startAgentPlace(o)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}
@@ -212,8 +182,8 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if len(o.args) > 0 {
 		params["args"] = o.args
 	}
-	if env := startAgentEnv(o, t.host); len(env) > 0 {
-		params["env"] = env
+	if len(o.env) > 0 {
+		params["env"] = o.env
 	}
 	if o.workspace > 0 {
 		params["workspace"] = o.workspace
@@ -232,11 +202,10 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		wait = 120000
 	}
 	// The daemon answers when the agent is ready, then types the prompt and
-	// waits for it to be taken, so the client waits past both, and past a
-	// clone on a host.
+	// waits for it to be taken, so the client waits past both.
 	raw, err := t.client.CallWithTimeout("start-agent", params, time.Duration(wait)*time.Millisecond+5*time.Minute)
 	if err != nil {
-		return reportVerbError(explainHostedVerb(t, "start-agent", err), jsonOutput)
+		return reportVerbError(t.explain("start-agent", err), jsonOutput)
 	}
 	var res struct {
 		Session        string `json:"session"`
@@ -268,10 +237,10 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		}
 	} else {
 		if res.CreatedSession {
-			fmt.Printf("Created session '%s'%s.\n", plainLine(res.Session), t.on())
+			fmt.Printf("Created session '%s'.\n", plainLine(res.Session))
 		}
 		if res.Cloned {
-			fmt.Printf("Cloned the repository to %s%s.\n", plainLine(res.Cwd), t.on())
+			fmt.Printf("Cloned the repository to %s.\n", plainLine(res.Cwd))
 		}
 		who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.WindowID))
 		switch {
@@ -281,13 +250,13 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			fmt.Println(plainLine(res.TaskNote))
 		}
 		if res.Ready {
-			fmt.Printf("%s is ready: it reads %s%s.\n", who, plainLine(res.ReadyBy), t.on())
+			fmt.Printf("%s is ready: it reads %s.\n", who, plainLine(res.ReadyBy))
 		} else {
 			state := plainLine(res.State)
 			if res.BlockedBy != "" {
 				state += " (" + plainLine(res.BlockedBy) + ")"
 			}
-			fmt.Printf("%s is not ready: it reads %s%s. %s\n", who, state, t.on(), plainLine(res.Reason))
+			fmt.Printf("%s is not ready: it reads %s. %s\n", who, state, plainLine(res.Reason))
 		}
 		switch res.PromptStatus {
 		case "":

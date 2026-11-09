@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -865,12 +866,99 @@ func (m *OS) renderDnDLabel() *lipgloss.Layer {
 	return m.renderDropLabel(text, v.Refusal != "", "dnd-label")
 }
 
-// dndPaneName names a pane for the label: its machine first when its shell
-// runs elsewhere, then the name the context menu would show.
+// dndPaneName names a pane for the label: the name the context menu would
+// show.
 func (m *OS) dndPaneName(w *terminal.Window) string {
 	name := printableTitle(contextMenuWindowName(m, m.windowIndexByID(w.ID), "pane "+shortID(w.ID)))
-	if w.Host != "" {
-		name = w.Host + ":" + name
-	}
 	return overlay.Truncate(name, 32)
+}
+
+// parseDroppedPaths reads a paste as the paths a terminal sends for files
+// dropped on it, and reports whether the paste is only paths.
+//
+// The forms are the ones the terminals use: iTerm2, Terminal.app, Ghostty and
+// WezTerm escape each space and shell character with a backslash; kitty and
+// GNOME Terminal put a path in single quotes; WezTerm can use double quotes;
+// some terminals send file:// URLs, one a line. Paths are separated by
+// spaces or line breaks. Each must be absolute.
+func parseDroppedPaths(s string) ([]string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > 64<<10 || strings.ContainsRune(s, 0) {
+		return nil, false
+	}
+	var words []string
+	var cur strings.Builder
+	in := false
+	end := func() {
+		if in {
+			words = append(words, cur.String())
+			cur.Reset()
+			in = false
+		}
+	}
+	for i := 0; i < len(s); {
+		c := s[i]
+		switch {
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			end()
+			i++
+		case c == '\\':
+			if i+1 < len(s) {
+				cur.WriteByte(s[i+1])
+			}
+			i += 2
+			in = true
+		case c == '\'':
+			j := strings.IndexByte(s[i+1:], '\'')
+			if j < 0 {
+				return nil, false
+			}
+			cur.WriteString(s[i+1 : i+1+j])
+			i += j + 2
+			in = true
+		case c == '"':
+			i++
+			closed := false
+			for i < len(s) {
+				if s[i] == '\\' && i+1 < len(s) && strings.IndexByte("\"\\$`", s[i+1]) >= 0 {
+					cur.WriteByte(s[i+1])
+					i += 2
+					continue
+				}
+				if s[i] == '"' {
+					closed = true
+					i++
+					break
+				}
+				cur.WriteByte(s[i])
+				i++
+			}
+			if !closed {
+				return nil, false
+			}
+			in = true
+		default:
+			cur.WriteByte(c)
+			i++
+			in = true
+		}
+	}
+	end()
+	if len(words) == 0 || len(words) > 64 {
+		return nil, false
+	}
+	for i, w := range words {
+		if strings.HasPrefix(w, "file://") {
+			u, err := url.Parse(w)
+			if err != nil || (u.Host != "" && u.Host != "localhost") || u.Path == "" {
+				return nil, false
+			}
+			w = u.Path
+		}
+		if !strings.HasPrefix(w, "/") || strings.ContainsAny(w, "\r\n") {
+			return nil, false
+		}
+		words[i] = path.Clean(w)
+	}
+	return words, true
 }

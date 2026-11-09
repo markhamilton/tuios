@@ -467,34 +467,18 @@ func (m *OS) agentMailLoad() tea.Cmd {
 	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
 
-// verbDialer reaches the daemon that holds the session this client shows:
-// the host's when the client is attached through one, else this machine's.
+// verbDialer reaches the daemon that holds the session this client shows.
 func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
 
 // agentMailDialer is how a mailbox command reaches the daemon that holds the
-// ring: this machine's daemon directly, or, while this client is attached to
-// a session on another machine, that machine's daemon through the link. The
-// ring is the session's, so it lives where the session does.
+// ring: this machine's daemon.
 func (m *OS) agentMailDialer() agentMailDial {
-	host, build := m.AttachedHost, ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func() (*session.VerbClient, error) {
-		if host == "" {
-			return dialVerbLocal()
-		}
-		c, _, err := dialVerbThroughHost(host, build)
-		return c, err
-	}
+	return func() (*session.VerbClient, error) { return dialVerbLocal() }
 }
 
-// dialVerbThroughHost and dialVerbLocal are the two ways verbDialer reaches a
-// daemon, as variables so a test can see which one a command used.
-var (
-	dialVerbThroughHost = session.DialVerbClientThroughHost
-	dialVerbLocal       = session.DialVerbClient
-)
+// dialVerbLocal is how verbDialer reaches the daemon, as a variable so a test
+// can see that a command used it.
+var dialVerbLocal = session.DialVerbClient
 
 // agentMailDial opens a verb connection to the daemon that holds the ring.
 type agentMailDial func() (*session.VerbClient, error)
@@ -1061,7 +1045,7 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	send := agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()), parts)
+	send := agentMailSendCmd(m.agentMailDialer(), false, name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()), parts)
 	w := st.wires
 	if w.histWindow == "" || st.draftAutomated() || m.ProcessingRemoteKeys {
 		return send

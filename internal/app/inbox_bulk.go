@@ -214,9 +214,7 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 	for _, e := range m.markedAgents() {
 		who := agentName(e)
 		switch {
-		case e.Host != "":
-			skipped = append(skipped, who+" (on "+printableTitle(e.Host)+")")
-			continue
+
 		case e.State == "needs_input":
 			skipped = append(skipped, who+" (waits on a prompt)")
 			continue
@@ -276,7 +274,7 @@ func (m *OS) bulkHeld() []session.AttentionItem {
 	var out []session.AttentionItem
 	for _, e := range m.markedAgents() {
 		for _, it := range m.Inbox.Items {
-			if it.Host == "" && it.Window == e.WindowID && it.Session == e.SessionID && inboxHeld(it) {
+			if it.Window == e.WindowID && it.Session == e.SessionID && inboxHeld(it) {
 				out = append(out, it)
 			}
 		}
@@ -483,7 +481,7 @@ func (m *OS) bulkItems() []session.AttentionItem {
 	seen := map[string]bool{}
 	for _, e := range m.markedAgents() {
 		for _, it := range m.Inbox.Items {
-			if it.Host == e.Host && it.Window == e.WindowID && it.Session == e.SessionID {
+			if it.Window == e.WindowID && it.Session == e.SessionID {
 				out = append(out, it)
 				seen[it.ID] = true
 			}
@@ -614,7 +612,7 @@ func (m *OS) InboxAgentsBulkResume() tea.Cmd {
 		// cursor before it called here.
 		return m.InboxResume()
 	}
-	if m.AttachedHost != "" || m.DaemonClient == nil {
+	if m.DaemonClient == nil {
 		m.ShowNotification("These panes are on another machine. Attach there to resume them", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -635,9 +633,7 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 	for _, it := range offers {
 		who := inboxWho(it)
 		switch {
-		case it.Host != "":
-			skipped = append(skipped, who+" (on "+printableTitle(it.Host)+")")
-			continue
+
 		case len(targets) == bulkMax:
 			skipped = append(skipped, who+" (past "+strconv.Itoa(bulkMax)+")")
 			continue

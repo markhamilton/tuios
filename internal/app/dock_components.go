@@ -216,11 +216,7 @@ func (m *OS) dockCustomCell(name string) string {
 	if name == config.DockComponentClock && (!m.Settings.ShowClock || m.Settings.HideClock) {
 		return ""
 	}
-	// The copies between machines draw from the mirror, not from the
-	// engine, and nothing while no copy exists. See transfers_render.go.
-	if name == config.DockComponentTransfers {
-		return m.transfersDockCell()
-	}
+
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
 		// The clock is a built-in that carries a value, so it draws through the
@@ -328,14 +324,13 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentClock ||
-		name == config.DockComponentTransfers || name == config.DockComponentSession
+		name == config.DockComponentSession
 }
 
 // dockCellClickable reports whether a cell records where it was drawn, for a
-// click: a custom component, which runs its on-click command, and the
-// copies, which open the Copies panel.
+// click: a custom component, which runs its on-click command.
 func dockCellClickable(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentTransfers
+	return strings.HasPrefix(name, config.DockCustomPrefix)
 }
 
 // dockCustomWidth is the room a side's custom cells want.

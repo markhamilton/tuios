@@ -307,12 +307,6 @@ func TestApprovalRefusals(t *testing.T) {
 	}
 	d.setApprovalPeer(nil)
 
-	// Over a link, never.
-	raw := json.RawMessage(`{"session":"work","window":"` + b + `","harness":"claude-code"}`)
-	if _, verr := d.verbRequestApproval(&connState{viaLink: true, linkHuman: true}, raw); verr == nil || verr.Code != ErrVerbForbidden {
-		t.Errorf("a request over a link answered %v", verr)
-	}
-
 	// An option that is not a decision.
 	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?","options":["yes"]}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {

@@ -434,12 +434,9 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 		if !ok {
 			return nil, false
 		}
-		it = session.AttentionItem{Session: e.SessionID, Window: e.WindowID, Host: e.Host, Name: e.Title}
+		it = session.AttentionItem{Session: e.SessionID, Window: e.WindowID, Name: e.Title}
 	}
-	if it.Host != "" {
-		m.reviewNotify(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to review it", "info", m.Settings.NotificationDuration)
-		return nil, true
-	}
+
 	if it.Window == "" {
 		m.reviewNotify("That item has no pane to review", "info", m.Settings.NotificationDuration)
 		return nil, true
@@ -475,10 +472,7 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 		m.reviewNotify("Review needs the daemon. Start a daemon session with: tuios new", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	if m.AttachedHost != "" {
-		m.reviewNotify("This session runs on "+printableTitle(m.AttachedHost)+", and its repository is there. Review it on that machine", "info", m.Settings.NotificationDuration)
-		return nil
-	}
+
 	r := &m.review
 	if r.pending {
 		return nil

@@ -50,12 +50,10 @@ func (s *Session) noteCwdOnOutput(p *PTY) {
 	if p == nil {
 		return
 	}
-	// A local shell that announces its folder, and has no report from
-	// another machine to clear, gives checkPaneCwd nothing to do.
+	// A shell that announces its folder, and has no report from another
+	// machine to clear, gives checkPaneCwd nothing to do.
 	if p.place.announced.Load() && p.place.Elsewhere() == "" {
-		if _, remote := p.pty.(*remotePane); !remote {
-			return
-		}
+		return
 	}
 	c := &p.cwdCheck
 	c.mu.Lock()
@@ -81,11 +79,6 @@ func (s *Session) noteCwdOnOutput(p *PTY) {
 
 // checkPaneCwd looks at where p is and tells the clients when it moved.
 func (s *Session) checkPaneCwd(p *PTY) {
-	if rp, ok := p.pty.(*remotePane); ok {
-		// The answer lands later and publishes itself when it differs.
-		rp.askCwd()
-		return
-	}
 	if p.IsExited() {
 		return
 	}
@@ -130,4 +123,20 @@ func (s *Session) publishPlaceMove() {
 		s.placePushQueued.Store(false)
 		s.PublishLiveFacts()
 	}()
+}
+
+// PublishLiveFacts pushes the session's state to its clients because something
+// the emulators or the processes know has changed, rather than because the
+// session itself was altered: a shell that moved without announcing it, for
+// one. Nothing about the session changes, so no mutation happens and no push
+// follows on its own.
+//
+// It goes through mutateState with an empty change so it takes the version
+// with it. The push is skipped for a version already sent, so a bump is what
+// makes it a push at all.
+func (s *Session) PublishLiveFacts() {
+	// The cached read goes first: liveCwds holds its answer for a second, and
+	// publishing without clearing it would send the old answer again.
+	s.forgetCwdCache()
+	_ = s.mutateState(func(*SessionState) error { return nil })
 }

@@ -71,8 +71,7 @@ type fileTreeState struct {
 	// dirs is the listing of each open folder the tree draws now, by absolute
 	// path. It never holds a folder that is not on screen.
 	dirs map[string]*fileTreeDir
-	// host is the machine dirs were read from.
-	host string
+
 	// req is the last read stamp handed out.
 	req uint64
 	// gen moves whenever what the tree draws changes. The rail's cache folds it.
@@ -87,9 +86,9 @@ type fileTreeState struct {
 
 // fileTreeSync is the fingerprint syncFileTree compares.
 type fileTreeSync struct {
-	on                  bool
-	session, root, host string
-	rootGen, treeGen    uint64
+	on               bool
+	session, root    string
+	rootGen, treeGen uint64
 }
 
 // fileTreeListMsg is one open folder's finished read.
@@ -107,9 +106,9 @@ func (m *OS) filesTreeOn() bool {
 	return m.Settings.SidebarFilesStyle == config.SidebarFilesTree
 }
 
-// fileTreeKey names an open folder across machines: the same path on two
-// machines is two folders.
-func fileTreeKey(host, dir string) string { return host + "\x00" + dir }
+// fileTreeKey names an open folder. The leading NUL is the empty machine name
+// older builds put first, kept so a saved open set still matches.
+func fileTreeKey(dir string) string { return "\x00" + dir }
 
 // fileTreeOpenSet is the open set of the attached session.
 func (m *OS) fileTreeOpenSet(create bool) map[string]struct{} {
@@ -145,7 +144,7 @@ func (m *OS) fileTreeVisible() []string {
 				continue
 			}
 			full := filepath.Join(dir, e.Name)
-			if _, ok := set[fileTreeKey(v.Host, full)]; !ok {
+			if _, ok := set[fileTreeKey(full)]; !ok {
 				continue
 			}
 			out = append(out, full)
@@ -169,21 +168,13 @@ func (m *OS) syncFileTree() tea.Cmd {
 	fp := fileTreeSync{
 		on:      m.filesTreeOn() && v.Dir != "",
 		session: m.sidebarCurrentSessionID(),
-		root:    v.Dir, host: v.Host,
+		root:    v.Dir,
 		rootGen: v.Gen, treeGen: t.gen,
 	}
 	if fp == t.synced {
 		return nil
 	}
 	changed := false
-	if t.host != v.Host {
-		// Nothing read on the last machine is about this one.
-		if len(t.dirs) > 0 {
-			t.dirs = nil
-			changed = true
-		}
-		t.host = v.Host
-	}
 	m.fileTreeForgetGone()
 	visible := m.fileTreeVisible()
 	want := make(map[string]bool, len(visible))
@@ -225,7 +216,7 @@ func (m *OS) fileTreeForgetGone() {
 	if len(set) == 0 || v.Dir == "" || v.Loading || v.Err != "" {
 		return
 	}
-	prefix := fileTreeKey(v.Host, "")
+	prefix := fileTreeKey("")
 	for key := range set {
 		dir, ok := strings.CutPrefix(key, prefix)
 		if !ok {
@@ -268,9 +259,9 @@ func (m *OS) fileTreeRead(dir string, quiet bool) tea.Cmd {
 	}
 	// A folder below the root is one the person opened by hand, so it is read
 	// as one they named, the same way a list walk into it is.
-	client, host, origin := m.DaemonClient, m.AttachedHost, m.filesView.Origin
+	client, origin := m.DaemonClient, m.filesView.Origin
 	return func() tea.Msg {
-		l := readListing(client, host, origin, dir, true, 0, false)
+		l := readListing(client, origin, dir, true, 0, false)
 		return fileTreeListMsg{Dir: dir, Req: req, Quiet: quiet, Entries: l.Entries, Capped: l.Capped, Err: l.Err}
 	}
 }
@@ -360,7 +351,7 @@ func (m *OS) fileTreeOpenDir(dir string) tea.Cmd {
 			"info", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.fileTreeOpenSet(true)[fileTreeKey(m.filesView.Host, dir)] = struct{}{}
+	m.fileTreeOpenSet(true)[fileTreeKey(dir)] = struct{}{}
 	m.filesTree.gen++
 	return m.syncFileTree()
 }
@@ -368,7 +359,7 @@ func (m *OS) fileTreeOpenDir(dir string) tea.Cmd {
 // fileTreeCloseDir closes a folder of the tree. The folders open under it stay
 // remembered, and show again when it opens.
 func (m *OS) fileTreeCloseDir(dir string) tea.Cmd {
-	delete(m.fileTreeOpenSet(false), fileTreeKey(m.filesView.Host, dir))
+	delete(m.fileTreeOpenSet(false), fileTreeKey(dir))
 	m.filesTree.gen++
 	return m.syncFileTree()
 }

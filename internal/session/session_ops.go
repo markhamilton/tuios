@@ -211,10 +211,6 @@ type NewWindowOptions struct {
 	// spawns the PTY; sending bytes for a shell to re-parse instead would make
 	// the command's meaning depend on which shell answered.
 	Command []string
-	// Host asks for the window's process on another machine, named as it is in
-	// the [hosts] config table. Empty is this machine, which is every window
-	// unless someone asked otherwise. See hosted_pane.go.
-	Host string
 	// Name is the window's custom name, the one the dock and the rail show.
 	//
 	// It is set here rather than by a rename afterwards for the same reason the
@@ -394,19 +390,19 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// machine. Handing it to another machine would start the shell somewhere
 	// unrelated on the rare occasion the path happens to exist there, so a
 	// window with a host inherits nothing and starts where its own shell would.
-	if cwd == "" && opts.Host == "" {
+	if cwd == "" {
 		cwd = s.inheritedCwd()
 	}
 	// With nothing to inherit, use the directory set when the session was
 	// created. A local path, so a window with a host skips it
 	// for the reason above.
-	if cwd == "" && opts.Host == "" {
+	if cwd == "" {
 		cwd = s.StartDir()
 	}
 	// A pane without admin cannot start a window whose folder is wider than
 	// its own, by cd before the call or by the focused pane's folder.
 	noStartDir := false
-	if opts.Bounded && opts.Host == "" {
+	if opts.Bounded {
 		switch {
 		case opts.Bound == "":
 			noStartDir = true
@@ -438,7 +434,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	}
 
 	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
-		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
+		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants, keepOpen: opts.keepOpen,
 		workspace: opts.Workspace, noStartDir: noStartDir, closeOnExit: opts.closeOnExit,
 	})
@@ -544,10 +540,6 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			Height:     height,
 			Workspace:  workspace,
 			PTYID:      pty.ID,
-			// The machine the process is on. Empty for a window of this
-			// daemon's own, which is what makes the field free for every
-			// session that is not global.
-			Host: opts.Host,
 			// Stamped here as well as on the detector's poll, because the pid is
 			// already in hand and a pane that waits a poll for it is a pane the
 			// rail cannot check for two seconds. The poll stays the authority: it
@@ -570,10 +562,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			Kind:        opts.Kind,
 			URI:         opts.URI,
 		}
-		// A window on another machine holds what that machine gives it.
-		if opts.Host == "" {
-			win.Grants = grantNamesPtr(opts.Grants)
-		}
+		win.Grants = grantNamesPtr(opts.Grants)
 		state.Windows = append(state.Windows, win)
 		// The workspace's own focus points at the new window either way: it is
 		// the only sensible thing to focus when that workspace is next shown.

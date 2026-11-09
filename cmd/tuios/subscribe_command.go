@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ type subscribeOptions struct {
 	resume   bool
 	bootID   string
 	count    int
-	hosts    bool
 }
 
 // newSubscribeCommand builds tuios subscribe, the command-line end of the
@@ -63,10 +61,7 @@ trusting that you saw every change.`,
   tuios subscribe --types agent-state --after-seq 118 --boot-id 9f2c41d07a3e8b65
 
   # Wait for the next bell anywhere, then exit
-  tuios subscribe --types bell --count 1
-
-  # Every agent on every machine, and every host coming or going
-  tuios subscribe --hosts --types agent-state,host-changed`,
+  tuios subscribe --types bell --count 1`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// The stream keeps this process running; --pprof is a persistent
@@ -84,7 +79,6 @@ trusting that you saw every change.`,
 	cmd.Flags().StringSliceVar(&opts.types, "types", nil, "Only these event types, comma-separated (default: all)")
 	cmd.Flags().Uint64Var(&opts.afterSeq, "after-seq", 0, "Replay the retained events after this seq before streaming live")
 	cmd.Flags().StringVar(&opts.bootID, "boot-id", "", "The boot_id the --after-seq came with, so a daemon restart shows as a gap")
-	cmd.Flags().BoolVar(&opts.hosts, "hosts", false, "Also print the agent-state and session events of every linked host, each with host set")
 	cmd.Flags().IntVar(&opts.count, "count", 0, "Exit after printing this many events, gap lines included (default: run until the stream ends)")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("types", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
@@ -112,14 +106,11 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			params["boot_id"] = opts.bootID
 		}
 	}
-	if opts.hosts {
-		params["hosts"] = true
-	}
 	raw, err := t.client.Call("subscribe", t.params(params))
 	if err != nil {
 		return t.explain("subscribe", err)
 	}
-	if _, err := fmt.Fprintln(out, string(t.result(raw))); err != nil {
+	if _, err := fmt.Fprintln(out, string(raw)); err != nil {
 		return err
 	}
 
@@ -131,9 +122,7 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			}
 			return fmt.Errorf("failed to read the event stream: %w", err)
 		}
-		if t.host != "" {
-			line = t.result(json.RawMessage(line))
-		}
+
 		// The daemon escapes C1 controls itself; a daemon on another
 		// machine may be older, so the line is escaped here too.
 		if _, err := fmt.Fprintln(out, jsonSafe(string(line))); err != nil {

@@ -29,20 +29,17 @@ func TestPopupContentSize(t *testing.T) {
 // emulator, so the refusal is in order with its DA1 answer.
 func TestKittyAnimationRefusal(t *testing.T) {
 	frame := &vt.KittyCommand{Action: vt.KittyActionFrame, ImageID: 3}
-	got := string(kittyAnimationRefusal(frame, false, false))
+	got := string(kittyAnimationRefusal(frame, false))
 	if !strings.Contains(got, "i=3") || !strings.Contains(got, "ENOTSUPPORTED") {
 		t.Fatalf("refusal = %q", got)
 	}
-	if kittyAnimationRefusal(frame, false, true) != nil {
+	if kittyAnimationRefusal(frame, true) != nil {
 		t.Fatal("refused a frame edit the host makes")
 	}
-	if kittyAnimationRefusal(frame, true, false) != nil {
-		t.Fatal("answered for a pane on another machine")
-	}
-	if kittyAnimationRefusal(&vt.KittyCommand{Action: vt.KittyActionFrame, Quiet: 2}, false, false) != nil {
+	if kittyAnimationRefusal(&vt.KittyCommand{Action: vt.KittyActionFrame, Quiet: 2}, false) != nil {
 		t.Fatal("answered a command that asked for no answer")
 	}
-	if kittyAnimationRefusal(&vt.KittyCommand{Action: vt.KittyActionTransmit}, false, false) != nil {
+	if kittyAnimationRefusal(&vt.KittyCommand{Action: vt.KittyActionTransmit}, false) != nil {
 		t.Fatal("refused a command that is not a frame edit")
 	}
 }

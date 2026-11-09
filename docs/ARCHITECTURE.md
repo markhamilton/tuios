@@ -11,9 +11,7 @@ This document provides a comprehensive overview of TUIOS's internal architecture
 - [Theme Color System](#theme-color-system)
 - [Rendering Pipeline](#rendering-pipeline)
 - [Multi-Client Architecture](#multi-client-architecture)
-- [SSH Server Architecture](#ssh-server-architecture)
 - [Core Components](#core-components)
-- [File transfers between machines](#file-transfers-between-machines)
 - [Performance Characteristics](#performance-characteristics)
 
 ## Overview
@@ -30,13 +28,8 @@ The emulator behind the `vt.Terminal` interface is either the pure Go implementa
 graph TB
     subgraph "Clients"
         TUI["tuios, tuios attach<br>Bubble Tea TUI"]
-        SSHS["tuios ssh<br>one app.OS per connection"]
-        WEBS["tuios-web<br>one app.OS per connection"]
         CLI["CLI, agents, tuios mcp"]
     end
-
-    SSHC[SSH client terminal] --> SSHS
-    BROWSER[Browser with xterm.js] --> WEBS
 
     subgraph "Daemon: internal/session"
         BIN[Binary frames]
@@ -44,35 +37,27 @@ graph TB
         MGR["Sessions and windows<br>session state"]
         PTYD["PTY per pane<br>64 KB ring and stream position"]
         VTD[VT emulator per pane]
-        FED["Federation hub<br>internal/federation"]
     end
 
     SHELL[Shell or program]
-    FAR["Daemon on another machine"]
 
     TUI <-->|unix socket| BIN
-    SSHS <-->|unix socket| BIN
-    WEBS <-->|unix socket| BIN
     CLI -->|unix socket| VERBS
     BIN --> MGR
     VERBS --> MGR
     MGR --> PTYD
     PTYD <--> SHELL
     PTYD --> VTD
-    FED <-->|"ssh, tuios stdio-proxy"| FAR
 
     style MGR fill:#1d3557,color:#fff
     style VTD fill:#2d6a4f,color:#fff
-    style FED fill:#457b9d,color:#fff
 ```
 
 What runs where:
 
-- **The daemon** owns the sessions, their windows and workspaces, and a PTY per pane. Every byte a pane's PTY produces goes to the daemon's emulator for that pane, to a 64 KB ring that numbers each byte with a stream position, and to every client subscribed to the pane. The daemon's emulator answers the program's queries and holds the pane's state for the next attach. A client starts a daemon in the background when none is running. The SSH server and `tuios-web` start one in their own process.
+- **The daemon** owns the sessions, their windows and workspaces, and a PTY per pane. Every byte a pane's PTY produces goes to the daemon's emulator for that pane, to a 64 KB ring that numbers each byte with a stream position, and to every client subscribed to the pane. The daemon's emulator answers the program's queries and holds the pane's state for the next attach. A client starts a daemon in the background when none is running.
 - **A TUI client** runs the whole window manager: the `app.OS` model, the layout, the input modes and the compositor. Each window holds a second emulator for its pane. It is filled from a snapshot of the daemon's emulator, then from the stream from the snapshot's position (see [REHYDRATION.md](REHYDRATION.md)). The client draws from this copy. Its emulator's replies to the program are dropped, because the daemon's emulator already answered. A key goes to the daemon as `MsgInput`, and the daemon writes it to the PTY.
-- **The SSH server and `tuios-web`** build one `app.OS` per connection with `internal/served`, attached to the daemon like a local client. They send the composed frame to the SSH client's terminal or to the browser. With `--ephemeral`, or when no daemon can be reached, that model runs standalone.
 - **The CLI, agents and `tuios mcp`** speak the JSON verb protocol on the same socket. The daemon tells the two protocols apart by a connection's first byte. Read verbs, input verbs and window creation act on daemon-owned state, with or without a client attached (see [protocol.md](protocol.md#how-verbs-interact-with-an-attached-client)).
-- **Other machines** are reached through federation. The local daemon dials each host in the `[hosts]` table over ssh and runs `tuios stdio-proxy` there. One ssh connection carries several multiplexed streams. A client reaches another machine's daemon through its own daemon with `open-host-connection` (`tuios attach --host`). A window whose process runs on another machine (`new-window --host`) has its PTY there and its emulator here: the far daemon runs no emulator for it.
 
 The daemon owns session state. A client keeps its own copy and pushes it back as it renders, and the daemon merges that push by version (see [protocol.md](protocol.md#who-owns-session-state)).
 
@@ -113,7 +98,6 @@ graph TB
     end
 
     subgraph "External Integration"
-        SSH[SSH Server Wish]
         SHELL[Shell Process]
     end
 
@@ -132,12 +116,10 @@ graph TB
     RENDER --> CACHE
     RENDER --> POOL
     RENDER --> UI
-    SSH --> OS
 
     style OS fill:#1d3557
     style VT fill:#2d6a4f
     style RENDER fill:#9d0208
-    style SSH fill:#457b9d
 ```
 
 ### Component Responsibilities
@@ -561,74 +543,6 @@ When clients join, leave, or sync state, notifications are displayed:
 - **Workspace changes**: "Switched to workspace N"
 - **Session size**: "Session size: WxH (N clients)" when the shared size changes
 
-## SSH Server Architecture
-
-```mermaid
-graph TB
-    subgraph "SSH Clients"
-        C1[SSH Client 1]
-        C2[SSH Client 2]
-        C3[SSH Client N]
-    end
-
-    subgraph "TUIOS SSH Server :2222"
-        WISH[Wish v2 Middleware]
-        AUTH[Session Handler]
-    end
-
-    subgraph "Isolated Instances"
-        OS1[OS Instance 1]
-        OS2[OS Instance 2]
-        OS3[OS Instance N]
-    end
-
-    subgraph "Terminal Sessions"
-        W1[Windows + PTY + Shell]
-        W2[Windows + PTY + Shell]
-        W3[Windows + PTY + Shell]
-    end
-
-    C1 -->|SSH Connection| WISH
-    C2 -->|SSH Connection| WISH
-    C3 -->|SSH Connection| WISH
-
-    WISH --> AUTH
-    AUTH -->|Dedicated Context| OS1
-    AUTH -->|Dedicated Context| OS2
-    AUTH -->|Dedicated Context| OS3
-
-    OS1 --> W1
-    OS2 --> W2
-    OS3 --> W3
-
-    style WISH fill:#457b9d
-    style OS1 fill:#1d3557
-    style OS2 fill:#1d3557
-    style OS3 fill:#1d3557
-```
-
-### SSH Session Isolation
-
-By default `tuios ssh` attaches each connection to a session of the daemon, like
-a local `tuios attach`, so several connections can share one session and it
-outlives them (see [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-ssh)). Either way
-`internal/served` builds the connection's `app.OS`, and `tuios-web` uses the
-same code for a browser. The diagram above is `--ephemeral`, or a connection
-made when no daemon can be reached, where each SSH connection receives:
-
-- Dedicated OS instance (window manager state)
-- Independent workspace configuration
-- Isolated window collection
-- Separate PTY processes
-- Own terminal size and capabilities
-
-This ensures:
-
-- No cross-session interference
-- Individual user preferences
-- Clean session teardown
-- Scalable multi-user support
-
 ## Core Components
 
 | Component             | File                            | Purpose                    | Key Responsibilities                                            |
@@ -637,8 +551,6 @@ This ensures:
 | **Daemon**            | `internal/session/daemon.go`    | Persistent server process  | Sessions, socket, binary frames and JSON verbs, state sync to clients |
 | **Daemon PTY**        | `internal/session/session.go`   | One pane in the daemon     | PTY, the daemon's VT emulator, output ring, stream subscribers  |
 | **Daemon Client**     | `internal/session/tuiclient.go` | A client's connection      | Attach, input, PTY subscriptions, terminal snapshots            |
-| **Served Model**      | `internal/served/served.go`     | SSH and web sessions       | One `app.OS` per remote connection, attached or ephemeral       |
-| **Federation**        | `internal/federation/`          | Links to other machines    | ssh links to other daemons, multiplexed streams, bulk transfers |
 | **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle (standalone) or daemon stream, VT emulator integration, content caching |
 | **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
@@ -648,7 +560,6 @@ This ensures:
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
 | **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
 | **BSP Tiling**        | `internal/layout/bsp.go`        | BSP tree management        | Binary space partitioning, spiral layout, split rotation        |
-| **SSH Server**        | `internal/server/ssh.go`        | Remote access              | Wish middleware, one served model per connection, authentication |
 | **Config System**     | `internal/config/userconfig.go` | Configuration              | TOML parsing, keybinding validation, defaults management        |
 | **Keybind Registry**  | `internal/config/registry.go`   | Keybinding mapping         | Action lookup, conflict detection, help generation              |
 | **Style Cache**       | `internal/app/stylecache.go`    | Performance optimization   | Lipgloss style caching, LRU cache (40-60% allocation reduction) |
@@ -723,7 +634,7 @@ Two consequences follow from the id living in a color:
   images need a truecolor host.
 
 Placeholders need a host terminal that implements them: kitty, Ghostty and
-WezTerm do, and xterm.js does not, so they do not appear in `tuios-web`.
+WezTerm do, and xterm.js does not.
 
 ### Images under a window
 
@@ -829,7 +740,7 @@ the machine it was written on, so where it gets read decides whether it works.
 - **Standalone.** The pane and tuios are on one machine. When the host
   terminal draws no kitty graphics, `a=q` gets no answer. When the host
   terminal can read files there (the capability probe's `i=2` answer), tuios
-  hands it the path. When it cannot (a browser, an SSH client), tuios reads the
+  hands it the path. When it cannot (an SSH client), tuios reads the
   file itself and sends the bytes inline. The `a=q` answer says which: file
   media are refused when the host cannot read files, so a guest that asks,
   such as icat, streams the bytes instead.
@@ -840,12 +751,8 @@ the machine it was written on, so where it gets read decides whether it works.
   sixel (see below): any attached client that shows the image is enough, and
   with no client attached the last answer stands. Otherwise the answer says
   whether the path will be read on the machine it names a file on. File
-  media are refused while any client attached over a link is drawing the
-  session. Everywhere else they are accepted, and each client handles the
-  path as in standalone. Direct transmission is always accepted.
-- **A window on another machine.** The pane's process runs on machine B and
-  the window is drawn by a session on machine A (`new-window --host`). The
-  path names a file on B, so B reads it. See below.
+  media are accepted, and each client handles the path as in standalone.
+  Direct transmission is always accepted.
 
 A path is text the pane printed. Any output can carry one, for example a file
 that a program prints, so tuios checks the path before anything opens it. The
@@ -862,74 +769,12 @@ checks follow the kitty graphics protocol:
 - A `t=f` or `t=t` file must belong to the user tuios runs as.
 - A `t=t` file name must hold `tty-graphics-protocol`, as the spec asks.
 
-When tuios reads the file itself and sends the bytes to a browser or an SSH
-client, the bytes leave the machine. There, a `t=f` or `t=t` path must also be
+When tuios reads the file itself and sends the bytes to an SSH client, the
+bytes leave the machine. There, a `t=f` or `t=t` path must also be
 in a temporary directory (`/tmp`, `/var/tmp`, `/dev/shm` or `$TMPDIR`). A key
 in the home directory is refused. `$TMPDIR` is ignored when it is `/`, the home
 directory or a parent of it. A guest that asks first with `a=q` is told
 not to send a path at all, and streams the bytes.
-
-### Kitty file media from a window on another machine
-
-B runs no emulator for the pane (see `hosted_pane.go`), so the work is split
-between the two daemons (`kitty_link_far.go` on B, `kitty_link_near.go` on A):
-
-1. B's pump passes the process's output through a filter. A graphics command
-   with a file medium (t=f, t=t, t=s) is taken out of the stream. Everything
-   else passes unchanged. The filter scans for ESC with `IndexByte`, so plain
-   output costs one pass over the bytes.
-2. B checks the path and opens the file. A refusal is answered to the process
-   at once, in kitty's words. Nothing goes to A.
-3. A query (a=q) is passed on as a query for direct transmission, so A answers
-   it from what its clients can show, as for any other pane.
-4. An upload is replaced by a marker: an APC that names the transfer and
-   carries the command's other keys. B's pump then waits.
-5. A sees the marker, fetches the bytes with `pane-kitty-medium` on a bulk
-   stream, and writes them after the marker as t=d chunks of 4096 characters.
-   Raw pixels cross compressed. When the bytes are sent, B's pump goes on.
-
-B deletes a t=t file or a t=s object after an upload (a=t or a=T) is read,
-under the rule the daemon keeps for frames no client reads: only the name as
-given, which must be the very object read and not a symlink, and only when it
-is the frame the command describes (`vt.KittyMediumIsFrame`). A query deletes
-nothing. A name is text the pane printed, and a printed file can name an
-object another program still uses.
-
-Every command with a file medium is B's, whatever its action and m are. A
-chunked one (m=1) is refused whole and its later chunks are dropped. A
-command that B cannot classify within 50 ms (a program that printed half of
-it and paused) is refused with an answer when its keys name a file, and
-dropped when it may start a marker. One whose keys so far name no file goes
-on, and the rest of its keys are checked as they come. Sent on as it was, a
-path would reach A's clients and their terminals. As a second layer, A's
-clients drop a file medium command from any pane whose process runs on
-another machine.
-
-An open or a read of a file that hangs past its budget (a network or FUSE
-mount that stopped answering) is given up on. While four of them still hang,
-B refuses new ones, so a pane cannot pile up stuck threads.
-
-The pump waiting keeps the order: the process's later output comes after the
-image, as it does in kitty. Other panes do not wait. Each pane has its own
-stream and pump, and the bytes ride a bulk stream, which writes behind every
-ordinary frame on the link and keeps to a window. At most two files are read
-at once on B. A slot covers one read of the file, never a wait for A, and
-each write to A has 15 seconds. An A that stops reading ends its own
-transfer, with an EIO reply to the program, and holds up no other pane.
-
-The bytes leave B, so B reads only what the link may read with `file-read`:
-the machine needs the `files` capability (asked again before each read and
-each delete, so a config change applies to a running pane), the read deny list applies (keys,
-credentials, shell start files, histories, tuios's own state), a file with
-other names (hard links) is refused, and `files_read_roots` narrows it. The
-kitty checks above apply as well, including the temporary folder rule for
-t=t. A temporary folder is not required for t=f, because the link can
-already read the same file with `file-read`. Without the `files` capability
-B leaves the commands as they are, and A refuses them as it did before.
-
-A far machine from before this refuses the `kitty_media` param of open-pane,
-and the pane opens without it: file media are then refused for that pane,
-and a guest that asks first is told to stream.
 
 ### Sixel images
 
@@ -944,8 +789,6 @@ and over the next pane, with nothing to take it back.
 - An SSH client's terminal is guessed from its `TERM` first, then asked for DA1
   once the session runs (`internal/app/sixel_probe.go`). The answer replaces
   the guess.
-- `tuios-web` draws with xterm.js and its image addon, which does both sixel and
-  kitty graphics.
 - A terminal whose XTVERSION answer names xterm.js (VS Code, Netcatty, Tabby,
   Hyper) gets neither sixel nor kitty graphics, whatever it answers to the
   graphics queries. A local one is also recognised by `TERM_PROGRAM=vscode`.
@@ -1042,10 +885,10 @@ compressed on one, so neither holds up the UI.
 **Support.** "Tested" means run in a pane against a stand-in terminal of that
 kind; "expected" means the path is the same but the program was not run. The
 tuios mode does not change the result, because every client shows images to
-its own terminal: standalone, daemon, an SSH client (its DA1 answer decides)
-and tuios-web (a sixel host) all take the same path.
+its own terminal: standalone, daemon and an SSH client (its DA1 answer decides)
+all take the same path.
 
-| Program | Sixel host (foot, WezTerm, xterm, mlterm, Konsole, Windows Terminal, tuios-web) | Kitty host without sixel (kitty, Ghostty) | Host with neither (kmscon, plain SSH) |
+| Program | Sixel host (foot, WezTerm, xterm, mlterm, Konsole, Windows Terminal) | Kitty host without sixel (kitty, Ghostty) | Host with neither (kmscon, plain SSH) |
 | --- | --- | --- | --- |
 | chafa | tested: sixel | expected: chafa draws kitty graphics | tested: sixel, drawn as glyphs |
 | timg | tested: sixel | expected: timg draws kitty graphics | expected: sixel, drawn as glyphs |
@@ -1061,32 +904,7 @@ was tested with a sixel file of the same form.
 Standalone and daemon mode are covered by `e2e/tui/sixel_test.go`, which
 replays what tuios wrote to a stand-in sixel terminal and checks that the
 picture lands in the right cells, clipped, and is gone when cleared. An SSH
-client and a browser use the same code with a different writer; neither has an
-end-to-end test.
-
-## File transfers between machines
-
-A copy between machines is a job in the daemon of the machine where it was
-started (`internal/session/transfer.go`). That daemon reads and writes its own
-disk directly and reaches another machine's disk through that machine's
-daemon, with the file verbs (`verb_files.go`), over the link. So every
-direction, this machine to a host, a host to this machine and one host to
-another, is one code path with a different end.
-
-The bytes ride bulk streams (`internal/federation/bulk.go`). A link's mux has
-two write lanes: every ordinary frame goes first, and a bulk frame (64 KiB at
-most) waits for the ordinary lane to be empty. A bulk stream also keeps to a
-credit window, sized at twice the bytes of the shortest round trip seen, from
-256 KiB to 16 MiB, so a copy never fills the ssh channel's buffer ahead of a
-keystroke. A peer that sends no credit frames gets no window, so an older peer
-still works.
-
-Each file goes through a part file named by its job, a sha256 of the original
-and of the part, and a rename into place. A job that has not ended is in a
-journal under the state folder, so a daemon restart goes on with it from its
-parts. Writes that arrive over a link go through an `os.Root` at the home
-folder and are refused in a deny list (`verb_files_confine.go`). The contract
-is in [protocol.md](protocol.md#files-and-transfers).
+client uses the same code with a different writer; it has no end-to-end test.
 
 ## Performance Characteristics
 

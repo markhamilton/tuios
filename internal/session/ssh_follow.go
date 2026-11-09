@@ -926,9 +926,6 @@ func (s *Session) sshFollowArgv(window string) (argv, env []string, why string, 
 	if pty == nil || pty.IsExited() {
 		return nil, nil, "", false
 	}
-	if _, remote := pty.pty.(*remotePane); remote {
-		return nil, nil, "", false
-	}
 	host, dir := pty.place.ElsewhereReport()
 	return SSHFollowArgv(pty.ShellPID(), host, dir)
 }

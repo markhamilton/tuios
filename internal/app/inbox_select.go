@@ -131,17 +131,17 @@ func (m *OS) inboxItemSelected(it session.AttentionItem) bool {
 		return true
 	}
 	t := session.AttentionSelectorTarget(it)
-	if it.Host == "" {
-		var info *session.WorktreeInfo
-		switch {
-		case it.Session == m.SessionName:
-			info = m.SessionWorktree
-		case m.DaemonClient != nil:
-			info = m.DaemonClient.SessionWorktree(it.Session)
-		}
-		if info != nil {
-			t.Group = info.Group
-		}
+
+	var info *session.WorktreeInfo
+	switch {
+	case it.Session == m.SessionName:
+		info = m.SessionWorktree
+	case m.DaemonClient != nil:
+		info = m.DaemonClient.SessionWorktree(it.Session)
 	}
+	if info != nil {
+		t.Group = info.Group
+	}
+
 	return sel.Match(t)
 }

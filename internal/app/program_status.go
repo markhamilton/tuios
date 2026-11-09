@@ -127,7 +127,7 @@ func (m *OS) paneProgramStatus(sessionID, windowID string) []sessiontree.Program
 			}
 		}
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		return nil
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {

@@ -382,9 +382,6 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	// A listing that cannot say where a window runs is incomplete once a
 	// session can hold windows from more than one machine, and the listing is
 	// what scripts and agents read.
-	if w.Host != "" {
-		info["host"] = w.Host
-	}
 	// What the pane runs in the foreground, omitted at a shell prompt. The
 	// agent detector reads it; the tmux shim reports it as
 	// pane_current_command.
@@ -393,10 +390,6 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	}
 	// Set only while the link to that machine is lost and the pane is being
 	// reattached: reconnecting, and when the far machine stops keeping it.
-	if w.HostLink != "" {
-		info["host_link"] = w.HostLink
-		info["host_link_until"] = w.HostLinkUntil
-	}
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.
 	info["agent_state"] = w.AgentState.Name()

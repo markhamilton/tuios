@@ -155,7 +155,7 @@ type (
 // session on another host has its daemon there.
 func (m *OS) DaemonRestartAvailable() bool {
 	return m.IsDaemonSession && m.DaemonClient != nil && m.Client == ClientLocal &&
-		!m.RemoteClient && m.AttachedHost == "" && runtime.GOOS != "js"
+		!m.RemoteClient && runtime.GOOS != "js"
 }
 
 // DaemonRestartOpen reports whether the restart dialog is up.

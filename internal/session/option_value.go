@@ -45,7 +45,7 @@ type sessionOptions struct {
 // the default.
 func (d *Daemon) optionsFor(cs *connState, sess *Session) sessionOptions {
 	o := sessionOptions{sess: sess}
-	if d.configPath == "" || (cs != nil && cs.viaLink) {
+	if d.configPath == "" {
 		return o
 	}
 	lc, err := config.LoadLayered(d.configPath)

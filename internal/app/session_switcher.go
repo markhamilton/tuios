@@ -72,21 +72,9 @@ func (m *OS) OpenSessionSwitcher() {
 	m.SessionSwitcherItems = m.sessionSwitcherItems()
 }
 
-// sessionSwitcherItems is the tree's session list without the machines'
-// headers. A header is a group in the rail, not a session: listed here it
-// would read as a session called "local" whose Enter asks the daemon for a
-// session named "\x00host/local". The sessions under each machine stay, and
-// switching to one crosses to its machine through OpenSessionNode.
+// sessionSwitcherItems is the tree's session list.
 func (m *OS) sessionSwitcherItems() []sessiontree.Node {
-	sessions := m.BuildSessionTree().Sessions
-	out := make([]sessiontree.Node, 0, len(sessions))
-	for _, n := range sessions {
-		if n.Kind == sessiontree.KindHost {
-			continue
-		}
-		out = append(out, n)
-	}
-	return out
+	return m.BuildSessionTree().Sessions
 }
 
 // SessionSwitcherTarget returns the session the switcher's selection points at,
@@ -144,17 +132,10 @@ func FilterSessionItems(items []sessiontree.Node, query string) []sessiontree.No
 
 // sessionSwitcherKeys is what a switcher row can be found by.
 func sessionSwitcherKeys(item sessiontree.Node) []string {
-	if item.Host == "" {
-		return []string{item.Title, item.ID}
-	}
-	return []string{item.Title, remoteSessionName(item), item.Host, sessionSwitcherLabel(item)}
+	return []string{item.Title, item.ID}
 }
 
-// sessionSwitcherLabel is the label a switcher row shows: the session's title,
-// and for a session on another machine, "title @ host".
+// sessionSwitcherLabel is the label a switcher row shows: the session's title.
 func sessionSwitcherLabel(item sessiontree.Node) string {
-	if item.Host == "" {
-		return item.Title
-	}
-	return item.Title + " @ " + item.Host
+	return item.Title
 }

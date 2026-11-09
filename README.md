@@ -43,7 +43,7 @@ The MIT license and the upstream copyright stay. See [LICENSE](LICENSE).
   <img alt="TUIOS" src="./assets/demo.gif">
 </picture>
 
-TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette, all running inside your existing terminal. A daemon keeps sessions alive, reaches sessions on your other machines, and lets the coding agents in your panes report their state and message each other.
+TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette, all running inside your existing terminal. A daemon keeps sessions alive and lets the coding agents in your panes report their state and message each other.
 
 Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driven rendering for near-zero idle CPU usage, flicker-free kitty image passthrough, and comprehensive keyboard/mouse interaction.
 
@@ -64,8 +64,8 @@ What changed in v0.10.1 is in the [release notes](docs/release-notes/v0.10.1.md)
 - **[Glyph sets](docs/GLYPHS.md)**: The characters the chrome is drawn with
 - **[CLI Reference](docs/CLI_REFERENCE.md)**: All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)**: Automate workflows
-- **[Sessions](docs/SESSIONS.md)**: Daemon mode, attach/detach, other machines, and what survives
-- **[Agents](docs/AGENT_STATE.md)**: Running coding agents in tuios: state, the Inbox, approvals, fleets, other machines, grants and MCP
+- **[Sessions](docs/SESSIONS.md)**: Daemon mode, attach/detach, and what survives
+- **[Agents](docs/AGENT_STATE.md)**: Running coding agents in tuios: state, the Inbox, approvals, fleets, grants and MCP
 - **[Program Status](docs/PROGRAM_STATUS.md)**: OSC 7501 from any program, `tuios status`, and the reports tuios sends to its own terminal
 - **[tmux Shim](docs/TMUX_SHIM.md)**: Run tools that drive tmux, such as Claude Code agent teams
 - **[Control Protocol](docs/protocol.md)**: JSON verb protocol for driving the daemon
@@ -150,7 +150,7 @@ tuios does not yet detect sixel support in the terminal on Windows, so set
 
 `tuios completion <shell>` prints a completion script for bash, zsh, fish or
 PowerShell. Besides subcommands and flags, it completes values such as session
-names for `--session` and configured hosts for `--host`.
+names for `--session`.
 
 ```bash
 # Bash (needs the bash-completion package)
@@ -205,7 +205,7 @@ Each picture is a capture that tuios made of itself. Click one to read its docs 
 The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Agent State**: Panes running a coding agent show whether it is working, waiting for you, done or errored, as a shape in the title and a row on the rail. `tuios integration install` wires 19 harnesses (Claude Code, Codex, Gemini CLI, opencode and more) to report it, and tuios detects 24 agent CLIs by their process and screen
 - **Program Status (OSC 7501)**: Any program can say what it is doing with the Program Status Protocol, or with `tuios status working --app build --progress 40`. A build, a deploy script or `brew` then shows on the rail and in the Inbox like an agent. tuios also reports its panes to a terminal that reads the protocol, such as Rex ([docs](docs/PROGRAM_STATUS.md))
-- **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode, Kilo and Qwen Code permission requests with one key
+- **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode, Kilo and Qwen Code permission requests with one key
 - **Questions and Messages**: `tuios ask-human` puts a question with fixed answers in your Inbox. Agents mail each other with `tuios send-agent-message`, and `tuios ask-agent` asks one and waits for its answer. It never types into a pane waiting on a prompt, and replies from you are marked verified
 - **Fleets**: `tuios fan` starts one prompt in several agents, mixed harnesses allowed, each in its own git worktree. `tuios start-agent` starts one helper beside you, in its TUI or headless over ACP or the Codex app-server. Selectors such as `group:fan/retry needs:you` address a whole group
 - **Resume**: After a daemon restart, the Inbox offers to resume each agent conversation that was running
@@ -214,13 +214,6 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **tmux Shim**: `tuios tmux-shim` runs tools that drive tmux, such as Claude Code agent teams, with their panes opened as tuios panes
 - **Session Stash**: `tuios stash put` keeps a file for the session, so another agent can still open it
 - **Agent Skill**: `tuios --skill` prints the short guide an agent in a pane reads to drive tuios, and `tuios --skill TOPIC` the rest, recipes included. To move your tmux, zellij or herdr settings over, tell your agent: "Run `tuios --skill config` and move my tmux settings over."
-
-### Machines
-- **Hosts**: `tuios hosts add` names another machine, reached over ssh. `tuios hosts tailnet` lists the machines on a Tailscale tailnet
-- **Remote Sessions**: `tuios attach --host build api` draws a session on another machine in this client, and `-s HOST:SESSION` sends any command there
-- **Hosted Panes**: `tuios new-window NAME --host build` runs one pane's process on another machine, in a session here
-- **Global Sessions**: `tuios new NAME --global` holds panes from several machines ([docs](docs/SESSIONS.md))
-- **Agents on Other Machines**: `tuios fan --host build` and `tuios start-agent -s build:api` run agents there, their Inbox items show here, and `tuios worktree pull` brings their work back. Each machine's `[hosts]` policy says what the others may do
 
 ### Tiling
 - **BSP Tiling**: Binary Space Partitioning with spiral layout

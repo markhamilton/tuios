@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // queueFixture is a daemon whose queue looks at a pane 50 ms after it comes
@@ -90,21 +88,6 @@ func TestQueuedPaneEntryIsCheckedAgainWhenTyped(t *testing.T) {
 	d.setApprovalPeer(nil)
 	setAgentState(t, person, "a", a2, "idle", "", "")
 	eventually(t, "the entry is typed", 5*time.Second, func() bool { return paneShows(t, d, sess, a2, "again-a1") })
-}
-
-// TestQueueOriginRefusalForALink: an entry a linked machine queued is typed
-// only while that machine's policy still allows write.
-func TestQueueOriginRefusalForALink(t *testing.T) {
-	d, _, sess, _, _, b := queueFixture(t)
-	target, _ := findWindowState(sess.GetState(), b)
-	e := &queueEntry{origin: queueOrigin{kind: "link", peer: "laptop"}}
-	if why := d.queueOriginRefusal(e, sess, target); why != "" {
-		t.Fatalf("the default policy, which allows write, refused: %s", why)
-	}
-	d.SetLinkPolicies(map[string]config.HostConfig{"laptop": {Allow: []string{"list"}}})
-	if why := d.queueOriginRefusal(e, sess, target); why == "" || !strings.Contains(why, "laptop") {
-		t.Fatalf("a link that may only list was not refused: %q", why)
-	}
 }
 
 // TestCancelQueuedOwnership: the person drops anything, a pane only what it
@@ -270,46 +253,6 @@ func TestQueueRechecksNeedsInputRightBeforeTyping(t *testing.T) {
 	}
 	if got := queuedEntries(t, c, b); len(got) != 1 || got[0]["state"] != queueWaiting {
 		t.Fatalf("list-queued = %v, want the entry waiting again", got)
-	}
-}
-
-// TestCancelQueuedUnnamedLinks: two linked machines that gave no name share
-// the empty peer, and neither may drop what the other queued. Each drops its
-// own.
-func TestCancelQueuedUnnamedLinks(t *testing.T) {
-	d, _, _, c, _, b := queueFixture(t)
-	setAgentState(t, c, "work", b, "working", "", "")
-	one := &connState{clientID: "link-one", viaLink: true, done: make(chan struct{})}
-	two := &connState{clientID: "link-two", viaLink: true, done: make(chan struct{})}
-	queue := func(cs *connState, text string) string {
-		res, verr := d.verbQueuePrompt(cs, mustJSON(map[string]any{"session": "work", "window": b, "text": text}))
-		if verr != nil {
-			t.Fatalf("queue-prompt over a link: %v", verr.Message)
-		}
-		return res.(map[string]any)["id"].(string)
-	}
-	idOne := queue(one, "from link one")
-	idTwo := queue(two, "from link two")
-	if _, verr := d.verbCancelQueued(two, mustJSON(map[string]any{"session": "work", "id": idOne})); verr == nil || verr.Code != ErrVerbForbidden {
-		t.Fatalf("an unnamed link dropping another unnamed link's entry = %v, want forbidden", verr)
-	}
-	res, verr := d.verbCancelQueued(two, mustJSON(map[string]any{"session": "work", "window": b, "all": true}))
-	if verr != nil {
-		t.Fatal(verr.Message)
-	}
-	if ids := res.(map[string]any)["cancelled"].([]string); len(ids) != 1 || ids[0] != idTwo {
-		t.Fatalf("an unnamed link's cancel all = %v, want only its own entry", ids)
-	}
-	if _, verr := d.verbCancelQueued(one, mustJSON(map[string]any{"session": "work", "id": idOne})); verr != nil {
-		t.Fatalf("an unnamed link dropping its own entry: %v", verr.Message)
-	}
-
-	// A named machine drops what it queued, on any connection.
-	named := &connState{clientID: "link-three", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
-	again := &connState{clientID: "link-four", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
-	id := queue(named, "from laptop")
-	if _, verr := d.verbCancelQueued(again, mustJSON(map[string]any{"session": "work", "id": id})); verr != nil {
-		t.Fatalf("laptop dropping its own entry after reconnecting: %v", verr.Message)
 	}
 }
 

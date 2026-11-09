@@ -156,7 +156,7 @@ shows `NEST F12`.
 `tuios keybinds list` shows every action and the keys that run it, as your
 `config.toml` sets them. It has one table for each scope: global, window mode,
 terminal mode, the sidebar and its files and agent rows, the agents view, its prompt,
-the mailbox, the Copies panel, copy mode, the prefix and each prefix menu, and tape playback. A key in a
+the mailbox, copy mode, the prefix and each prefix menu, and tape playback. A key in a
 prefix menu shows with its chord, such as `ctrl+b L 5`. The command keys have a
 table of their own.
 
@@ -230,35 +230,16 @@ as one paste.
 tuios does not paste the path in these cases. The label and a dock note say
 why.
 
-- The pane is on another machine.
 - The pane runs ssh or mosh, or its shell reports a folder on another machine.
-- The file is in a listing from another machine.
 - The name holds a line break or a control character.
 - The pane is in copy mode.
 
 A drag never copies or moves the file. To turn the drag off, set
 `appearance.sidebar.file_drag = false`.
 
-When the session runs on another machine, tuios does not check the file on your
-machine. If the editor is not on that machine, no pane opens. tuios shows a
-dock note that names the editor and the machine, so you know what to check.
-
-With the File editor setting empty, a remote session uses `$EDITOR` from this
-machine. Set the File editor if the far machine has a different editor.
-
-tuios can not edit a file that lists from a different machine than the one the
-session runs on.
-
 `Shift+Enter` needs a terminal that reports modified Enter, such as one that
 uses the Kitty keyboard protocol. On other terminals, use the Edit row in the
 context menu of a file, or bind `file_edit` to a different key.
-
-`S` sends the selected file or folder to a host. tuios asks which host, then
-which folder. The folder field starts as `~/Downloads/tuios/`.
-tuios makes the folder when it is not there. A file that is there stays, and
-the copy gets the name `name (from HOST).ext`. The context menu of a row has a
-Send to host row that does the same. The binding is `file_send` in
-`[keybindings.sidebar_files]`.
 
 `Space` shows a quick look preview of the selected row. The preview opens over
 the panes and shows:
@@ -277,9 +258,7 @@ shows that row. `Space` or `Esc` closes the preview. A click outside it closes
 it too. The preview takes no other key: every other key goes to the sidebar.
 When the sidebar loses keyboard focus, the preview closes.
 
-For a listing on another machine, that machine reads the file and sends the
-preview. Its host policy must allow `files`. The binding is `file_quick_look`
-in `[keybindings.sidebar_files]`.
+The binding is `file_quick_look` in `[keybindings.sidebar_files]`.
 
 A picture uses Kitty graphics when the terminal supports them. Other terminals
 get block characters. At 16 colours the preview names the picture and does not
@@ -384,8 +363,7 @@ not to the panes.
 
 `Ctrl+B /` opens the pane navigator. It shows a tree of sessions, workspaces
 and panes on the left, and a preview of the highlighted row on the right. The
-sessions on the machines in `[hosts]` are in the tree too. The action is
-`choose_tree`, as in tmux.
+action is `choose_tree`, as in tmux.
 
 | Key | What it does |
 |---|---|
@@ -454,7 +432,7 @@ pane       payments › 1 › nvim
 
 With nothing typed, the first row is the place you were on last, so `Ctrl+B G` and `enter` take you back to where you were. The agents that need you come right after it, the one waiting longest first, then the other places you were on recently, the most recent first, then every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
 
-Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `host:`, `name:`), and three more:
+Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `name:`), and three more:
 
 | Term | Keeps |
 |---|---|
@@ -472,7 +450,7 @@ A value is a glob, and commas between values mean any of them, as in `kind:sessi
 | `ctrl+u` | Clear the query |
 | `esc` | Close the picker |
 
-Workspaces and panes are listed for the sessions on the machine you are attached to. A session on another machine is listed, and its agents are, and `enter` on it attaches that machine as the rail does. A workspace of a session you are not attached to shows its number, because its name is not sent to your client.
+A workspace of a session you are not attached to shows its number, because its name is not sent to your client.
 
 ## Neovim pane navigation
 
@@ -509,7 +487,7 @@ TUIOS itself.
 
 Every list in the TUI moves the same way: the command palette, the launcher,
 the settings page, the agents view, the mailbox, the keybind manager, the theme,
-glyph and effect pickers, the session, workspace, layout and machine pickers,
+glyph and effect pickers, the session, workspace and layout pickers,
 the go-to picker, the window picker, the quit and context menus, the dock and rail editors and
 the tape manager.
 
@@ -782,8 +760,6 @@ or `~/` stays absolute. tuios puts a path with a space or a special character
 in quotes. When the program in the pane turned on bracketed paste, tuios
 sends the path as a paste. Else it types the path.
 
-The picker works in a pane on another machine. The daemon on that machine
-lists the folder, with the same read rules as the sidebar's files section.
 When the shell in the pane runs ssh to another machine, the picker does not
 open.
 
@@ -812,8 +788,7 @@ in. The action is `toggle_calm`. To keep calm mode on after a restart, set
 
 `Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios
 saves the image to a file on the machine where the pane runs. Then it pastes
-the path of that file into the pane. The pane can run on this machine or on a
-host. Claude Code, Codex and other agents read an image from a path in the
+the path of that file into the pane. Claude Code, Codex and other agents read an image from a path in the
 prompt. The action is `paste_image`, and the command palette has it too.
 
 The paste binding also pastes an image. `terminal_paste_host` in
@@ -835,7 +810,6 @@ pastes text. It then does not ask the tool again until tuios restarts.
 
 `Ctrl+V` alone goes to the program in the pane. Claude Code reads the
 clipboard on `Ctrl+V` itself, and that only works in a pane on this machine.
-For a pane on a host, use `Ctrl+B V`.
 
 tuios reads the image with the clipboard tool of your system:
 
@@ -853,43 +827,8 @@ The file is in the `paste` folder next to the tuios socket. The folder keeps
 at most 50 images and 100 MB. When it is full, tuios deletes the oldest image.
 If the `paste` folder is a symbolic link, tuios does not paste.
 
-### A pane on another machine
-
-A pane can run on another machine in three ways. In each, tuios writes the
-image on that machine:
-
-- A session on a host, attached with `tuios attach --host NAME`. The daemon on
-  the host writes the file.
-- A window on a host in a session of this machine. The daemon on the host
-  writes the file.
-- A pane of this machine that runs `ssh` or `mosh` to another machine, such
-  as `ssh build` or `ssh -t build tmux`. tuios reads the ssh command line from
-  the process. It resolves that line and each `[hosts]` entry with `ssh -G`.
-  It compares the host name, the user, the port and the jump hosts. When
-  exactly one entry is the same, tuios copies the image to the drop folder of
-  that host and pastes the path there.
-
-The other machine must allow `files` from this machine. If it does not, tuios
-pastes nothing and shows the line to add to the config on that machine.
-
-tuios pastes nothing in an ssh pane in these cases. A message says why.
-
-- No `[hosts]` entry is the machine of the ssh command. Add the machine with
-  `tuios hosts add NAME ADDR`.
-- More than one `[hosts]` entry is that machine. Keep one of them.
-- tuios cannot read the ssh command line, for example because it has `-F` or
-  `-o ProxyCommand`.
-- The shell over there reports a folder on another `[hosts]` machine: the pane
-  runs ssh inside ssh. Paste the image in a pane on that machine.
-
-An ssh tunnel (`ssh -N`, or `-f`, `-n` or `-W` without `-t`) does not read
-what you type. tuios saves the image on this machine for it. So does a pane
-that only reports a folder on another machine and runs no ssh.
-
 tuios does not read the clipboard in these cases:
 
-- The client runs in a browser. Save the image to a file and paste the path.
-- The client runs on another machine through `tuios ssh`.
 - The client runs inside ssh. The clipboard there is the other machine's.
   An X display that `ssh -X` forwards is the exception: tuios reads it.
 - The paste comes from `send-keys`.
@@ -971,19 +910,9 @@ an entry that has no `name`, the panes of its scratch terminal close at the
 next reload. The
 dock shows a message.
 
-In a session on a different machine, a `scratch`, `popup` or `pane` entry runs
-on the machine of the session. The command runs as the user of that machine,
-in the folder of the focused pane on that machine. A `~` in the command is the
-home folder on that machine. A `popup` or `scratch` entry there needs `"open"`
-in the `allow` list of that machine's `[hosts]` table for your machine. Without
-it, the dock shows a message that names the table to change. A `shell` entry
-runs on the machine that runs the tuios client.
-
 Only a key press or the command palette runs a command key. A change to
 `config.toml` does not run a command. A pane that has the respond grant can
-press keys as you through `run-command`. It can press a command key, also from
-a session on a different machine, and a `shell` entry then runs on this
-machine. Give the respond grant only to a pane that you trust.
+press keys as you through `run-command`. It can press a command key. Give the respond grant only to a pane that you trust.
 
 ### Recipes
 
@@ -1137,7 +1066,6 @@ The command palette has the entry "Restart the daemon". These open it too:
   for example "The daemon runs 0.10.0. ctrl+b j restarts it." Click it, or
   press the key it names. Press `esc` to put it off until the next start.
 - The row "Restart the daemon" at the top of the Daemon tab in the settings.
-- The rail's menu for this machine.
 
 A dialog shows the daemon's version now and after the restart, and this
 window's version when it moves too. It lists the programs that stop, by pane
@@ -1212,30 +1140,6 @@ nothing. The actions have no default key. The command palette has the entries
 next_workspace = ["alt+y"]
 prev_workspace = ["alt+u"]
 ```
-
-## Cycle through machines
-
-The `next_host` and `prev_host` actions go to a session on the next or the
-previous machine. The order is the order of the machine groups in the rail.
-This machine is first, then the machines of the `[hosts]` table. The actions
-wrap at the end. They skip a machine whose link is not up and a machine with
-no session.
-
-On each machine, they go to the session you last showed on that machine. If
-you have not been on that machine, or that session is gone, they go to the
-session that is attached there. If no session is attached, they go to the first
-session in the rail. With no other machine, they show "No other machines".
-
-The actions have no default key. The command palette has the entries "Next
-machine" and "Previous machine". To bind them:
-
-```toml
-[keybindings.window_management]
-next_host = ["alt+."]
-prev_host = ["alt+,"]
-```
-
-Like `next_session`, a chord with Alt or Ctrl also works in terminal mode.
 
 ## Actions for a tmux-style keymap
 
@@ -1481,8 +1385,6 @@ The command palette entry is "Edit the scrollback in the editor".
   editor exits.
 - The file is in a private folder. tuios removes the file when the editor
   exits, and when the client stops.
-- A browser client or an SSH client from another machine cannot open the
-  editor. tuios shows a message.
 
 In copy mode, `e` and `E` move to the end of a word, as in vim. For this
 reason, the editor key is `Ctrl+G`. `Ctrl+G` also opens a reply in the editor.
@@ -1631,8 +1533,7 @@ Use the `json` format to process each pane separately, for example with `jq`.
 With `cancel = true`, multi copy mode stops in every pane.
 
 The command runs on the machine that runs the tuios client. That is the same
-machine as for a `shell` command key. For the SSH and web clients, it is the
-server. The command starts in the folder of the focused pane and gets the
+machine as for a `shell` command key. The command starts in the folder of the focused pane and gets the
 variables of a command key: `TUIOS_SESSION`, `TUIOS_SOCKET`,
 `TUIOS_ACTIVE_PANE_ID` and `TUIOS_ACTIVE_PANE_CWD`. You can use tuios while
 the command runs.
@@ -1676,37 +1577,6 @@ they go when the daemon stops. `[paste_buffers]` in `config.toml` sets how
 many to keep. The commands `tuios list-buffers`, `show-buffer`, `set-buffer`,
 `delete-buffer` and `paste-buffer` read and change the same buffers, and so
 does `tmux` under the tmux shim.
-
-## Copies between machines
-
-`Ctrl+B u` opens the Copies panel. It shows one row for each copy between
-machines, the newest first. The dock item `transfers` opens it too, with a
-click. The command palette row is "Copies between machines".
-
-| Key | Action | What it does |
-| --- | --- | --- |
-| `j` `k` `Down` `Up` | `transfers_down` `transfers_up` | Move the cursor |
-| `p` | `transfers_pause` | Pause the copy, or go on with it |
-| `x` | `transfers_cancel` | Cancel the copy. tuios asks first |
-| `r` | `transfers_retry` | Try a failed copy again from where it stopped |
-| `c` | `transfers_clear` | Remove the copies that ended |
-| `Enter` | `transfers_answer` | Answer a copy that waits for an answer |
-| `Esc` `q` | `transfers_close` | Close the panel |
-
-The keys are in `[keybindings.transfers]`. The panel key is
-`prefix_transfers` in `[keybindings.prefix_mode]`.
-
-A copy waits for an answer when a file is there on the other machine and the
-copy was started with `conflict = "ask"`. The dock says `1 copy asks`. Press
-`Enter` on the row to choose Replace, Keep both or Skip. Press `Space` to use
-the answer for the other files of the copy. tuios does not open this question
-by itself, because `tuios cp` in a pane asks the same question there.
-
-When you drop files on a pane whose program runs on another machine, the
-terminal pastes their paths. tuios asks whether to send the files to that
-machine. Send copies them to a private drop folder there. When the copy is
-checked, tuios pastes the path on that machine. Paste the text pastes the paths
-as they are. A paste into a pane on this machine is not changed.
 
 ## Screenshots over a panel
 
@@ -1818,10 +1688,10 @@ so and keeps nothing. `enter` goes
 to the attempt's pane, `r` reads the attempts again and `esc` goes back.
 
 The New agent sheet starts an agent with a task. Write the task, then pick
-the agent, the model, where it works and the machine. `tab` and `shift+tab`
+the agent, the model and where it works. `tab` and `shift+tab`
 move between the fields. `left` and `right` change the agent, where it works,
 the attempts and the button. `space` or `down` on the agent opens the list of
-every agent. `up` and `down` on the machines pick one. `v` on the attempts
+every agent. `v` on the attempts
 gives each attempt a different agent. `ctrl+j` adds a new line to the task.
 `enter` starts. `esc` closes the sheet and keeps what you wrote for the next
 `n`.
@@ -1833,13 +1703,10 @@ gives each attempt a different agent. `ctrl+j` adds a new line to the task.
 | Model | Passed to the agent as `--model`. Empty uses the agent's default |
 | Where it works | A new worktree on its own branch, or this folder |
 | Branch, Base | The new branch, named after the task until you change it, and where it starts |
-| Machine | This machine and the linked hosts, the most free cores first |
 | Attempts | 1 to 8. Each attempt gets its own worktree and branch |
 
 A new worktree goes through the same path as `tuios fan`, and this folder
-through `tuios start-agent`. Uncommitted files stay in this folder. On a
-linked host the agent works in a new worktree of the host's checkout, which
-the host finds by the repository's origin.
+through `tuios start-agent`. Uncommitted files stay in this folder.
 
 The Artifacts tab lists what the agent has shown you: each TML document its
 pane opened, open or closed, and each screenshot it took. The newest is
@@ -2252,8 +2119,7 @@ the Mac when it starts:
 
 If you change the layout while tuios runs, tuios reads it again when such a
 character arrives and the last read is more than 30 seconds old. The new
-layout applies from the next key. A tuios that serves SSH or web clients from
-a Mac uses the layout of that Mac.
+layout applies from the next key.
 
 `keyboard_layout` overrides the layout that tuios reads. With
 `keyboard_layout = "us"`, tuios runs the binding. With

@@ -127,36 +127,6 @@ func TestShellEntryRunsAndReportsAFailure(t *testing.T) {
 	}
 }
 
-// In a session on another machine popup and scratch entries go to that
-// machine, in the focused pane's folder there.
-func TestCommandEntriesOnAnotherMachine(t *testing.T) {
-	m := commandOS(t, true,
-		config.CommandBinding{Key: "alt+t", Command: "htop", Name: "top"},
-		config.CommandBinding{Key: "alt+y", Type: "scratch", Name: "notes"})
-	m.AttachedHost = "build"
-	m.Windows[0].Cwd = "file://build/srv/app"
-	var popups []commandPopupRequest
-	var scratches []scratchRequest
-	prevPopup, prevScratch := commandPopupOpener, scratchOpener
-	commandPopupOpener = func(r commandPopupRequest) error { popups = append(popups, r); return nil }
-	scratchOpener = func(r scratchRequest) error { scratches = append(scratches, r); return nil }
-	t.Cleanup(func() { commandPopupOpener, scratchOpener = prevPopup, prevScratch })
-
-	for _, action := range []string{"command:top", "command:notes"} {
-		cmd := m.RunCommandBinding(action)
-		if cmd == nil {
-			t.Fatalf("%s did not run in a session on another machine", action)
-		}
-		cmd()
-	}
-	if len(popups) != 1 || popups[0].Host != "build" || popups[0].Dir != "/srv/app" {
-		t.Fatalf("popup = %+v", popups)
-	}
-	if len(scratches) != 1 || scratches[0].Host != "build" || scratches[0].Dir != "/srv/app" {
-		t.Fatalf("scratch = %+v", scratches)
-	}
-}
-
 // The palette lists each entry by its description.
 func TestCommandEntriesInThePalette(t *testing.T) {
 	m := commandOS(t, false, config.CommandBinding{Key: "prefix+alt+g", Type: "scratch", Command: "lazygit", Description: "Lazygit"})
@@ -243,24 +213,6 @@ func TestLocalScratchThatStopsAtOnceIsReported(t *testing.T) {
 	m.noteLocalScratchExit(w)
 	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "X stopped") {
 		t.Fatalf("notifications = %+v", m.Notifications)
-	}
-}
-
-// In a session on another machine a pane entry gets no socket of this
-// machine and starts in the focused pane's folder there.
-func TestRemotePaneEntryEnv(t *testing.T) {
-	m := commandOS(t, true)
-	m.AttachedHost = "build"
-	m.Windows[0].Cwd = "file://build/srv/app"
-	if got := m.remotePaneDir(); got != "/srv/app" {
-		t.Fatalf("dir = %q, want /srv/app", got)
-	}
-	env := m.commandEnv(m.remotePaneDir())
-	if _, ok := env["TUIOS_SOCKET"]; ok {
-		t.Fatal("a remote pane got this machine's socket")
-	}
-	if env["TUIOS_ACTIVE_PANE_CWD"] != "/srv/app" {
-		t.Fatalf("env = %v", env)
 	}
 }
 

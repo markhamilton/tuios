@@ -44,14 +44,11 @@ const resumeWindow = 48 << 10
 type Attached struct {
 	// SessionID is the daemon's id for the session.
 	SessionID string `json:"session_id,omitempty"`
-	// DaemonPID is the daemon's process id, 0 for a daemon on another host.
-	// A new pid with a restored session means the daemon restarted.
+	// DaemonPID is the daemon's process id. A new pid with a restored session means the daemon restarted.
 	DaemonPID int `json:"daemon_pid,omitempty"`
 	// Restored marks a session the daemon rebuilt from saved state that no
 	// client had attached since.
 	Restored bool `json:"restored,omitempty"`
-	// Host is the machine the session is on, empty for this one.
-	Host string `json:"host,omitempty"`
 }
 
 // pickSession chooses the session to attach: the one with id, then name
@@ -71,11 +68,8 @@ func pickSession(list []session.SessionInfo, id, name string) string {
 
 // attachedInfo is what the attached event says about name, read from the
 // listing before the attach clears the restored mark.
-func attachedInfo(list []session.SessionInfo, name, host string) Attached {
-	a := Attached{Host: host}
-	if host == "" {
-		a.DaemonPID = session.GetDaemonPID()
-	}
+func attachedInfo(list []session.SessionInfo, name string) Attached {
+	a := Attached{DaemonPID: session.GetDaemonPID()}
 	for _, s := range list {
 		if s.Name == name {
 			a.SessionID, a.Restored = s.ID, s.Restored
@@ -84,16 +78,9 @@ func attachedInfo(list []session.SessionInfo, name, host string) Attached {
 	return a
 }
 
-// listSessions asks the daemon that holds the sessions (this machine's, or
-// host's through it) for every session with its id.
-func listSessions(version, host string) []session.SessionInfo {
-	var c *session.VerbClient
-	var err error
-	if host == "" {
-		c, err = session.DialVerbClientAs(version)
-	} else {
-		c, _, err = session.DialVerbClientThroughHost(host, version)
-	}
+// listSessions asks the daemon for every session with its id.
+func listSessions(version string) []session.SessionInfo {
+	c, err := session.DialVerbClientAs(version)
 	if err != nil {
 		return nil
 	}
@@ -202,14 +189,9 @@ func (t *tap) ResumeFrom(ptyID string, snapSeq int64) int64 {
 	return at
 }
 
-// dialVerb opens a verb connection to the daemon that holds the session: this
-// machine's, or the host's through it.
+// dialVerb opens a verb connection to the daemon that holds the session.
 func (m *model) dialVerb() (*session.VerbClient, error) {
-	if m.host == "" {
-		return session.DialVerbClientAs(m.version)
-	}
-	c, _, err := session.DialVerbClientThroughHost(m.host, m.version)
-	return c, err
+	return session.DialVerbClientAs(m.version)
 }
 
 // idOf finds name's id in a list-sessions answer.

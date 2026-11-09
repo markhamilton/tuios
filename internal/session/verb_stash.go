@@ -49,13 +49,6 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 	if p.Path == "" {
 		return nil, invalidParam("path", "path is required: name the file to store")
 	}
-	viaLink := cs != nil && cs.viaLink
-	if viaLink && p.Content == nil {
-		return nil, hintedVerbError(ErrVerbForbidden, "stash put "+echoName(p.Path)+": a linked machine sends the file's bytes as content", &VerbHint{
-			Param:  "content",
-			Detail: "Nothing was stored. Send the file's bytes, base64, in content.",
-		})
-	}
 	content := ""
 	if p.Content != nil {
 		content = *p.Content
@@ -71,7 +64,7 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 	}
 	var res stashResult
 	var err error
-	if content != "" || viaLink {
+	if content != "" {
 		if len(content) > base64.StdEncoding.EncodedLen(stashTransferMaxBytes) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
 				Param:  "content",

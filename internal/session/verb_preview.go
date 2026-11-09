@@ -102,13 +102,7 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 
 	// The name is judged before anything about the file is said, so a
 	// folder or a pipe in the deny list gets the same refusal as a file.
-	if verr := d.checkLinkRead(cs, path); verr != nil {
-		return nil, verr
-	}
-	f, fi, verr, err := d.openLinkRead(cs, path)
-	if verr != nil {
-		return nil, verr
-	}
+	f, fi, err := openRegular(path)
 	if err != nil && fi == nil {
 		return nil, fileError("preview", path, err)
 	}

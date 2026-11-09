@@ -34,37 +34,6 @@ func TestAnAnnouncedDirectoryIsNotOverwrittenByTheDaemons(t *testing.T) {
 	}
 }
 
-// TestTheSpoofCheckIsNotRunAgainstAnotherMachinesPid.
-//
-// A window's ShellPgid is filled from the daemon's WindowState.ShellPID, and
-// that is done for every pane including one attached from another machine. The
-// number is then a pid on that machine, and reading it here asks the local
-// operating system about whatever process happens to hold the same number.
-//
-// A security check is allowed to answer "no evidence". It is not allowed to
-// answer using a fact from the wrong computer, which is what comparing a remote
-// shell's directory against an unrelated local process does. The check is for
-// panes this client's own daemon owns, and it runs only for those.
-//
-// Negative control: removing the AttachedHost gate makes the remote case carry
-// a pid and this fails.
-func TestTheSpoofCheckIsNotRunAgainstAnotherMachinesPid(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		host string
-		want bool
-	}{
-		{"on this machine the check runs", "", true},
-		{"on another machine it does not", "ente", false},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			if got := spoofCheckApplies(c.host); got != c.want {
-				t.Errorf("attached to %q the check applies=%v, want %v", c.host, got, c.want)
-			}
-		})
-	}
-}
-
 // TestAFailedListingIsNotRetriedOnEveryMessage is the other half. FilesSyncCmd
 // runs once per message, so an unpaced retry is a request to the daemon per
 // keystroke for as long as the directory stays unreadable.

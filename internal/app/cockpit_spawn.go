@@ -19,8 +19,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -78,13 +76,12 @@ type spawnAgent struct {
 
 // spawnMachine is one machine the sheet offers.
 type spawnMachine struct {
-	// host is the [hosts] name, empty for this machine.
-	host, name string
-	cores      int
-	load       float64
-	loadOK     bool
-	working    int
-	up         bool
+	name    string
+	cores   int
+	load    float64
+	loadOK  bool
+	working int
+	up      bool
 }
 
 // spawnSheet is the open sheet, or a closed one kept as a draft.
@@ -152,7 +149,6 @@ type spawnPreset struct {
 	Model    string `json:"model,omitempty"`
 	Folder   bool   `json:"this_folder,omitempty"`
 	Attempts int    `json:"attempts,omitempty"`
-	Host     string `json:"host,omitempty"`
 }
 
 // spawnStartedMsg is the daemon's answer to a Start.
@@ -194,7 +190,6 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 			s.model.SetText(pr.Model)
 			s.worktree = !pr.Folder
 			s.attempts = min(max(pr.Attempts, 1), spawnMaxAttempts)
-			s.machines = []spawnMachine{{host: pr.Host}}
 			if pr.Agent != "" {
 				ck.spawnLast = pr.Agent
 			}
@@ -225,7 +220,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 // runs git there and Start makes a worktree of it, so an OSC 7 report alone
 // never chooses it (paneShellDir).
 func (m *OS) spawnFolder() string {
-	if w := m.GetFocusedWindow(); w != nil && m.paneIsLocal(w) {
+	if w := m.GetFocusedWindow(); w != nil {
 		if dir, ok := paneShellDir(w, true); ok {
 			return dir
 		}
@@ -306,97 +301,27 @@ func (m *OS) spawnSortAgents(s *spawnSheet) {
 // spawnCommon are the harnesses most people run, by manifest id.
 var spawnCommon = []string{"claude-code", "codex", "gemini", "opencode"}
 
-// spawnRank lists the machines best fit first: by spare cores (cores minus
-// load, minus half a core per working agent), then the machines that report
-// no load by fewest working agents. A machine whose link is down is last and
-// cannot be picked.
+// spawnRank reads this machine's cores, load and working agents for the
+// sheet's machine row.
 func (m *OS) spawnRank(s *spawnSheet) {
-	picked := ""
-	if s.machine < len(s.machines) {
-		picked = s.machines[s.machine].host
-	}
-	working := map[string]int{}
+	working := 0
 	for _, e := range m.agentEntries(m.BuildSessionTree().Sessions) {
 		if e.State == "working" {
-			working[e.Host]++
+			working++
 		}
 	}
 	name, _ := os.Hostname()
 	if i := strings.IndexByte(name, '.'); i > 0 {
 		name = name[:i]
 	}
-	// While attached, the tree's own sessions are the far machine's, and
-	// this machine's come in under the local host name.
-	hostWorking := func(host string) int {
-		switch {
-		case m.AttachedHost == "":
-			return working[host]
-		case host == "":
-			return working[federation.LocalHostName]
-		case host == m.AttachedHost:
-			return working[""]
-		}
-		return working[host]
-	}
-	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: hostWorking(""), up: true}
-	// The local row is the machine of the client's own daemon, where an
-	// agent with no host starts, attached to another machine or not. Its
-	// load is the one that daemon reported, on every system.
-	if l := m.LocalLoad; l.Cores > 0 {
-		// A load the daemon could not read ranks as unknown, not as idle.
-		local.cores = l.Cores
-		local.load, local.loadOK = l.Load1, l.Known()
-	} else {
-		local.load, local.loadOK = spawnLoadAvg()
-	}
+	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: working, up: true}
+	local.load, local.loadOK = spawnLoadAvg()
 	if m.LearnMode && m.learnSpawn != nil {
 		// A browser tab has no cores or load to rank by, and its host name
 		// is the runtime's.
 		local.name, local.cores, local.load, local.loadOK = cmp.Or(m.learnSpawn().Machine, local.name), 0, 0, false
 	}
-	ms := []spawnMachine{local}
-	for _, h := range m.FederationHosts {
-		if h.Name == federation.LocalHostName {
-			continue
-		}
-		sm := spawnMachine{host: h.Name, name: h.Name, working: hostWorking(h.Name), up: h.Status == string(federation.StatusUp)}
-		if h.Cores > 0 {
-			// The load the link's last hello carried, so the sheet ranks
-			// the machine with no call of its own.
-			sm.cores, sm.load, sm.loadOK = h.Cores, h.Load1, h.LoadOK
-		}
-		ms = append(ms, sm)
-	}
-	// Spare cores: the cores, held to spawnCoresMax so a host cannot win by
-	// claiming more, times the share of them the load leaves free.
-	score := func(x spawnMachine) float64 {
-		cores := float64(min(max(x.cores, 1), spawnCoresMax))
-		free := 1 - min(max(x.load/float64(max(x.cores, 1)), 0), 1)
-		return cores*free - 0.5*float64(x.working)
-	}
-	sortx.SortStableFunc(ms, func(a, b spawnMachine) int {
-		first := func(x, _ bool) int {
-			if x {
-				return -1
-			}
-			return 1
-		}
-		switch {
-		case a.up != b.up:
-			return first(a.up, b.up)
-		case a.loadOK != b.loadOK:
-			return first(a.loadOK, b.loadOK)
-		case a.loadOK:
-			return cmp.Compare(score(b), score(a))
-		}
-		return cmp.Compare(a.working, b.working)
-	})
-	s.machines, s.machine = ms, 0
-	for i, x := range ms {
-		if x.host == picked && x.up && picked != "" {
-			s.machine = i
-		}
-	}
+	s.machines, s.machine = []spawnMachine{local}, 0
 }
 
 // spawnCoresMax bounds the cores a machine is ranked by.
@@ -488,20 +413,9 @@ func (m *OS) applySpawnInfo(msg spawnInfoMsg) {
 }
 
 // spawnCanWorktree reports whether a new worktree can be made: the folder is
-// in a repository, and a repository on another machine is found by its origin.
+// in a repository.
 func (s *spawnSheet) spawnCanWorktree() bool {
-	if s.repo == "" {
-		return false
-	}
-	return s.host() == "" || s.origin != ""
-}
-
-// host is the machine picked, empty for this one.
-func (s *spawnSheet) host() string {
-	if s.machine < len(s.machines) {
-		return s.machines[s.machine].host
-	}
-	return ""
+	return s.repo != ""
 }
 
 // spawnStops are the fields tab stops on, in order. The branch and the base
@@ -772,7 +686,7 @@ func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
 // spawnSavePreset keeps the sheet's choices, but not the task or the
 // branch, for the next new sheet.
 func (m *OS) spawnSavePreset(s *spawnSheet) {
-	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Folder: !s.worktree, Attempts: s.attempts, Host: s.host()}
+	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Folder: !s.worktree, Attempts: s.attempts}
 	if s.agent < len(s.agents) {
 		pr.Agent = s.agents[s.agent].id
 	}
@@ -830,9 +744,6 @@ func (m *OS) spawnSetWorktree(s *spawnSheet, on bool) {
 	case on && !s.spawnCanWorktree():
 		s.notice = spawnNoWorktree(s)
 		return
-	case !on && s.host() != "":
-		s.notice = "On another machine the agent works in a new worktree."
-		return
 	}
 	s.worktree, s.notice = on, ""
 	if !on {
@@ -845,10 +756,8 @@ func spawnNoWorktree(s *spawnSheet) string {
 	switch {
 	case !s.read:
 		return "Reading the folder. Try again in a moment."
-	case s.repo == "":
-		return "This folder is not in a git repository."
 	}
-	return "The repository has no origin remote, so " + s.host() + " cannot find it."
+	return "This folder is not in a git repository."
 }
 
 // spawnPickMachine picks machine i when it can take an agent.
@@ -857,12 +766,6 @@ func (m *OS) spawnPickMachine(s *spawnSheet, i int) {
 		return
 	}
 	s.machine, s.notice = i, ""
-	if s.machines[i].host != "" {
-		if !s.spawnCanWorktree() {
-			s.notice = spawnNoWorktree(s)
-		}
-		s.worktree = true
-	}
 }
 
 // spawnSetAttempts sets how many attempts start, from 1 to 8. More than one
@@ -970,7 +873,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		return fail(spTask, "Write the task first.")
 	case len(s.agents) == 0:
 		return fail(spAgent, "No agent is known on this machine.")
-	case s.host() == "" && !s.agents[s.agent].installed:
+	case !s.agents[s.agent].installed:
 		return fail(spAgent, s.agents[s.agent].cmd+" is not installed on this machine.")
 	case strings.HasPrefix(model, "-"):
 		return fail(spModel, "A model name cannot start with -.")
@@ -985,12 +888,9 @@ func (m *OS) spawnStart() tea.Cmd {
 	case s.worktree && strings.HasPrefix(base, "-"):
 		return fail(spBase, "A base cannot start with -.")
 	}
-	host := s.host()
 	params := map[string]any{"prompt": task}
-	if host == "" {
-		// The agent is looked up where this client finds programs.
-		params["env"] = map[string]string{"PATH": os.Getenv("PATH")}
-	}
+	// The agent is looked up where this client finds programs.
+	params["env"] = map[string]string{"PATH": os.Getenv("PATH")}
 	verb, what := "start-agent", s.agents[s.agent].cmd
 	if s.worktree {
 		verb = "fan"
@@ -1008,11 +908,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		} else {
 			params["agents"] = specs
 		}
-		if host == "" {
-			params["repo"] = s.folder
-		} else {
-			params["repo_url"] = s.origin
-		}
+		params["repo"] = s.folder
 		what = branch
 	} else {
 		// start-agent takes the model as an argv: no shell word to quote.
@@ -1023,29 +919,22 @@ func (m *OS) spawnStart() tea.Cmd {
 		if s.folder != "" {
 			params["cwd"] = s.folder
 		}
-		if m.AttachedHost == "" && m.SessionName != "" {
+		if m.SessionName != "" {
 			params["session"] = m.SessionName
 		}
 	}
 	m.Inbox.ck.spawnLast = s.agents[s.agent].id
 	s.starting, s.notice = true, ""
 	m.spawnClose()
-	where := ""
-	if host != "" {
-		where = " on " + host
-	}
 	switch {
 	case !s.worktree:
-		m.ShowNotification("Starting "+what+" in this folder"+where+".", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Starting "+what+" in this folder.", "info", m.Settings.NotificationDuration)
 	case s.attempts > 1:
-		m.ShowNotification("Starting "+strconv.Itoa(s.attempts)+" agents in new worktrees"+where+".", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Starting "+strconv.Itoa(s.attempts)+" agents in new worktrees.", "info", m.Settings.NotificationDuration)
 	default:
-		m.ShowNotification("Starting "+s.agents[s.agent].cmd+" in a new worktree"+where+".", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Starting "+s.agents[s.agent].cmd+" in a new worktree.", "info", m.Settings.NotificationDuration)
 	}
 	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
-	if host != "" {
-		card = nil
-	}
 	taskID := ""
 	if card != nil {
 		taskID = card.id
@@ -1062,24 +951,7 @@ func (m *OS) spawnStart() tea.Cmd {
 	case params["session"] == card.session:
 		params["task"], params["human_nonce"] = card.id, nonce
 	}
-	build := ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
 	return func() tea.Msg {
-		if host != "" {
-			if root := spawnReposRoot(host); root != "" {
-				params["repos_root"] = root
-			}
-			call = func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
-				c, err := dialSessionDaemon(host, build)
-				if err != nil {
-					return nil, err
-				}
-				defer func() { _ = c.Close() }()
-				return c.CallWithTimeout(verb, params, timeout)
-			}
-		}
 		raw, err := call(verb, params, spawnStartTimeout)
 		// A daemon from before the task parameter refuses it by name, and a
 		// card that cannot be taken refuses the call. The agent starts
@@ -1131,31 +1003,18 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 		switch {
 		case verb == "fan" && res.Total > 1:
-			return spawnStartedMsg{sheet: s, text: fmt.Sprintf("Started %d agents on %s%s.", res.Total, res.Group, where) + held}
+			return spawnStartedMsg{sheet: s, text: fmt.Sprintf("Started %d agents on %s.", res.Total, res.Group) + held}
 		case verb == "fan":
-			return spawnStartedMsg{sheet: s, text: "Started " + what + where + ". The task is typed when the agent is ready." + held}
+			return spawnStartedMsg{sheet: s, text: "Started " + what + ". The task is typed when the agent is ready." + held}
 		case !res.Ready && res.Reason != "":
-			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". It is not ready: " + res.Reason + held}
+			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + ". It is not ready: " + res.Reason + held}
 		case res.PromptStatus != "" && res.PromptStatus != session.PromptSent:
 			// The agent is up and its task did not go through: the
 			// notice says so, and not that all went well.
-			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". The task was not sent: " + res.PromptNote + held}
+			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + ". The task was not sent: " + res.PromptNote + held}
 		}
-		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + where + "." + held}
+		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + "." + held}
 	}
-}
-
-// spawnReposRoot is [hosts.NAME] repos_root from this machine's config.
-func spawnReposRoot(host string) string {
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return ""
-	}
-	hosts, err := config.HostsInFile(path)
-	if err != nil {
-		return ""
-	}
-	return hosts[host].ReposRoot
 }
 
 // applySpawnStarted says what became of a start. A start that worked drops

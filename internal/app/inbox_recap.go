@@ -108,7 +108,7 @@ func agentActivityRecapCall(call inboxVerbCall, sessionID, windowID string, sinc
 // inboxRecapFor reports whether the Inbox shows a recap for an item: a
 // finished turn of a pane on this machine, with the recap not turned off.
 func (m *OS) inboxRecapFor(it session.AttentionItem) bool {
-	return it.Kind == session.AttentionFinished && it.Window != "" && it.Host == "" && !it.Stale &&
+	return it.Kind == session.AttentionFinished && it.Window != "" && !it.Stale &&
 		m.recapSettings().Mode != config.RecapOff
 }
 
@@ -195,11 +195,11 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 	if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
 		add(facts)
 	}
-	if it.Host == "" {
-		for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
-			add(l)
-		}
+
+	for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
+		add(l)
 	}
+
 	return lines
 }
 
@@ -274,7 +274,7 @@ func (m *OS) agentPaneMeta(sessionID, windowID string) []sessiontree.MetaToken {
 			}
 		}
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		return nil
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
@@ -366,7 +366,7 @@ func (m *OS) AgentRecapFetch() tea.Cmd {
 	}
 	m.Inbox.recap.pending = nil
 	r := *ret
-	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
+	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil)) {
 		// No ring to read here: the dock says what this client counted.
 		m.showAgentReturn(r, nil)
 		return nil

@@ -1142,10 +1142,8 @@ frame against a coloured new one, and reads as a regression that is not there.
 On a truecolor terminal that is two more copies of a 40 to 50 KB frame. On a
 256-colour one it downsampled the frame that the bubbletea renderer downsamples
 again per cell, from the same `colorprofile.Detect` on the same stdout. On a
-headless server it stripped every colour, which is why `internal/server` and
-`tuios-web` pinned `lipgloss.Writer.Profile` to truecolor. Both pins are gone:
-the only other `lipgloss.Writer` users are `lipgloss.Sprintf` calls over plain
-text, which no profile changes. `TestComposeFrameKeepsPaneColour` held a
+headless server it stripped every colour. The only other `lipgloss.Writer`
+users are `lipgloss.Sprintf` calls over plain text, which no profile changes. `TestComposeFrameKeepsPaneColour` held a
 composed frame to its pane's colour; it was later removed, and e2e
 `TestListingStyleFidelityAgainstBarePTY` checks colour on the real binary.
 
@@ -1979,8 +1977,7 @@ five patterns, which would otherwise fail only on first use).
   hidden state that goes stale when the settings page edits the config.
 - **CoreFoundation and Security**, loaded by dyld because crypto/x509 is
   linked: about 0.9 ms per exec. Removing it would mean a CLI binary without
-  net/http and crypto/tls. Notifications and `tuios update` now link them on
-  purpose, to drop the runtime need for curl.
+  net/http and crypto/tls. Notifications now link them on purpose, to drop the runtime need for curl.
 - **encoding/gob init**, 0.12 ms: the standard library scanning typelinks.
 - **gopsutil/cpu init**, 0.06 ms, which calls host_processor_info twice. On
   darwin gopsutil/process imports it for `ProcessCwd`.
@@ -2552,7 +2549,7 @@ change and the fixes made in the final review.
 | Turn checkpoints | +147,456 | +134,768 |
 | Bulk history readers | +28,672 | +17,648 |
 | Inbox push notifications, the web deep link and `tuios notify test`, as first written with curl | +122,880 | +118,480 |
-| net/http for notifications and `tuios update`, in place of curl | +1,941,504 | +1,841,440 |
+| net/http for notifications, in place of curl | +1,941,504 | +1,841,440 |
 | `tuios ship`, `fan keep --merge` and the pull request badge | +208,896 | +186,016 |
 | Mode legends in the dock | +8,192 | -48 |
 | Emulator allocations, the scroll window, the idle ticker and memtrim | +12,288 | +17,104 |
@@ -2561,8 +2558,8 @@ change and the fixes made in the final review.
 
 The net/http row is 70% of the growth. tuios linked neither net/http nor
 crypto/tls before it. The maintainer accepted the 1.9 MB so that tuios needs
-no curl at run time: notifications and `tuios update` used to run curl from
-PATH, and a machine without it could not send either.
+no curl at run time: notifications used to run curl from PATH, and a machine
+without it could not send them.
 
 The budgets went to 31,130,000 (linux/amd64) and 29,345,000 (darwin/arm64)
 for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
@@ -2609,23 +2606,10 @@ browse` and `tuios keybinds browse`, and the `internal/explore` panel behind
 them. On Go 1.26.6 the build measured 31,781,026 and 29,947,586 bytes,
 111,026 and 117,586 over the old budgets.
 
-The budgets went to 31,945,000 (linux/amd64) and 30,105,000 (darwin/arm64)
-for `tuios hosts sync`: the probe, install and restart scripts, the dev
-cross-build, the release download by tag, the restart question and the
-report. It links no new package. On Go 1.26.6 the build measured 31,908,002
-and 30,066,354 bytes, 88,002 and 86,354 over the old budgets.
-
 The budgets went to 32,015,000 (linux/amd64) and 30,155,000 (darwin/arm64)
 for the sessionizer work: `tuios switch-session`, its verb, and the start
 directory of a session. It links no new package. On Go 1.26.6 the build
 measured 31,977,634 and 30,116,962 bytes, 32,634 and 11,962 over the old
-budgets.
-
-The budgets went to 32,075,000 (linux/amd64) and 30,210,000 (darwin/arm64)
-for Tailscale SSH check mode in the host commands: the gate reader, the wait
-for an approval in the link and in `hosts sync`, and the shared ssh
-connection of a sync run. It links no new package. On Go 1.26.6 the build
-measured 32,034,978 and 30,167,794 bytes, 19,978 and 12,794 over the old
 budgets.
 
 The budgets went to 32,140,000 (linux/amd64) and 30,275,000 (darwin/arm64)
@@ -2643,7 +2627,7 @@ over the old budgets.
 The budgets went to 32,365,000 (linux/amd64) and 30,480,000 (darwin/arm64)
 for the pane navigator (`choose_tree`) and `list-windows --all`: the tree,
 its search and preview, the load of the other sessions, and the listing
-across sessions and hosts. It links no new package. On Go 1.26.6 the build
+across sessions. It links no new package. On Go 1.26.6 the build
 measured 32,305,314 and 30,420,946 bytes, 120,314 and 90,946 over the old
 budgets.
 
@@ -2653,13 +2637,6 @@ with `tuios doctor agents`, the install and uninstall actions, the notice and
 its stored dismissals, and the check that a file did not change during an
 edit. It links no new package. On Go 1.26.6 the build measured 32,399,522 and
 30,505,330 bytes, 34,522 and 25,330 over the old budgets.
-
-The budgets went to 32,600,000 (linux/amd64) and 30,690,000 (darwin/arm64)
-for the Tailscale SSH sign-in: the rail's sign-in control and hover, the check
-that a sign-in link is on a Tailscale login origin, the `retry-host` verb, and
-`tuios hosts signin`. It links no new package. On Go 1.26.6 the build measured
-32,571,554 and 30,639,922 bytes: linux/amd64 was 46,554 over its budget of
-32,525,000, and darwin/arm64 had 10,078 left of its 30,650,000.
 
 The linux/amd64 budget went from 32,600,000 to 32,700,000 when the rail's
 opt-in switch numbers brought the build to 32,600,226 bytes (Go 1.26.6). Main
@@ -2698,9 +2675,8 @@ over origin/main at ebeee191. On linux/amd64, 64 KiB of that is a section
 crossing an alignment boundary, not code.
 
 The budgets went to 33,250,000 (linux/amd64) and 31,290,000 (darwin/arm64)
-for following the person's ssh agent (#552): the link keeper for sessions and
-hosts, the ssh -G check of a host's forwarding, the ssh-agent-path verb and
-command, and the agent field of the link handshake. On main at d42b9d06 the
+for following the person's ssh agent (#552): the link keeper for sessions
+and the ssh-agent-path verb and command. On main at d42b9d06 the
 build measured 33,194,146 and 31,230,146 bytes on Go 1.26.6, 22,146 and
 32,146 over the old budgets.
 
@@ -2733,23 +2709,12 @@ answer. That put linux/amd64 1,346 bytes over. Both budgets now have about
 The budgets went to 34,600,000 (linux/amd64) and 32,600,000 (darwin/arm64)
 for the phone apps. stream-pane, attach-presence and the size lease (#602),
 agent-transcript (#603) and Web Push with RFC 8291 encryption (#608) landed
-first, and `tuios pair` (#607) adds the QR encoder (rsc.io/qr) and the
-pairing listener. With #607 the build measured 34,046,114 and 32,043,810
+first. With #607 the build measured 34,046,114 and 32,043,810
 bytes, 46,114 and 43,810 over the old budgets. Both budgets again have about
 550 KB of room, and linux/amd64 is now within 400 KB of the 35 MB ceiling, so
 the next feature that needs room should look for bytes to cut first.
 
-The budgets went to 34,900,000 (linux/amd64) and 32,900,000 (darwin/arm64)
-for the file transfer engine (#620): bulk streams on the link, the file
-verbs, copies the daemon runs and journals, and the confinement of link file
-access to `files_roots` and the deny lists. With it the build measured
-34,676,898 and 32,634,946 bytes, 524,288 and 489,328 bytes over origin/main
-at a8ae79e4 (34,152,610 and 32,145,618), and 76,898 and 34,946 bytes over the
-old budgets. Of that, 106,496 bytes are the Unicode normalisation tables of
-golang.org/x/text/unicode/norm. The deny lists need them: APFS opens a name
-in either Unicode normal form, so a deny match must compare both. The file
-previews of #597 stay off main, which keeps out about 217 KB of image
-decoders. The ceiling is now 40 MB.
+The ceiling then went to 40 MB.
 
 The linux/amd64 budget went to 35,000,000 for tuios pane-view (#630): the
 command, the stream-pane client, the query filter, the viewer leases and the
@@ -2773,22 +2738,6 @@ image paste work in the panes of a daemon that ssh started. The CI build
 measured 35,037,346 bytes, 37,346 over the old budget, on top of the one
 daemon per user change (#635) that landed just before. The budget has about
 460 KB of room again, under the 40 MB ceiling.
-
-The budgets went to 35,700,000 (linux/amd64) and 33,600,000 (darwin/arm64)
-for `tuios cp`, `tuios transfers` and the copies in the TUI: the tree stream,
-check-ahead, compression with skip, the conflict state, the speed test, the
-two commands and their progress output, the dock item, the Copies panel and
-the send and drop flows. On origin/main at b228b387 (34,840,738 and
-32,769,954 bytes on Go 1.26.9) the branch measured 35,483,810 and 33,379,042,
-643,072 and 609,088 bytes more. Rebased on 377bc074, after pane-view, it
-measured 35,565,730 and 33,463,378. The compression is compress/flate, which the
-binary held already. No dependency was added.
-
-They went on to 35,900,000 and 33,800,000 with the review fixes of #636 (the
-pane's start folder, the os.Root for a pane's copy, the escaping of far names
-in the CLI and of C1 controls in the daemon's lines) and main's rail options.
-Rebased on e70a72fe the build measured 35,672,226 and 33,564,050 bytes on Go
-1.26.9, which left under 40 KB of room.
 
 The cold-path sorts (internal/sortx) cut 331,776 bytes from linux/amd64 and
 236,864 from darwin/arm64. Each slices.SortFunc or slices.SortStableFunc call
@@ -2838,8 +2787,7 @@ internal/app 36 KB, spread over the bridge's handlers with no large table to
 cut. The new budgets leave 103,934 and 104,766 bytes of room.
 
 The budgets went to 36,110,000 (linux/amd64) and 34,000,000 (darwin/arm64)
-for `file-preview` (#659), the verb behind the GUI's Quick Look, and the
-bridge's verbs on a host. With #658 under it the build measured 35,836,066
+for `file-preview` (#659), the verb behind the GUI's Quick Look. With #658 under it the build measured 35,836,066
 and 33,775,234 bytes (Go 1.26.9), and with #659 36,008,098 and 33,894,034,
 172,032 and 118,800 bytes more. The image scaler from golang.org/x/image/draw
 (already in go.mod) is 94,208 and 66,640 of it: ApproxBiLinear links a
@@ -3004,7 +2952,6 @@ the regenerated skill archive counted in the pull request it follows:
 | #830 write mail with the composer | 8,192 | 16,544 |
 | #832 history of what you sent, and $EDITOR | 73,728 | 51,088 |
 | #833 measure image paste per harness | 0 | 0 |
-| #835 reply to an agent on a host | 8,192 | 48 |
 
 #769 adds a package that nothing links until #770. #833 adds only an e2e
 test. No dependency was added. The new budgets leave 30,246 and 30,526 bytes
@@ -3206,7 +3153,7 @@ of room.
 
 The budgets went to 38,506,760 (linux/amd64) and 36,137,790 (darwin/arm64)
 for the cockpit's spawn sheet: the sheet's fields and lists, its layout and
-drawing, the machine ranking, the preset, and the start through fan and
+drawing, the preset, and the start through fan and
 start-agent. The branch before it measured 38,338,722 and 35,999,202 bytes
 (Go 1.26.9, a clean clone, as CI builds it). The change measured 38,502,562
 and 36,133,586, so it adds 163,840 and 134,384 bytes. It reads the manifests
@@ -3342,21 +3289,11 @@ and 38,327,282, so it adds 16,384 and 16,528 bytes. No third-party dependency
 was added. The new budgets leave 8,294 and 3,996 bytes of room, as before.
 
 The budgets went to 40,993,032 (linux/amd64) and 38,348,414 (darwin/arm64)
-when the link plane was hardened (#926): a resurrect name is checked before it
-becomes a path, the read deny list holds every credential carrier of the write
-deny list, MsgWatchDir keeps to the read rules, a walk over a link leaves out
-and counts the denied entries, and session names that Windows folds are
-refused. The build before it measured 40,980,642 and 38,327,522 bytes (Go
+for #926: a resurrect name is checked before it becomes a path, and session
+names that Windows folds are refused. The build before it measured 40,980,642 and 38,327,522 bytes (Go
 1.26.9, a clean clone, as CI builds it). The change measured 40,988,834 and
 38,344,210, so it adds 8,192 and 16,688 bytes. No third-party dependency was
 added. The new budgets leave 4,198 and 4,204 bytes of room.
-
-tuios-web has no budget, and its growth is recorded here. The refusal of
-`--no-auth` on a wildcard bind, the bind host that is resolved once, and the
-owner and DACL check of the password file on Windows add 8,192 bytes on
-linux/amd64 (42,410,146 to 42,418,338) and 22,016 bytes on windows/amd64
-(42,994,176 to 43,016,192), built the release way on Go 1.26.9. tuios uses
-the shared bind host parse in internal/netutil and does not change size, so its budgets stay.
 
 The budgets went to 41,013,512 (linux/amd64) and 38,365,198 (darwin/arm64) for
 the perf pass on tuios.dev/sketch, which renders a diagram about 30% faster
@@ -3535,8 +3472,8 @@ so it adds 32,768 and 17,168 bytes. No dependency was added. The new budgets
 leave 4,198 bytes of room.
 
 Six more cold sorts over struct elements went through internal/sortx: the CLI
-option search, the look take-over's config write, the spawn sheet's agents and
-machines, and hint mode's Find and settle. With Go 1.26.10, as CI builds it,
+option search, the look take-over's config write, the spawn sheet's agents,
+and hint mode's Find and settle. With Go 1.26.10, as CI builds it,
 the cut is 53,248 bytes on linux/amd64 and 67,104 on darwin/arm64. Sorts on
 render, key, event or broadcast paths, and over a type a hot path also sorts,
 keep slices.
@@ -3568,11 +3505,9 @@ are inlined at every site again. The lexers run once per source and width in
 loom and once per Show, Resize or Redraw in internal/mermaid/live.go, never
 per compositor frame (the per-frame motion draw works on a raster scene and
 never reaches them). The cut is 319,488 bytes on linux/amd64 and 280,576 on
-darwin/arm64 for tuios, and 315,392 and 280,576 for tuios-web. On origin/main
-at 70bbad3c8 (Go 1.26.10, as CI builds it, in workspace mode) tuios measured
-48,115,874 and 44,697,154 bytes and tuios-web 52,650,146 and 49,625,426, and
-the branch measured 47,796,386 and 44,416,578 for tuios and 52,334,754 and
-49,344,850 for tuios-web. A GOWORK=off release build takes the cut once the
+darwin/arm64. On origin/main at 70bbad3c8 (Go 1.26.10, as CI builds it, in
+workspace mode) tuios measured 48,115,874 and 44,697,154 bytes, and the branch
+measured 47,796,386 and 44,416,578. A GOWORK=off release build takes the cut once the
 root go.mod pin of tuios.dev/sketch moves, which is the third commit of the
 PR. BenchmarkRenderCorpus on one core with 20 runs per side shows no
 significant change in time (24.38 ms and 24.11 ms, p=0.95, and in a second
@@ -4987,9 +4922,6 @@ same way, so this is not a regression.
   wakeups.
 - Every composed frame restarts the budget, so a frame for pane output also
   counts.
-- The hosts page parsed the whole config file on every frame to read the
-  `[tailscale]` table. That was 16% of client CPU during the sweep. The table
-  is now parsed again only when the file's size or modification time changes.
 
 ### Numbers
 
@@ -5208,7 +5140,7 @@ same kind of cache and is not covered.
 
 ## 2026-10 an ended session's timers
 
-An SSH or web session that ends is let go at once, not when its timers fire.
+An SSH session that ends is let go at once, not when its timers fire.
 A `tea.Tick` command waits on its timer inside bubbletea's command goroutine,
 which holds the Program and the model until the timer fires, so every ended
 session kept its heap and about a dozen goroutines for the length of its
@@ -5226,9 +5158,8 @@ screensaver on; they now leave under 1 MiB at the first poll.
   session gets the same message at the same time.
 - The timers that wait a second or more and can be armed on a served session
   use it: the maintenance tick (`armTick`), the screensaver arm, the TML
-  clock, the foreign session listing poll, the federation poll, the sidebar
-  session retry, the host reconnect wait, the worktree-remove quit dwell, the
-  paste timeout, the transfers linger, the inbox alert settle, the subagent
+  clock, the foreign session listing poll, the sidebar session retry, the
+  worktree-remove quit dwell, the paste timeout, the inbox alert settle, the subagent
   hide, the review compare tick and the tape finish refresh.
 - `InboxAgentsTick`, a one-minute timer that only `CloseInbox` stopped, also
   returns when the session ends.

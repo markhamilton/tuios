@@ -10,18 +10,16 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// list-windows --all: every pane of every session, on this machine and with
-// --all-hosts on every host in [hosts], with what the pane navigator
+// list-windows --all: every pane of every session, with what the pane navigator
 // (choose_tree) shows for it. --text N adds the last N lines of each pane's
 // screen.
 //
 // It is built from the verbs a single list-windows and capture-pane already
-// make, one call per session and per pane, so the grants and the link policy
-// that hold for those verbs hold here: a pane whose text the caller may not
+// make, one call per session and per pane, so the grants that hold for those
+// verbs hold here: a pane whose text the caller may not
 // read is listed with the reason and no text.
 
 // maxListText caps --text, so one command cannot pull every pane's whole
@@ -33,8 +31,6 @@ const listCallTimeout = 5 * time.Second
 
 // listedPane is one row of list-windows --all.
 type listedPane struct {
-	Host        string   `json:"host,omitempty"`
-	Untrusted   bool     `json:"untrusted,omitempty"`
 	Session     string   `json:"session"`
 	Workspace   int      `json:"workspace"`
 	WorkspaceNm string   `json:"workspace_name,omitempty"`
@@ -49,26 +45,25 @@ type listedPane struct {
 	TextError   string   `json:"text_error,omitempty"`
 }
 
-// listError is a session or a machine the listing could not read.
+// listError is a session the listing could not read.
 type listError struct {
-	Host    string `json:"host,omitempty"`
 	Session string `json:"session,omitempty"`
 	Error   string `json:"error"`
 }
 
-// runListAllWindows is list-windows with --all, --all-hosts or --text.
-// session limits it to one session when --all is not given.
-func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOutput bool) error {
+// runListAllWindows is list-windows with --all or --text. session limits it
+// to one session when --all is not given.
+func runListAllWindows(sessionName string, all bool, text int, jsonOutput bool) error {
 	if text < 0 || text > maxListText {
 		return fmt.Errorf("--text takes a number of lines from 0 to %d", maxListText)
 	}
-	if sessionName != "" && (all || allHosts) {
-		return fmt.Errorf("--session names one session, so it cannot be used with --all or --all-hosts")
+	if sessionName != "" && all {
+		return fmt.Errorf("--session names one session, so it cannot be used with --all")
 	}
 	var panes []listedPane
 	var errs []listError
 
-	if !all && !allHosts {
+	if !all {
 		t, err := dialSessionTarget(sessionName)
 		if err != nil {
 			return err
@@ -81,7 +76,7 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 			return t.client, nil
 		}}
 		defer conn.Close()
-		p, e := listSessionPanes(conn, t.host, t.session, text)
+		p, e := listSessionPanes(conn, t.session, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 		return printListedPanes(panes, errs, text, jsonOutput)
 	}
@@ -100,41 +95,10 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 		names = []string{""}
 	}
 	for _, name := range names {
-		p, e := listSessionPanes(conn, "", name, text)
+		p, e := listSessionPanes(conn, name, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 	}
 
-	if allHosts {
-		raw, err := conn.CallWithTimeout("list-host-sessions", nil, listCallTimeout)
-		if err != nil {
-			errs = append(errs, listError{Error: explainVerbError("list-host-sessions", err).Error()})
-		} else {
-			var res struct {
-				Hosts []hostSessionsEntry `json:"hosts"`
-			}
-			if json.Unmarshal(raw, &res) == nil {
-				for _, h := range res.Hosts {
-					if h.Host == federation.LocalHostName {
-						continue
-					}
-					if h.Error != "" || h.Stale {
-						errs = append(errs, listError{Host: h.Host, Error: hostTrouble(h.Status, h.Reason)})
-						continue
-					}
-					host := h.Host
-					hc := &listConn{dial: func() (*session.VerbClient, error) {
-						c, _, err := session.DialVerbClientThroughHost(host, version)
-						return c, err
-					}}
-					for _, s := range h.Sessions {
-						p, e := listSessionPanes(hc, host, s.Name, text)
-						panes, errs = append(panes, p...), append(errs, e...)
-					}
-					hc.Close()
-				}
-			}
-		}
-	}
 	return printListedPanes(panes, errs, text, jsonOutput)
 }
 
@@ -197,10 +161,10 @@ func listSessionNames(client *listConn) ([]string, error) {
 
 // listSessionPanes lists one session's panes, and with text > 0 reads each
 // one's last lines with capture-pane.
-func listSessionPanes(client *listConn, host, name string, text int) ([]listedPane, []listError) {
+func listSessionPanes(client *listConn, name string, text int) ([]listedPane, []listError) {
 	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": name}, listCallTimeout)
 	if err != nil {
-		return nil, []listError{{Host: host, Session: name, Error: explainVerbError("list-windows", err).Error()}}
+		return nil, []listError{{Session: name, Error: explainVerbError("list-windows", err).Error()}}
 	}
 	var list struct {
 		Session string `json:"session_name"`
@@ -217,7 +181,7 @@ func listSessionPanes(client *listConn, host, name string, text int) ([]listedPa
 		} `json:"windows"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, []listError{{Host: host, Session: name, Error: "could not read the window list"}}
+		return nil, []listError{{Session: name, Error: "could not read the window list"}}
 	}
 	if list.Session != "" {
 		name = list.Session
@@ -236,7 +200,7 @@ func listSessionPanes(client *listConn, host, name string, text int) ([]listedPa
 			state = ""
 		}
 		p := listedPane{
-			Host: host, Untrusted: host != "", Session: name,
+			Session:   name,
 			Workspace: w.Workspace, WorkspaceNm: wsNames[w.Workspace],
 			WindowID: w.ID, Name: w.Display, Title: w.Title, Command: w.Command, Cwd: w.Cwd,
 			Focused: w.ID == list.Focused, AgentState: state,
@@ -316,9 +280,6 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 	}
 	for _, e := range errs {
 		where := plainLine(e.Session)
-		if e.Host != "" {
-			where = plainLine(e.Host) + ":" + where
-		}
 		if where != "" {
 			where += ": "
 		}
@@ -329,14 +290,10 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 		return nil
 	}
 	for _, p := range panes {
-		// Every field a pane's program or another machine wrote is laundered
-		// of control and invisible characters before it reaches the terminal:
-		// a title can carry an escape sequence, and a host's text is fenced
-		// as untrusted, as capture-pane fences it.
+		// Every field a pane's program wrote is laundered of control and
+		// invisible characters before it reaches the terminal: a title can
+		// carry an escape sequence.
 		where := plainLine(p.Session)
-		if p.Host != "" {
-			where = plainLine(p.Host) + ":" + where
-		}
 		ws := strconv.Itoa(p.Workspace)
 		if p.WorkspaceNm != "" {
 			ws += " " + plainLine(p.WorkspaceNm)
@@ -356,10 +313,6 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 			continue
 		}
 		body := plainText(strings.Join(p.Text, "\n"))
-		if p.Host != "" {
-			fmt.Println(session.UntrustedFence("pane "+plainLine(p.Name)+" on "+plainLine(p.Host), body))
-			continue
-		}
 		for l := range strings.SplitSeq(body, "\n") {
 			fmt.Printf("    │ %s\n", l)
 		}

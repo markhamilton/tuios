@@ -636,41 +636,6 @@ func TestAgentsSwitchIsThePersons(t *testing.T) {
 	alive(t, term, "after the person turned the features off")
 }
 
-// TestAgentsOffHereRefusesACallToAnotherMachine: with this machine's
-// features off, an agent command aimed at a session on a linked machine is
-// refused here, by name of this machine's config, while the other machine
-// has them on. A plain command to that machine still runs.
-//
-// Negative control: with the HostCallGuard cut from VerbClient, list-agents
-// on build:far succeeds after the switch went off here.
-func TestAgentsOffHereRefusesACallToAnotherMachine(t *testing.T) {
-	base := t.TempDir()
-	remote := remoteMachine(t)
-	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
-		t.Fatalf("create the far session: %v\n%s", err, out)
-	}
-	env := hubWithBuild(t, base, remote)
-	if out, err := tuiosCLIEnv(t, base, env, "list-agents", "-s", "build:far", "--all"); err != nil {
-		t.Fatalf("list-agents on build with the features on here: %v\n%s", err, out)
-	}
-
-	cfg := configPathIn(base)
-	raw, err := os.ReadFile(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfg, append(raw, []byte("\n[agents]\nenabled = false\n")...), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	out, err := tuiosCLIEnv(t, base, env, "list-agents", "-s", "build:far", "--all")
-	if err == nil || !strings.Contains(out, "Agent features are off in this machine's config") {
-		t.Fatalf("ASSERTION: list-agents on build was not refused by this machine's switch: %v\n%s", err, out)
-	}
-	if out, err := tuiosCLIEnv(t, base, env, "list-windows", "-s", "build:far"); err != nil {
-		t.Fatalf("ASSERTION: a plain command to build stopped working: %v\n%s", err, out)
-	}
-}
-
 // helpFinds opens the help, searches it for query, and reports whether want
 // is among the results. The search lists every tab at once.
 func helpFinds(t *testing.T, term *tuitest.Terminal, query, want string) bool {
@@ -698,58 +663,6 @@ func helpFinds(t *testing.T, term *tuitest.Terminal, query, want string) bool {
 	_ = term.SendKeys(tuitest.Esc)
 	_ = term.SendKeys(tuitest.Esc)
 	return found
-}
-
-// TestAgentsOffHidesAnotherMachinesAgentMarks: a session on a linked machine
-// whose agent waits on the person wears the needs_input mark on this rail.
-// With this machine's features off the mark goes, though that machine still
-// has them on.
-//
-// Negative control: with clearAgentMarks cut from withHostGroups, the mark
-// stays on the remote session's row after the switch went off.
-func TestAgentsOffHidesAnotherMachinesAgentMarks(t *testing.T) {
-	const cols, rows, width = 120, 32, 24
-	base := t.TempDir()
-	useShippedLooks(base)
-	remote := remoteMachine(t)
-	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
-		t.Fatalf("create the far session: %v\n%s", err, out)
-	}
-	if out, err := tuiosCLI(t, remote, "set-agent-state", "needs_input", "-s", "far"); err != nil {
-		t.Fatalf("set-agent-state on build: %v\n%s", err, out)
-	}
-	env := hubWithBuild(t, base, remote)
-	term := attachIn(t, base, "home", startOpts{cols: cols, rows: rows, shippedLooks: true, env: env})
-	railCol := cols - width
-	railHasMark := func(s tuitest.Screen) bool {
-		_, h := s.Size()
-		for y := range h {
-			var b strings.Builder
-			for x := railCol; x < cols; x++ {
-				b.WriteString(s.Cell(x, y).Content)
-			}
-			if strings.Contains(b.String(), "far") && strings.Contains(b.String(), needsInputGlyph) {
-				return true
-			}
-		}
-		return false
-	}
-	if err := term.WaitFor(railHasMark, uiTimeout); err != nil {
-		t.Fatalf("the rail never marked build's waiting session with the features on: %v\n%s", err, term.Snapshot())
-	}
-
-	cfg := configPathIn(base)
-	raw, err := os.ReadFile(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfg, append(raw, []byte("\n[agents]\nenabled = false\n")...), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !railHasMark(s) }, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: build's agent mark stayed on the rail with the features off here: %v\n%s", err, term.Snapshot())
-	}
-	alive(t, term, "after the remote mark went")
 }
 
 // TestAgentsOffGetConfigSaysOff reads the switch back the way a person and a

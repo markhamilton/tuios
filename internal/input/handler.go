@@ -186,12 +186,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			if msg.Content == "" {
 				return o, o.PasteImageOnEmptyPaste()
 			}
-			// Files dropped on a pane whose program runs on another machine
-			// arrive as a paste of their paths. tuios asks whether to send
-			// them there. See app.DropPaste.
-			if cmd := o.DropPaste(msg.Content); cmd != nil {
-				return o, cmd
-			}
+
 			forwardPasteToFocused(o, msg.Content)
 		}
 		return o, nil
@@ -457,16 +452,8 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// It runs before the overlay routing below so it works while help, the
 	// palette or the quit dialog is up, since those are exactly the moments a
 	// message is in the way.
-	var escCmd tea.Cmd
 	if msg.String() == "esc" {
 		o.DismissNotifications()
-		// esc also stops a rail click that waits for another machine, and
-		// says so. The key still goes on.
-		escCmd = o.CancelHostOpen()
-	}
-	if escCmd != nil {
-		m, cmd := routeAfterEsc(msg, o)
-		return m, tea.Batch(escCmd, cmd)
 	}
 	return routeAfterEsc(msg, o)
 }
@@ -586,18 +573,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// app/integration_confirm.go.
 	if o.IntegrationAskOpen() {
 		return o, o.IntegrationAskKey(msg.String())
-	}
-
-	// A copy's question and the Copies panel, the same way: the rail and
-	// the dock open them, and their keys must reach them. The question is
-	// over the panel, so it is first. A panel opened over the Copies panel,
-	// such as Settings, is in front of it and takes its keys in the mode
-	// handlers below.
-	if o.CopyDialogOpen() {
-		return handleCopyDialogInput(msg, o)
-	}
-	if o.TransfersOwnsKeys() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
-		return handleTransfersInput(msg, o)
 	}
 
 	// The sidebar rail owns the keyboard while focused, in both terminal and

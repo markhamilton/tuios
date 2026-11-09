@@ -169,9 +169,6 @@ type railContext struct {
 	// PanePgid is the pane's shell, for a local pane that reported no folder:
 	// its working directory is the fallback, read at run start.
 	PanePgid int
-	// Remote says the session is on another machine, so PaneDir is a path
-	// there and nothing on this machine can check it.
-	Remote bool
 }
 
 // newDockEngine builds the engine for a set of components and starts the

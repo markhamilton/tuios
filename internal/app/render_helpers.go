@@ -313,33 +313,8 @@ func windowTitleText(window *terminal.Window, markState string, position int, ma
 	// running an agent is always marked.
 	indicator := agentStateIndicator(markState)
 
-	// A pane whose shell is on another machine says so. This is not decoration
-	// and it is not optional: two panes side by side look identical, and the
-	// same typed line is a different act depending on which machine answers
-	// it.
-	//
-	// It goes on the front because truncation below takes from the end, so a
-	// name too long for the bar gives up its own tail and never the marker.
-	host := window.Host
-	// A pane whose link is lost says so first, in words, so truncation never
-	// takes it and colour is not the only sign its screen has stopped.
-	if host != "" && window.HostLink != "" {
-		host = "[" + window.HostLink + "] " + host
-	}
 	if windowName == "" {
-		if host != "" {
-			return joinTitleParts(indicator, host)
-		}
 		return indicator
-	}
-
-	// The machine joins the name before the truncation rather than after it, so
-	// what is measured against the bar is what will be drawn on it. Prefixing
-	// afterwards would push the finished badge past the width that was just
-	// fitted, and layoutBorderRow drops a badge that no longer fits whole:
-	// the pane most worth marking would have ended up with no title at all.
-	if host != "" {
-		windowName = host + ":" + windowName
 	}
 
 	// Reserve room for the indicator, measured since a glyph set's mark may be

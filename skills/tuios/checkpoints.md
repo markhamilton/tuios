@@ -46,8 +46,7 @@ Every refusal changes nothing in the work tree.
 ## Grants and limits
 
 From a pane, the list and the diff need `read`. A restore needs `write` on a
-pane that holds nothing you do not. Checkpoints work on this machine's panes
-only. For a pane on another machine, attach to that machine. `[agents.checkpoints]`
+pane that holds nothing you do not. `[agents.checkpoints]`
 in config.toml turns them off (`enabled`), sets how many a pane keeps (`keep`,
 50) and the untracked file limit (`max_untracked_mb`). A removed worktree takes
 its checkpoints with it.

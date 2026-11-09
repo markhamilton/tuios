@@ -22,18 +22,15 @@ const queueDedupAge = 7 * 24 * time.Hour
 
 // queueDedupKey names one client's message for one pane. The sender is in it,
 // so two clients that count their ids from 1 do not drop each other's
-// messages. It takes the origin's kind, peer and window and not the entry's
-// by, which turns from link:X to human when a resend carries a nonce the first
-// send did not. It leaves out the origin's conn: a resend comes on a new
-// connection.
+// messages. It takes the origin's kind and window and not the entry's by.
 type queueDedupKey struct {
-	kind, peer, window string
-	target             string
-	id                 string
+	kind, window string
+	target       string
+	id           string
 }
 
 func newQueueDedupKey(o queueOrigin, target, id string) queueDedupKey {
-	return queueDedupKey{kind: o.kind, peer: o.peer, window: o.window, target: target, id: id}
+	return queueDedupKey{kind: o.kind, window: o.window, target: target, id: id}
 }
 
 // queueDedup remembers what queue-prompt answered for a client's message id,

@@ -25,7 +25,7 @@ Every pane holds grants:
   write    type into the panes of its own session, and leave mail there
   fan      write in its fan group, and start agents with fan and start-agent
   respond  answer another pane's prompt without the person
-  files    copy files with tuios cp, inside its own folder
+  files    grants nothing on its own; kept so older configs still read
   task     add, claim and finish the task cards of its own session
   admin    everything else, as every pane could before grants existed, such
            as run-command and attach

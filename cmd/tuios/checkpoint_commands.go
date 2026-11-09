@@ -63,17 +63,6 @@ func (f *checkpointFlags) add(cmd *cobra.Command) {
 // only, as the review commands do. It returns the raw result, or nil after it
 // printed the JSON form.
 func callCheckpointVerb(f checkpointFlags, verb string, params map[string]any) (json.RawMessage, string, error) {
-	host, sess, _, err := resolveTarget(f.session, f.window)
-	if err != nil {
-		return nil, "", err
-	}
-	if host != "" {
-		return nil, "", &diagnosticError{
-			What:  fmt.Sprintf("checkpoints work on this machine's sessions, and %s:%s is on %s.", host, sess, host),
-			Cause: "checkpoints of a session on a linked machine are not supported yet.",
-			Fix:   fmt.Sprintf("attach to %s and run 'tuios checkpoint' there.", host),
-		}
-	}
 	t, err := dialTarget(f.session, f.window)
 	if err != nil {
 		return nil, "", err
@@ -94,7 +83,7 @@ func callCheckpointVerb(f checkpointFlags, verb string, params map[string]any) (
 	if f.json {
 		return nil, "", printVerbResultOn(t, raw, true)
 	}
-	return raw, t.on(), nil
+	return raw, "", nil
 }
 
 // checkpointN reads a checkpoint number argument.

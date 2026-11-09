@@ -147,18 +147,12 @@ func (m *OS) applyInboxAgentsTick(msg inboxAgentsTickMsg) tea.Cmd {
 	}
 	m.tickStats.AgentsTicks++
 	a.tickStop = nil
-	// The machines block shows each machine's load, which no push carries:
-	// the minute tick that moves the ages on reads the hosts again, while
-	// the view is open and has hosts. No timer of its own.
-	if m.ShowInbox && m.ckManyMachines() {
-		return tea.Batch(m.InboxAgentsTick(), refreshFederationCmd())
-	}
 	return m.InboxAgentsTick()
 }
 
 // agentKey is an agent's identity in the view.
 func agentKey(e sidebarAgentEntry) string {
-	return e.Host + "\x00" + e.SessionID + "\x00" + e.WindowID
+	return "\x00" + e.SessionID + "\x00" + e.WindowID
 }
 
 // inboxAgentsList is the view's rows, built again only when the rail's
@@ -179,7 +173,7 @@ func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 	if a.listAt == key {
 		return a.list
 	}
-	all := append(m.agentEntries(m.BuildSessionTree().Sessions), m.remoteAgentEntries()...)
+	all := m.agentEntries(m.BuildSessionTree().Sessions)
 	kept := all[:0]
 	for _, e := range all {
 		if m.agentsKeep(e) {
@@ -190,52 +184,16 @@ func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 	return a.list
 }
 
-// remoteAgentRowsMax bounds the agent rows of one host, as the daemon bounds
-// what it passes on.
-const remoteAgentRowsMax = 256
-
-// remoteAgentEntries are the agent panes of the other machines' sessions, as
-// their daemons last listed them. The rail draws a machine's sessions alone;
-// the agents view draws each agent there as a row of its own.
-//
-// A host is held to remoteAgentRowsMax rows, whatever its daemon sent.
-func (m *OS) remoteAgentEntries() []sidebarAgentEntry {
-	var out []sidebarAgentEntry
-	for _, h := range m.FederationHosts {
-		if h.Name == m.attachedMachine() {
-			continue
-		}
-		n := 0
-		for _, s := range h.Sessions {
-			for _, a := range s.Agents {
-				if n == remoteAgentRowsMax {
-					break
-				}
-				n++
-				out = append(out, sidebarAgentEntry{
-					SessionID: s.Name, SessionLabel: firstNonEmptyStr(s.DisplayName, s.Name),
-					WindowID: a.ID, Title: a.Title, State: a.State, StateAt: a.StateAt,
-					Harness: a.Harness, Message: a.Message, AgentKind: a.Kind, Meta: a.Meta,
-					Subagents: a.Subagents, Settled: a.Settled, WindowIndex: -1, Foreign: true, Host: h.Name,
-				})
-			}
-		}
-	}
-	return out
-}
-
 // agentsKeep reports whether a row passes the selector and the search.
 func (m *OS) agentsKeep(e sidebarAgentEntry) bool {
 	a := &m.Inbox.agents
 	if sel := m.Inbox.selector; sel != nil {
 		t := session.SelectorTarget{
-			Host: e.Host, Session: e.SessionID, Name: e.Title, State: e.State,
+			Session: e.SessionID, Name: e.Title, State: e.State,
 			Harness: e.Harness, NeedsYou: sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou,
 		}
-		if e.Host == "" {
-			for _, c := range m.ckHeldCards()[e.SessionID+"\x00"+e.WindowID] {
-				t.Tasks, t.Stages = append(t.Tasks, c.ID), append(t.Stages, c.Stage)
-			}
+		for _, c := range m.ckHeldCards()[e.SessionID+"\x00"+e.WindowID] {
+			t.Tasks, t.Stages = append(t.Tasks, c.ID), append(t.Stages, c.Stage)
 		}
 		if !sel.Match(t) {
 			return false
@@ -288,9 +246,6 @@ func agentSessionWords(e sidebarAgentEntry) string {
 	if s == "" {
 		s = e.SessionID
 	}
-	if e.Host != "" {
-		return e.Host + ":" + s
-	}
 	return s
 }
 
@@ -308,7 +263,7 @@ func (m *OS) InboxAgentsGo() tea.Cmd {
 		return nil
 	}
 	m.CloseInbox()
-	m.inboxJump(session.AttentionItem{Session: e.SessionID, Window: e.WindowID, Host: e.Host})
+	m.inboxJump(session.AttentionItem{Session: e.SessionID, Window: e.WindowID})
 	return nil
 }
 
@@ -325,14 +280,6 @@ func (m *OS) InboxAgentsReply() tea.Cmd {
 	ctx := sidebarStateWords(e.State)
 	if e.StateAt > 0 {
 		ctx += " " + inboxWait(e.StateAt, time.Now())
-	}
-	if e.Host != "" {
-		if e.State == "needs_input" {
-			m.ShowNotification(who+" is waiting on a prompt. Answer it first.", "warning", m.Settings.NotificationDuration)
-			return nil
-		}
-		m.openHostReply(e.Host, e.SessionID, e.WindowID, who, ctx)
-		return nil
 	}
 	m.openInboxReply(e.SessionID, e.WindowID, who, ctx, false)
 	return nil

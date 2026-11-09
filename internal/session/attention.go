@@ -155,10 +155,6 @@ type AttentionItem struct {
 	ID string `json:"id"`
 	// Kind is one of AttentionKindNames.
 	Kind string `json:"kind"`
-	// Host is the machine the item is on, empty for this one. It is here so a
-	// hub can merge items from linked hosts into the same list; this daemon
-	// only produces its own.
-	Host string `json:"host,omitempty"`
 	// Session is the session name, the one every verb addresses it by.
 	Session string `json:"session"`
 	// Window is the pane the item is about: the blocked or finished agent, or
@@ -398,35 +394,6 @@ func attentionItemKey(it *AttentionItem) string {
 	return attentionKey(it.Kind, it.Session, it.Window, it.Thread)
 }
 
-// noteOutbox opens, updates or closes the outbox item for host: how many
-// messages wait for it and what it refused. With neither, the item closes.
-func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFailure, since int64) {
-	if a == nil {
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	key := "outbox\x00" + host
-	if waiting == 0 && len(fails) == 0 {
-		a.closeKeyLocked(key, AttentionClosedResolved)
-		return
-	}
-	it := AttentionItem{
-		Kind:    AttentionOutbox,
-		ForHost: host,
-		Name:    attentionText(host, attentionMaxSummary),
-		Summary: attentionText(outboxSummary(host, waiting, fails), attentionMaxSummary),
-		Count:   waiting,
-	}
-	if since == 0 && len(fails) > 0 {
-		since = fails[0].At
-	}
-	if _, ok := a.byKey[key]; !ok && since != 0 {
-		it.Since = since
-	}
-	a.upsertLocked(it)
-}
-
 // attentionEvent is the stream event for one change. Session and Window are
 // copied to the top level so a subscriber's session and window filters apply
 // to attention events exactly as to every other event.
@@ -436,7 +403,7 @@ func attentionEvent(action string, it AttentionItem) streamEvent {
 		// Set for an item mirrored from a linked host, so a subscriber that
 		// filters by session does not read the host's session name as one on
 		// this machine.
-		Host:      it.Host,
+		Host:      "",
 		Session:   it.Session,
 		Window:    it.Window,
 		Action:    action,
@@ -740,7 +707,7 @@ func (a *attentionStore) windowWorkspace(sessionName, window string, workspace i
 	defer a.mu.Unlock()
 	for _, id := range a.sortedIDsLocked() {
 		it := a.items[id]
-		if it.Host != "" || it.Session != sessionName || it.Window != window || it.Workspace == workspace {
+		if it.Session != sessionName || it.Window != window || it.Workspace == workspace {
 			continue
 		}
 		a.rev++
@@ -947,12 +914,6 @@ func (a *attentionStore) noteMailRead(sessionName string, thread uint64) {
 func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if it, ok := a.hostItems[id]; ok {
-		out := *it
-		a.hideHostLocked(id)
-		a.rememberUndoLocked(out, AttentionClosedDismissed)
-		return out, true
-	}
 	if it, ok := a.hostSnoozed[id]; ok {
 		out := *it
 		out.SnoozedUntil = 0
@@ -1022,7 +983,7 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 	out := make([]AttentionItem, 0, len(a.items)+len(a.hostItems))
 	add := func(it *AttentionItem) {
 		counts[it.Kind]++
-		if !q.matchHost(it.Host) {
+		if !q.matchHost("") {
 			return
 		}
 		if q.session != "" && it.Session != q.session {
@@ -1044,7 +1005,7 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 		var sleeping []AttentionItem
 		for _, m := range []map[string]*AttentionItem{a.snoozed, a.hostSnoozed} {
 			for _, it := range m {
-				if q.matchHost(it.Host) && (q.session == "" || it.Session == q.session) && (len(q.kinds) == 0 || q.kinds[it.Kind]) {
+				if q.matchHost("") && (q.session == "" || it.Session == q.session) && (len(q.kinds) == 0 || q.kinds[it.Kind]) {
 					sleeping = append(sleeping, *it)
 				}
 			}

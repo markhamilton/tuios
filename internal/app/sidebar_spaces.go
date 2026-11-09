@@ -14,14 +14,19 @@ import (
 // own indent, with no heading. A rail with no session in any space draws exactly
 // the rows it always did. See sessiontree.GroupBySpace.
 
-// sidebarNodeIndent is the step a sessions-section row takes: the section's own
-// step, and one group step more for a row drawn under a space's heading.
+// sidebarGroupIndent is the step a row takes under a heading. Two cells: one
+// is not a step the eye reads at a glance, and three costs a twenty-eight
+// column rail a word off every name for nothing the second cell does not
+// already say.
+const sidebarGroupIndent = 2
+
+// sidebarNodeIndent is the step a sessions-section row takes: one group step
+// for a row drawn under a space's heading, and none otherwise.
 func (m *OS) sidebarNodeIndent(node sessiontree.Node) int {
-	indent := m.sidebarRowIndent()
 	if node.Space != "" && node.Kind != sessiontree.KindSpace {
-		indent += sidebarGroupIndent
+		return sidebarGroupIndent
 	}
-	return indent
+	return 0
 }
 
 // sidebarSpaceRow renders one space's heading.

@@ -219,7 +219,6 @@ var leaderToolRows = []menuRow{
 	{parts: []menuPart{{"prefix_settings", "Settings"}}, desc: "Settings"},
 	{parts: []menuPart{{"prefix_keybinds", "Keybindings"}}, desc: "Keybindings"},
 	{parts: []menuPart{{"prefix_screenshot", "Screenshot"}}, desc: "Screenshot"},
-	{parts: []menuPart{{"prefix_transfers", "Copies"}}, desc: "Copies"},
 	{parts: []menuPart{{"prefix_jump_notif", "Newest message"}}, desc: "Newest message"},
 	{parts: []menuPart{{"prefix_last_message", "Show last message"}}, desc: "Show last message"},
 	{parts: []menuPart{{"prefix_help", "Help"}}, desc: "Help"},
@@ -338,14 +337,6 @@ func IsAgentPrefixKeybinding(k Keybinding) bool {
 		return true
 	}
 	return false
-}
-
-// IsTransfersPrefixKeybinding reports whether a prefix menu line is the one
-// that opens the Copies panel. The client leaves it out while no copy exists,
-// as it draws nothing else for copies then; the key works either way. An
-// 80x24 screen has no row to spare for it.
-func IsTransfersPrefixKeybinding(k Keybinding) bool {
-	return k.Action == "prefix_transfers"
 }
 
 // IsAgentsSettingsPrefixKeybinding reports whether a prefix menu line is the

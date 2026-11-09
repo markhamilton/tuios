@@ -268,12 +268,6 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 	t.Run("a link draws on its own budget", func(t *testing.T) {
 		d := testFrameDaemon(t)
 		person := d.readBudgetFor(&connState{})
-		if link := d.readBudgetFor(&connState{viaLink: true}); link == person {
-			t.Fatal("a link draws on the person's budget")
-		}
-		if human := d.readBudgetFor(&connState{viaLink: true, linkHuman: true}); human != person {
-			t.Fatal("the person working through a hub does not draw on the person's budget")
-		}
 		if hosted := d.readBudgetFor(&connState{paneOnly: true}); hosted == person {
 			t.Fatal("a hosted pane call draws on the person's budget")
 		}
@@ -399,19 +393,6 @@ func TestConnectionCaps(t *testing.T) {
 	if got := d.openConns.Load(); got != maxConnections {
 		t.Fatalf("%d connections counted after refusals, want %d", got, maxConnections)
 	}
-
-	t.Run("the link sockets have slots of their own", func(t *testing.T) {
-		for i := range maxLinkConnections {
-			a, _ := pipe()
-			if !d.admitConnection(a, &d.openLinkConns, maxLinkConnections) {
-				t.Fatalf("link connection %d of %d was refused with the main socket full", i+1, maxLinkConnections)
-			}
-		}
-		a, _ := pipe()
-		if d.admitConnection(a, &d.openLinkConns, maxLinkConnections) {
-			t.Fatalf("link connection %d was admitted over the cap", maxLinkConnections+1)
-		}
-	})
 
 	d.openConns.Add(-1)
 	a, _ := pipe()

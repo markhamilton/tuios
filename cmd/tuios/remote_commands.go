@@ -141,9 +141,6 @@ func printVerbResult(raw json.RawMessage, jsonOutput bool) error {
 
 // reportVerbError renders a failed verb call, honoring --json by printing a
 // {success:false,error} object and exiting non-zero.
-//
-// An error another machine answered carries host and untrusted, as a result
-// from there does.
 func reportVerbError(err error, jsonOutput bool) error {
 	if jsonOutput {
 		outputJSON(verbErrorJSON(err))
@@ -164,9 +161,6 @@ func verbErrorJSON(err error) map[string]any {
 	if here, ok := errors.AsType[*session.AgentsOffHereError](err); ok {
 		out["error"] = here.Error()
 		out["code"] = here.ErrorCode()
-	}
-	if h, ok := errors.AsType[*hostError](err); ok {
-		markUntrusted(out, h.host)
 	}
 	return out
 }
@@ -235,8 +229,7 @@ func sendKeysSummary(sentTo, windowID, window string, keys int) string {
 // newWindowOptions is the `tuios new-window` command line. workspace 0 means
 // the current one, an empty cwd means the daemon's own directory, and a
 // non-empty command is an argv the window execs as its process instead of a
-// shell. A non-empty host puts the window's process on another machine; the
-// window is still this session's. Non-empty grants are what the window's
+// shell. Non-empty grants are what the window's
 // process may do through tuios.
 type newWindowOptions struct {
 	session, name string
@@ -244,7 +237,6 @@ type newWindowOptions struct {
 	cwd           string
 	focus         bool
 	command       []string
-	host          string
 	grants        []string
 	kind, uri     string
 	jsonOut       bool
@@ -275,9 +267,6 @@ func runNewWindow(o newWindowOptions) error {
 	}
 	if len(o.command) > 0 {
 		params["command"] = o.command
-	}
-	if o.host != "" {
-		params["host"] = o.host
 	}
 	if len(o.grants) > 0 {
 		params["grants"] = o.grants
@@ -485,7 +474,7 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 		fmt.Println("No window has the focus.")
 		return nil
 	}
-	fmt.Printf("%s  %s%s\n", shortWindowID(res.FocusedWindowID), windowLabel(res.Window), t.on())
+	fmt.Printf("%s  %s\n", shortWindowID(res.FocusedWindowID), windowLabel(res.Window))
 	return nil
 }
 
@@ -882,7 +871,7 @@ func runCapturePane(o captureOptions) error {
 	if o.jsonOut {
 		return printVerbResultOn(t, raw, o.jsonOut)
 	}
-	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
+	return printCapture(os.Stdout, raw)
 }
 
 // captureCapNote is the stderr line for a scrollback capture the default cap
@@ -957,33 +946,15 @@ var errStaleCapture = errors.New("the running daemon is older than this tuios an
 // the new parameter, worded like errStaleCapture.
 var errStaleWaitNew = errors.New("the running daemon is older than this tuios and does not know --new. Run 'tuios restart-server' to update it")
 
-// printCapture writes a capture-pane result. A capture from this machine is
-// the content as it is. A capture from host is fenced with
-// session.UntrustedFence, with control and invisible format characters
-// removed (plainText). keepEscapes says the
-// caller asked for escape codes, and then SGR alone is kept (hostStyledText).
-func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEscapes bool) error {
+// printCapture writes a capture-pane result: the content as it is.
+func printCapture(w io.Writer, raw json.RawMessage) error {
 	var res struct {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	if host == "" {
-		fmt.Fprint(w, res.Content)
-		return nil
-	}
-	who := "the focused pane on " + plainLine(host)
-	if window != "" {
-		who = "pane " + plainLine(window) + " on " + plainLine(host)
-	}
-	content := plainText(res.Content)
-	if keepEscapes {
-		content = hostStyledText(res.Content)
-	}
-	// The gutter on every line keeps a line the far pane printed, the close
-	// line included, inside the fence.
-	fmt.Fprintln(w, session.UntrustedFence(who, strings.TrimRight(content, "\n")))
+	fmt.Fprint(w, res.Content)
 	return nil
 }
 
@@ -1048,7 +1019,7 @@ func queryWindows(sessionName string, jsonOutput, rail bool) error {
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printWindowList(raw, t.on())
+	return printWindowList(raw, "")
 }
 
 // queryWindow describes one window with the get-window verb, so tuios
@@ -1072,13 +1043,13 @@ func queryWindow(sessionName string, args []string, jsonOutput bool) error {
 	raw, err := t.client.Call("get-window", t.params(map[string]any{"session": sessionName, "window": window}))
 	if err != nil {
 		var call *session.VerbCallError
-		if t.host == "" && errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
+		if errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
 			return runCommandRendered(sessionName, "GetWindow", args, jsonOutput, printWindowDetail)
 		}
 		return reportVerbError(t.explain("get-window", err), jsonOutput)
 	}
 	var data map[string]any
-	if err := json.Unmarshal(t.result(raw), &data); err != nil {
+	if err := json.Unmarshal(raw, &data); err != nil {
 		return reportVerbError(fmt.Errorf("failed to parse response: %w", err), jsonOutput)
 	}
 	delete(data, "type")
@@ -1982,7 +1953,7 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		if res.ExitCode != nil {
 			status = fmt.Sprintf("exit %d", *res.ExitCode)
 		}
-		fmt.Printf("%s matched on %s%s: %s, %s\n", res.Condition, plainLine(res.Window), t.on(), status, plainLine(res.Cmdline))
+		fmt.Printf("%s matched on %s: %s, %s\n", res.Condition, plainLine(res.Window), status, plainLine(res.Cmdline))
 		return nil
 	}
 	if res.Condition == "window-exit" && res.ExitCode != nil {
@@ -1990,18 +1961,18 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		if res.Signal > 0 {
 			status = fmt.Sprintf("signal %d", res.Signal)
 		}
-		fmt.Printf("%s matched on %s%s: %s\n", res.Condition, plainLine(res.Window), t.on(), status)
+		fmt.Printf("%s matched on %s: %s\n", res.Condition, plainLine(res.Window), status)
 		return nil
 	}
 	if res.Window != "" && anySession && res.Session != "" {
-		fmt.Printf("%s matched on %s in session %s%s\n", res.Condition, plainLine(res.Window), plainLine(res.Session), t.on())
+		fmt.Printf("%s matched on %s in session %s\n", res.Condition, plainLine(res.Window), plainLine(res.Session))
 		return nil
 	}
 	if res.Window != "" {
-		fmt.Printf("%s matched on %s%s\n", res.Condition, plainLine(res.Window), t.on())
+		fmt.Printf("%s matched on %s\n", res.Condition, plainLine(res.Window))
 		return nil
 	}
-	fmt.Printf("%s matched%s\n", res.Condition, t.on())
+	fmt.Printf("%s matched\n", res.Condition)
 	return nil
 }
 
@@ -3329,36 +3300,36 @@ func runPopup(o popupOptions) error {
 	return nil
 }
 
-// completeHostNames offers the machines in the [hosts] table, each with the
-// state of its link, so a completion does not silently suggest a machine that
-// is down. A daemon that is not running, or one with no hosts, offers nothing
-// rather than an error: a completion is not the place to report a problem.
-func completeHostNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	if !session.IsDaemonRunning() {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// commas writes n with a comma between each group of three digits.
+func commas(n int) string {
+	s := fmt.Sprint(n)
+	if n < 0 {
+		return s
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+	var b strings.Builder
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(c)
 	}
-	defer func() { _ = client.Close() }()
+	return b.String()
+}
 
-	raw, err := client.Call("list-hosts", map[string]any{})
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// jsonSafe escapes the C1 controls and DEL that encoding/json leaves raw, so
+// a name a pane's program wrote cannot drive the terminal the JSON is shown
+// on.
+func jsonSafe(line string) string {
+	if !strings.ContainsFunc(line, func(r rune) bool { return r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
+		return line
 	}
-	var res struct {
-		Hosts []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-		} `json:"hosts"`
+	var b strings.Builder
+	for _, r := range line {
+		if r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			fmt.Fprintf(&b, `\u%04x`, r)
+			continue
+		}
+		b.WriteRune(r)
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	names := make([]string, 0, len(res.Hosts))
-	for _, h := range res.Hosts {
-		names = append(names, fmt.Sprintf("%s\t%s", h.Name, h.Status))
-	}
-	return names, cobra.ShellCompDirectiveNoFileComp
+	return b.String()
 }

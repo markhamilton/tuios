@@ -571,11 +571,6 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if cs != nil && cs.viaLink {
-		return nil, hintedVerbError(ErrVerbForbidden, "request-approval is refused over a link: an approval is held by the hook of a pane on this machine", &VerbHint{
-			Detail: "Nothing was held. Run the hook on the machine the pane is on.",
-		})
-	}
 	if p.Kind != "" && !slices.Contains(approvalKinds, p.Kind) {
 		return nil, invalidParam("kind", "kind is approval or plan", approvalKinds...)
 	}

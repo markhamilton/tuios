@@ -117,9 +117,6 @@ func (d *Daemon) verbSetFanVerdict(cs *connState, params json.RawMessage) (any, 
 	if strings.TrimSpace(p.Summary) == "" {
 		return nil, invalidParam("summary", "summary is required: the verdict in a sentence or two")
 	}
-	if cs != nil && cs.viaLink {
-		return nil, newVerbError(ErrVerbForbidden, "a verdict is recorded on the machine of the fan, not over a link")
-	}
 	_, info, verr := d.fanTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr

@@ -35,7 +35,7 @@ import (
 
 // pluginOfPeer is the plugin whose process session the caller is in, or nil.
 func (d *Daemon) pluginOfPeer(cs *connState) *herdrplugin.Plugin {
-	if d.plugins == nil || cs == nil || cs.viaLink || cs.peerPID <= 0 {
+	if d.plugins == nil || cs == nil || cs.peerPID <= 0 {
 		return nil
 	}
 	sid, ok := procinfo.SessionID(cs.peerPID)

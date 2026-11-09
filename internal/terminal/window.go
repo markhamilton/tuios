@@ -524,26 +524,6 @@ type Window struct {
 	// itself sets it.
 	CwdElsewhereDir string
 
-	// Host is the machine the pane's process runs on, empty for this one.
-	//
-	// It is carried on the client, rather than left in the session state the
-	// daemon holds, because it is a thing the person has to be able to see. A
-	// pane whose shell is on another machine looks exactly like one whose
-	// shell is here, and the difference decides what a command in it does: the
-	// same line is a different act on a build box than on a laptop. So the
-	// frame says which machine, and it says it whether or not the shell is
-	// cooperating about its prompt.
-	Host string
-	// hostElsewhere mirrors Host != "" for the PTY reader goroutine, which
-	// may not read Host while the update loop writes it. See
-	// ProcessElsewhere.
-	hostElsewhere atomic.Bool
-	// HostLink is "reconnecting" while the link to Host is lost and the far
-	// machine keeps the process for its grace, and empty otherwise. The frame
-	// says so in words, because a pane whose screen stopped moving looks the
-	// same as one whose process has nothing to say.
-	HostLink string
-
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 
@@ -1028,13 +1008,3 @@ func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 func (w *Window) SetHasFocus(focused bool) {
 	w.hasFocus.Store(focused)
 }
-
-// SetHost records the machine the pane's process runs on.
-func (w *Window) SetHost(host string) {
-	w.Host = host
-	w.hostElsewhere.Store(host != "")
-}
-
-// ProcessElsewhere reports whether the pane's process runs on another
-// machine. It is safe from any goroutine.
-func (w *Window) ProcessElsewhere() bool { return w.hostElsewhere.Load() }

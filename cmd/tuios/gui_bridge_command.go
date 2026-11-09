@@ -59,7 +59,6 @@ func newGUIBridgeCommand() *cobra.Command {
 	f.IntSliceVar(&opts.Insets, "insets", nil, "Room around each pane's text in pixels: top,left,right,bottom")
 	f.StringVar(&opts.Theme, "theme", "", "Theme to use instead of the one the config names")
 	f.StringVar(&opts.SessionID, "session-id", "", "Session to attach by id, before --session; with neither, the session last active")
-	f.StringVar(&opts.Host, "host", "", "Attach a session on this host from the [hosts] table, through this machine's daemon")
 	f.StringVar(&resume, "resume", "", "Stream position the renderer holds per pane: pty=seq,pty=seq")
 	f.IntVar(&opts.ResumePID, "resume-pid", 0, "The daemon pid the --resume positions came from")
 	f.IntVar(&opts.Scrollback, "scrollback", 0, "History rows each pane's snapshot carries (default: the daemon's, 1000)")

@@ -124,10 +124,7 @@ func (m *OS) BeginWorktreePromptForFocusedPane() {
 		m.ShowNotification("No pane is focused.", "info", m.Settings.NotificationDuration)
 		return
 	}
-	if !m.paneIsLocal(w) {
-		m.ShowNotification("This pane is on another machine. Run tuios worktree new on that machine.", "info", m.Settings.NotificationDuration)
-		return
-	}
+
 	var root string
 	if m.learnFiles() {
 		root = m.learn.RepoRoot(m.paneDir(w))

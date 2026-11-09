@@ -70,18 +70,14 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 	})
 }
 
-// sessionSwitcherHints is the switcher's footer. Rename and delete go to the
-// daemon this client is connected to, so they are not offered while the
-// selected row is a session on another machine.
+// sessionSwitcherHints is the switcher's footer.
 func sessionSwitcherHints(filtered []sessiontree.Node, selected int) []overlay.Hint {
-	remote := selected >= 0 && selected < len(filtered) && filtered[selected].Host != ""
-	hints := []overlay.Hint{{Key: overlay.EnterGlyph, Label: "switch"}}
-	if !remote {
-		hints = append(hints,
-			overlay.Hint{Key: "ctrl+r", Label: "rename"},
-			overlay.Hint{Key: "ctrl+d", Label: "delete"})
+	return []overlay.Hint{
+		{Key: overlay.EnterGlyph, Label: "switch"},
+		{Key: "ctrl+r", Label: "rename"},
+		{Key: "ctrl+d", Label: "delete"},
+		{Key: "esc", Label: "close"},
 	}
-	return append(hints, overlay.Hint{Key: "esc", Label: "close"})
 }
 
 // sessionSwitcherRow draws one session: its label, the identity behind it when a
@@ -90,12 +86,8 @@ func sessionSwitcherHints(filtered []sessiontree.Node, selected int) []overlay.H
 // something blocked has to be visible before the switch, not after it.
 func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	// Right half first: it is fixed-width, so the label gets whatever is left.
-	// A row under a machine that is not up is that machine's cached listing,
-	// not a session you can reach, so it is muted and wears no agent glyph,
-	// the way the rail draws it.
-	down := item.Host != "" && !m.hostIsUp(item.Host)
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(item.WindowCount))
-	if glyph, glyphColor := agentMark(item.AgentState, item.DoneSeen, item.Subagents, pal); glyph != "" && !down {
+	if glyph, glyphColor := agentMark(item.AgentState, item.DoneSeen, item.Subagents, pal); glyph != "" {
 		right += overlay.Style(rowBg).Foreground(glyphColor).
 			Bold(sidebarAttention(item.AgentState)).Render(" " + agentMarkCellRight(glyph))
 	}
@@ -110,12 +102,7 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 
 	// The identity is shown only when a display name is hiding it, so an
 	// unrenamed session reads exactly as it always has.
-	// A session on another machine is named by its name there, not by its rail
-	// identity, and the label says which machine it is on.
 	title, name := sessionSwitcherLabel(item), item.ID
-	if item.Host != "" {
-		name = remoteSessionName(item)
-	}
 	identity := ""
 	if item.Title != name {
 		identity = " (" + printableTitle(name) + ")"
@@ -135,9 +122,6 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 	labelColor := pal.FgDim
 	if selected {
 		labelColor = pal.Fg
-	}
-	if down {
-		labelColor = pal.FgMute
 	}
 	label := overlay.Truncate(printableTitle(title), avail)
 	left := mark + overlay.Style(rowBg).Foreground(labelColor).Bold(selected).Render(label)

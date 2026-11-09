@@ -120,7 +120,6 @@ func (d *Daemon) verbRegisterPush(cs *connState, params json.RawMessage) (any, *
 			}
 		}
 	}
-	viaLink := cs != nil && cs.viaLink
 	replaced, err := w.register(pushDevice{
 		Device: p.Device,
 		Kinds:  kinds,
@@ -130,7 +129,7 @@ func (d *Daemon) verbRegisterPush(cs *connState, params json.RawMessage) (any, *
 			Auth:     strings.TrimRight(p.Auth, "="),
 		},
 		Created: time.Now().Unix(),
-	}, !viaLink)
+	}, true)
 	switch {
 	case errors.Is(err, errPushExists):
 		return nil, hintedVerbError(ErrVerbForbidden, "a phone named "+echoName(p.Device)+" is registered, and a link can not replace it", &VerbHint{
@@ -151,9 +150,6 @@ func (d *Daemon) verbRegisterPush(cs *connState, params json.RawMessage) (any, *
 		return nil, newVerbError(ErrVerbInternal, "cannot read the VAPID key: "+err.Error())
 	}
 	by := "this machine"
-	if viaLink {
-		by = "the link from " + linkPeerLabel(cs)
-	}
 	LogBasic("Phone %q registered for push (%s) by %s, replaced=%v", p.Device, hostOfEndpoint(p.Endpoint), by, replaced)
 	d.attention.notePhone(p.Device, phoneRegisteredNote(hostOfEndpoint(p.Endpoint), by, replaced))
 	return map[string]any{
@@ -247,27 +243,12 @@ func (d *Daemon) verbRemovePush(cs *connState, params json.RawMessage) (any, *ve
 	}
 	// The person's own remove closes the phone's item. A remove over a
 	// link opens one: a linked machine stopped the person's pushes.
-	if cs != nil && cs.viaLink {
-		LogBasic("Phone %q removed from push by the link from %s", p.Device, linkPeerLabel(cs))
-		d.attention.notePhone(p.Device, "Removed from Web Push by the link from "+linkPeerLabel(cs)+". It gets no pushes now.")
-	} else {
-		LogBasic("Phone %q removed from push", p.Device)
-		d.attention.closePhone(p.Device)
-	}
 	return map[string]any{"type": "push_removed", "device": p.Device, "removed": true}, nil
 }
 
 // errPushExists is a register-push over a link with the name of a phone
 // already registered.
 var errPushExists = errors.New("a phone of that name is registered")
-
-// linkPeerLabel names the machine at the other end of a link connection.
-func linkPeerLabel(cs *connState) string {
-	if cs == nil || cs.linkPeer == "" {
-		return "another machine"
-	}
-	return cs.linkPeer
-}
 
 // phoneRegisteredNote is the summary of the Inbox item a registration opens.
 // The item's name names the phone.

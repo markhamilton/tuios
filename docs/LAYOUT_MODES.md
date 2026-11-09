@@ -242,8 +242,7 @@ scroll stops, as niri does at the end of a gesture: the left edge of the screen
 goes to the start of a column, or to the end of the strip. A wheel and a
 trackpad do not say when a gesture ends, so with them the strip snaps after it
 has been still for a moment, to the next column in the way it was going. One
-notch is then one column. A finger on tuios-web snaps it when the finger
-lifts, to the nearest column. The default is `false`.
+notch is then one column. The default is `false`.
 
 ### Column commands
 
@@ -465,8 +464,7 @@ Type or paste a path. Press `Enter` to save, or press `Esc` to cancel. Press
   prompt shows the full path.
 - tuios does not write over a file that exists. It tells you when the folder
   does not exist or when the path is a folder.
-- The dock shows the path of the file it wrote. In the browser client and over
-  SSH, the file is on the machine that runs tuios, and the dock names that
+- The dock shows the path of the file it wrote. Over SSH, the file is on the machine that runs tuios, and the dock names that
   machine.
 
 A pane title can come from a remote shell. In the markdown and json formats,

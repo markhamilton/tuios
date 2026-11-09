@@ -86,45 +86,6 @@ past that are listed with their counts only.`,
 	return cmd
 }
 
-// dialReviewTarget is dialTarget for the review commands, which work on this
-// machine's sessions only. Reviewing a session on a linked machine is left out
-// for now, as worktree diff leaves it out: the diff is of files there, so the
-// person attaches there or brings the work here with worktree pull. The
-// refusal comes before anything is dialled.
-func dialReviewTarget(sessionName, window string) (*verbTarget, error) {
-	if err := reviewTargetRefusal(sessionName, window); err != nil {
-		return nil, err
-	}
-	return dialTarget(sessionName, window)
-}
-
-// reviewTargetRefusal is why the review commands refuse the target, nil when
-// it is on this machine. It dials nothing.
-func reviewTargetRefusal(sessionName, window string) error {
-	host, sess, _, err := resolveTarget(sessionName, window)
-	if err != nil {
-		return err
-	}
-	if host != "" {
-		return reviewHostError(host, sess)
-	}
-	return nil
-}
-
-// reviewHostError is the refusal of a review command naming a session on
-// another machine.
-func reviewHostError(host, sess string) error {
-	name := host + ":" + sess
-	if sess == "" {
-		name = host + ":<session>"
-	}
-	return &diagnosticError{
-		What:  fmt.Sprintf("review works on this machine's sessions, and %s is on %s.", name, host),
-		Cause: "reviewing a session on a linked machine is not supported yet.",
-		Fix:   fmt.Sprintf("attach to %s and run 'tuios review' there, or run 'tuios worktree pull %s' to bring its work here and review it.", host, name),
-	}
-}
-
 // reviewOptions are the diff flags of tuios review.
 type reviewOptions struct {
 	base, against string
@@ -150,7 +111,7 @@ type reviewDiffResult struct {
 }
 
 func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOutput bool) error {
-	t, err := dialReviewTarget(sessionName, window)
+	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -182,7 +143,7 @@ func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOut
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	return printReview(w, res, t.on(), o.stat)
+	return printReview(w, res, "", o.stat)
 }
 
 // reviewHeading is the first line tuios review prints.
@@ -451,7 +412,7 @@ remove.`,
 }
 
 func runReviewNote(w io.Writer, sessionName, window string, params map[string]any, jsonOutput bool) error {
-	t, err := dialReviewTarget(sessionName, window)
+	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -477,16 +438,16 @@ func runReviewNote(w io.Writer, sessionName, window string, params map[string]an
 	}
 	switch params["action"] {
 	case "add":
-		fmt.Fprintf(w, "Added note %s%s. 'tuios review send' sends it to the agent.\n", plainLine(res.ID), t.on())
+		fmt.Fprintf(w, "Added note %s. 'tuios review send' sends it to the agent.\n", plainLine(res.ID))
 		return nil
 	case "edit":
-		fmt.Fprintf(w, "Edited note %s%s.\n", plainLine(res.ID), t.on())
+		fmt.Fprintf(w, "Edited note %s.\n", plainLine(res.ID))
 		return nil
 	case "remove":
-		fmt.Fprintf(w, "Removed note %v%s.\n", params["id"], t.on())
+		fmt.Fprintf(w, "Removed note %v.\n", params["id"])
 		return nil
 	case "clear":
-		fmt.Fprintf(w, "Removed %d %s%s.", res.Removed, plural.Word(res.Removed, "note", "notes"), t.on())
+		fmt.Fprintf(w, "Removed %d %s.", res.Removed, plural.Word(res.Removed, "note", "notes"))
 		if len(res.Notes) > 0 {
 			fmt.Fprintf(w, " %d written by others %s kept.", len(res.Notes), plural.Word(len(res.Notes), "was", "were"))
 		}
@@ -557,7 +518,7 @@ one. It says "from the person" only when sent from the attached client.`,
 }
 
 func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, jsonOutput bool) error {
-	t, err := dialReviewTarget(sessionName, window)
+	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -591,7 +552,7 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, plural.Word(res.Notes, "note", "notes"),
-		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+t.on())
+		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+"")
 	if len(res.Withheld) > 0 {
 		ids := make([]string, len(res.Withheld))
 		for i, id := range res.Withheld {

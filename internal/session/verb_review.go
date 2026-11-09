@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
@@ -134,12 +133,6 @@ func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Se
 // in. It is never the pane's OSC 7 report: any program in the pane can print
 // one, and the daemon runs git here on every checkpoint.
 func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbError) {
-	if target.Host != "" {
-		return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its repository is there, not here", &VerbHint{
-			Command: "tuios worktree pull " + target.Host + ":<session>",
-			Detail:  "Nothing was read. Reviewing a pane on another machine is not supported yet: attach to that machine and review it there, or bring its work here with tuios worktree pull and review that.",
-		})
-	}
 	cwd := sess.windowStartDir(target.ID)
 	if pty := sess.GetPTY(target.PTYID); pty != nil {
 		if live, ok := pty.ProcessCwd(); ok && live != "" {
@@ -461,12 +454,6 @@ func (d *Daemon) reviewAuthorOf(cs *connState, nonce, sessionID, verb string) (r
 	if human {
 		return reviewAuthor{by: queueByHuman, human: true}, nil
 	}
-	if cs != nil && cs.viaLink {
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		return reviewAuthor{by: queueByLinkPrefix + firstNonEmpty(peer, "*")}, nil
-	}
 	if pa := d.paneAuthority(cs); pa != nil {
 		return reviewAuthor{by: pa.window, pane: pa.window}, nil
 	}
@@ -787,7 +774,7 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 // types over a prompt.
 func (d *Daemon) reviewNoteTargetRefusal(cs *connState, target WindowState) *verbError {
 	pa := d.paneAuthority(cs)
-	if pa == nil || pa.hosted || pa.grants.Has(GrantAdmin) {
+	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return nil
 	}
 	if why := d.typingRefusal(pa, target, true); why != "" {
@@ -806,24 +793,6 @@ func (d *Daemon) reviewNoteTargetRefusal(cs *connState, target WindowState) *ver
 func (d *Daemon) reviewNoteAuthorRefusal(by string, sess *Session, target WindowState) string {
 	switch {
 	case by == queueByHuman || by == queueByShell:
-		return ""
-	case strings.HasPrefix(by, queueByLinkPrefix):
-		peer := strings.TrimPrefix(by, queueByLinkPrefix)
-		if peer == "*" {
-			peer = ""
-		}
-		var hosts linkPolicyTable
-		if t := d.linkPolicies.Load(); t != nil {
-			hosts = *t
-		}
-		if !config.LinkPolicyFor(hosts, peer).Allows(config.LinkAllowWrite) {
-			return "the link from " + firstNonEmpty(printableClaim(peer, 40), "a machine that gave no name") + " that wrote a note may no longer write here"
-		}
-		return ""
-	case strings.HasPrefix(by, "hosted:"):
-		if !d.manager.grants.defaults().Has(GrantAdmin) {
-			return "a note was written by a pane that runs here for another machine, and the default grants no longer reach any session"
-		}
 		return ""
 	}
 	session := d.sessionOfWindow(by)
@@ -871,11 +840,6 @@ func (d *Daemon) reviewSender(e *queueEntry) string {
 	switch e.origin.kind {
 	case queueByHuman:
 		return "the person"
-	case "link":
-		if e.origin.peer != "" {
-			return "a caller on " + printableClaim(e.origin.peer, 40)
-		}
-		return "a caller on a linked machine"
 	case "pane":
 		name := ""
 		if sn := d.sessionOfWindow(e.origin.window); sn != "" {

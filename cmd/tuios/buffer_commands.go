@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -402,53 +401,24 @@ func runPasteBuffer(name, sessionName, window string, del, rawText, allowBlocked
 		return err
 	}
 	defer t.Close()
-	if t.host == "" {
-		params := t.params(bufferNameParams(name))
-		params["window"] = t.window
-		if del {
-			params["delete"] = true
-		}
-		if rawText {
-			params["raw"] = true
-		}
-		if allowBlocked {
-			params["allow_blocked"] = true
-		}
-		raw, err := t.client.Call("paste-buffer", params)
-		if err != nil {
-			return reportVerbError(t.explain("paste-buffer", err), jsonOutput)
-		}
-		if jsonOutput {
-			return printVerbResult(raw, true)
-		}
-		return nil
-	}
-	// The buffers are this machine's, and the pane is on another one: the
-	// text goes there as a paste.
-	params := bufferNameParams(name)
-	params["encoding"] = "base64"
-	raw, err := callBufferVerb("show-buffer", params)
-	if err != nil {
-		return reportVerbError(err, jsonOutput)
-	}
-	bufName, data, version, err := bufferContent(raw)
-	if err != nil {
-		return err
-	}
-	res, err := t.client.Call("send-text", t.params(map[string]any{"window": t.window, "text": pastebuf.PasteText(data, rawText), "paste": true}))
-	if err != nil {
-		return reportVerbError(t.explain("send-text", err), jsonOutput)
-	}
+
+	params := t.params(bufferNameParams(name))
+	params["window"] = t.window
 	if del {
-		// Only the text that was pasted: a buffer set again meanwhile stays.
-		params := bufferNameParams(bufName)
-		params["version"] = version
-		if _, err := callBufferVerb("delete-buffer", params); err != nil {
-			return reportVerbError(err, jsonOutput)
-		}
+		params["delete"] = true
+	}
+	if rawText {
+		params["raw"] = true
+	}
+	if allowBlocked {
+		params["allow_blocked"] = true
+	}
+	raw, err := t.client.Call("paste-buffer", params)
+	if err != nil {
+		return reportVerbError(t.explain("paste-buffer", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResultOn(t, res, true)
+		return printVerbResult(raw, true)
 	}
 	return nil
 }

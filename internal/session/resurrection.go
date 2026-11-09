@@ -229,7 +229,7 @@ func CleanResurrectionDir() {
 	// there is only swept once it is old, since nothing here says no write is
 	// in flight in them.
 	for _, d := range []string{
-		filepath.Dir(outboxPath()), filepath.Dir(attentionPath()),
+		filepath.Dir(attentionPath()),
 		filepath.Dir(reviewNotesPath()), filepath.Dir(appliedGrantsPath()), pushDir(),
 	} {
 		atomicfile.SweepStale(d, staleTempAge)

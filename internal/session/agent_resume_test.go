@@ -51,9 +51,6 @@ func savedAgentSession(name string) *SessionState {
 			{ID: "win-aider", Title: "aider", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-2",
 				AgentState: AgentStateIdle, AgentHarness: "aider",
 				AgentSessionID: "a1", AgentSessionHarness: "aider"},
-			{ID: "win-remote", Title: "remote", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-3",
-				Host: "build", AgentState: AgentStateWorking, AgentHarness: "echoer",
-				AgentSessionID: "r1", AgentSessionHarness: "echoer"},
 			{ID: "win-plain", Title: "plain", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-4"},
 			{ID: "win-ended", Title: "ended", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-5",
 				AgentSessionID: "e1-ended", AgentSessionHarness: "echoer"},
@@ -108,9 +105,6 @@ func TestRestoreKeepsTheConversationID(t *testing.T) {
 	}
 	if w := got["win-aider"]; w.AgentSessionID != "a1" {
 		t.Errorf("a pane whose harness cannot resume lost its id %q; it is still worth keeping", w.AgentSessionID)
-	}
-	if w := got["win-remote"]; w.AgentSessionID != "" || w.AgentSessionHarness != "" {
-		t.Errorf("a pane that ran on another machine kept that machine's conversation %q", w.AgentSessionID)
 	}
 	if w := got["win-ended"]; w.AgentSessionID != "e1-ended" {
 		t.Errorf("a pane whose agent had exited lost its id %q; resume-agent still needs it", w.AgentSessionID)
@@ -226,7 +220,6 @@ func TestResumeAgentRefusesWhatItCannotDo(t *testing.T) {
 	for _, tc := range []struct{ window, code string }{
 		{"win-plain", ErrVerbNotResumable},
 		{"win-aider", ErrVerbNotResumable},
-		{"win-remote", ErrVerbNotResumable},
 	} {
 		resp := c.call(t, `{"id":1,"verb":"resume-agent","params":{"session":"refuse","window":"`+tc.window+`"}}`)
 		if code := errCode(t, resp); code != tc.code {

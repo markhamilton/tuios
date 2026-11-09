@@ -14,7 +14,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
@@ -710,29 +709,10 @@ type OS struct {
 	// current workspace and session, for last_workspace and last_session.
 	lastWorkspace int
 	lastSession   lastSession
-	// shownOn is the session this client last showed on each machine, by
-	// machine name, for next_host and prev_host. See host_cycle.go.
-	shownOn map[string]string
-	// AttachedHost is the host DaemonClient reaches its daemon through, or ""
-	// for the daemon on this machine. See SwitchToHostSession.
-	AttachedHost string
-	// hostReturn is the session on this machine to come back to if the link
-	// to AttachedHost drops and cannot be got back, or "" when the client
-	// started on the host.
-	hostReturn string
-	// sessionSwitchHook, when set, replaces the connection work of
-	// switchSession. Tests set it to see which machine and name a surface
-	// asked for without a daemon on either end. Nil in production.
+	// sessionSwitchHook, when set, replaces the work of switchSession. Tests
+	// set it to see which session a surface asked for without a daemon. Nil
+	// in production.
 	sessionSwitchHook func(host, name string) error
-	// hostReconnect is the attempt to get a dropped link back, nil when there
-	// is nothing to get back. See host_reconnect.go.
-	hostReconnect *hostReconnect
-	// hostReconnectGen numbers those attempts, so a dial that finishes after
-	// the user has moved on is discarded rather than applied.
-	hostReconnectGen int
-	// hostReconnectReason is the sentence the exit notice shows when the
-	// client gave up on a link and had nowhere on this machine to return to.
-	hostReconnectReason string
 	// foreignTickGen is the generation of the listing poll timer now armed, and
 	// foreignSessionReplan asks Update to arm a new one. See
 	// foreignSessionReplanCmd.
@@ -779,10 +759,6 @@ type OS struct {
 	// none. It is daemon-owned and comes down with the session state, like
 	// SessionGlobal; every other session's arrives with the cached listing.
 	SessionSpace string
-	// The machines on this user's tailnet, offered as addresses on the Hosts
-	// settings page. Filled once by a goroutine, because the call behind it is
-	// a round trip and the row that shows them is drawn in the render path.
-	// See tailnetAddrCandidates.
 	// markStyleCache holds the selection, search and copy mode cursor styles
 	// so they are built once rather than per matching cell per frame. See
 	// marks() in render_terminal.go.
@@ -831,15 +807,6 @@ type OS struct {
 	// ArmPrefixRepeat.
 	prefixRepeatUntil time.Time
 
-	tailnetMu         sync.Mutex
-	tailnetAskedAt    time.Time
-	tailnetCandidates []string
-	// The [tailscale] table as last read, and the version of the config file
-	// it was read from. See tailnetOptionsCached.
-	tailnetOpt        federation.TailnetOptions
-	tailnetOptEnabled bool
-	tailnetOptKey     tailnetFileKey
-	tailnetOptValid   bool
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the
@@ -1387,9 +1354,6 @@ type OS struct {
 	// stopInbox ends the watcher. Both nil until the watcher starts.
 	inboxEvents chan tea.Msg
 	stopInbox   func()
-	// transfers is the mirror of the daemon's copies between machines, the
-	// Copies panel and its dialogs. See transfers.go.
-	transfers transfersState
 	// agentsSwitchedOff is the agent switch as applyAgentsSwitch last saw
 	// it, so a config change that did not touch it does nothing.
 	agentsSwitchedOff bool
@@ -1401,54 +1365,6 @@ type OS struct {
 	SessionSwitcherItems         []sessiontree.Node
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
 
-	// FederationHosts is what the daemon last said about the machines in the
-	// [hosts] config table, with the sessions each holds. The rail reads it and
-	// never writes it; it is refreshed by a Cmd, never inside Update. See
-	// sidebar_hosts.go.
-	FederationHosts []FederationHost
-	// LocalLoad is the load of the machine the client's daemon runs on, as
-	// the last host listing carried it: Cores is 0 until one did.
-	LocalLoad federation.Load
-	// federationGen counts snapshots, so the rail's render cache can tell one
-	// from the next without comparing them.
-	federationGen uint64
-	// federationPolling stays true while the daemon holds at least one host. It
-	// starts true so the first poll happens, and the first answer turns it off
-	// for a daemon with no hosts, which is the default install.
-	federationPolling bool
-	// federationPushed is true while the daemon streams every host that is
-	// up and pushes each change, so the rail's poll drops to a slow backstop.
-	// See FederationHostsMsg.Pushed.
-	federationPushed bool
-	// hostSignInUntil is when the fast host poll that opening a Tailscale
-	// sign-in page started ends. See host_signin.go.
-	hostSignInUntil time.Time
-	// hostSignInPending holds the machines whose sign-in page the person
-	// asked for before the daemon had one, with when the request lapses.
-	hostSignInPending map[string]time.Time
-	// hostOpen is the session on another machine a rail click waits for, and
-	// hostOpenGen counts the clicks. See host_open.go.
-	hostOpen    *hostOpenPending
-	hostOpenGen uint64
-	// hostReconnectDeferred says the link to the attached host was lost, or
-	// its reconnect stopped, while a rail click waited. The reconnect starts
-	// when no click waits any more. See resumeAfterHostOpen.
-	hostReconnectDeferred bool
-	// federationTickGen is the generation of the host poll timer now armed. A
-	// tick from an older generation is dropped, so the snapshot's re-arm and
-	// the tick's own re-arm cannot leave two loops running.
-	federationTickGen uint64
-	// hostTests are the results of the settings page's last link test, keyed by
-	// host name. A row prefers its test result to the daemon's snapshot: the
-	// test is newer, and it is what the user just asked for.
-	hostTests map[string]federation.HostReport
-	// hostTestRunning is true while a link test is in flight, so the row cannot
-	// start a second one.
-	hostTestRunning bool
-	// hostsToApply are the hosts the person changed on the settings page
-	// since the last save. The daemon applies a file change that dials a
-	// new host only for the person, so the save asks it to (applyHostsCmd).
-	hostsToApply []string
 	// navigator is the pane navigator (choose_tree) while it is up. See
 	// navigator.go.
 	navigator navigatorState
@@ -1479,30 +1395,6 @@ type OS struct {
 	AggregateViewQuery    string
 	AggregateViewSelected int
 	AggregateViewScroll   int
-	// Machine picker overlay: which machine a new window's process runs on.
-	//
-	// A session can hold windows from several machines, and the only way to
-	// make one was the command line. This is the way from inside, and it is a
-	// picker rather than a prompt because the answer is one of a known list.
-	ShowHostPicker bool
-	// HostPickerPurpose is what the machine picker was opened for: a window or
-	// a session. The list and the keys are the same; only the title and what
-	// enter does differ. See host_picker.go.
-	HostPickerPurpose  HostPickerPurpose
-	HostPickerQuery    string
-	HostPickerSelected int
-	HostPickerScroll   int
-	// HostPickerItems is the list as it stood when the picker opened. It is
-	// held rather than rebuilt per keystroke so the rows cannot move under the
-	// cursor while somebody is typing: a link coming up mid-search would
-	// otherwise change what Enter means.
-	HostPickerItems []HostPickerItem
-	// attachedHosts is the attached machine's own host list, for the window
-	// picker while the client is on another machine. See
-	// host_picker_attached.go.
-	attachedHosts       attachedHostView
-	attachedHostsLoaded bool
-	attachedHostsCh     chan AttachedHostsMsg
 
 	// Layout picker overlay
 	ShowLayoutPicker bool
@@ -1795,36 +1687,14 @@ type OS struct {
 	// survives the sessions in it being replaced. Persisted in the sidebar
 	// state file. See sidebar_worktrees.go.
 	SidebarCollapsedRepos map[string]bool
-	// SidebarCollapsedHosts is the set of machines whose group is folded shut
-	// on the rail, keyed by host name. Persisted in the sidebar state file.
-	// See sidebar_hosts.go.
-	SidebarCollapsedHosts map[string]bool
-	// SidebarHostOrder is the user's drag-defined order of the machine groups,
-	// applied over the daemon's sorted table (machines not named here keep
-	// their sorted order after the named ones). This machine is always first
-	// and is not in it. SidebarHostIDs is the machine order displayed last
-	// frame, which is what a starting drag snapshots. Persisted in the sidebar
-	// state file.
-	SidebarHostOrder []string
-	SidebarHostIDs   []string
-	// sidebarMachineGroups is whether the last frame laid the sessions section
-	// out by machine, which is what steps its rows in under their machine's
-	// heading. Derived by the render from the stored snapshot, never stored:
-	// with no other machine there are no headings and no step, so the rail of
-	// a machine that stands alone is untouched. See sidebar_hosts.go.
-	sidebarMachineGroups bool
-	// SidebarHostSessionOrder is the drag-defined session order of each other
-	// machine, keyed by host name, kept apart from SidebarOrder so a drag while
-	// attached on build cannot write build's names over this machine's order.
-	SidebarHostSessionOrder map[string][]string
-	// sessionOrderLocal holds, by machine, the build of a daemon that turned
-	// set-session-order down, as a verb it does not know or one a link does
-	// not allow: its rail order stays this client's until that machine runs
-	// another build. sessionOrderPush is, by machine, the
-	// order sent and not answered yet, and the one waiting behind it. See
-	// session_order.go.
-	sessionOrderLocal map[string]string
-	sessionOrderPush  map[string]*sessionOrderPush
+	// sessionOrderLocal holds the build of a daemon that turned
+	// set-session-order down as a verb it does not know, when
+	// sessionOrderLocalSet: its rail order stays this client's until the
+	// daemon runs another build. sessionOrderPush is the order sent and not
+	// answered yet, and the one waiting behind it. See session_order.go.
+	sessionOrderLocal    string
+	sessionOrderLocalSet bool
+	sessionOrderPush     sessionOrderPush
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
 	// order after the named ones). Persisted in the sidebar state file.
@@ -2172,10 +2042,6 @@ type Notification struct {
 // absent: it is resolved from live state at jump time, because a stored index
 // goes stale the moment the window is moved.
 type NotifTarget struct {
-	// Host is the machine the session is on, as attachedMachine names it, when
-	// the message names one: the Inbox's alerts do. Empty means the machine
-	// the client is attached to, which is every other message.
-	Host      string
 	SessionID string
 	WindowID  string
 	// Thread, when set, is the mail thread the message is about: activating
@@ -2250,10 +2116,6 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	if targetSession == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
-	// A switch the person made ends a rail click that waits for another
-	// machine. See host_open.go.
-	m.cancelHostOpen()
-
 	m.LogInfo("[SWITCH] Starting: %s → %s", m.SessionName, targetSession)
 
 	savedWidth, savedHeight := m.Width, m.Height
@@ -2283,7 +2145,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 		// on its own session with every pane streaming.
 		return fmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
 	}
-	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
+	from := lastSession{name: m.SessionName}
 	m.SessionName = m.DaemonClient.SessionName()
 	m.rebuildForSession(state, savedWidth, savedHeight)
 	m.leftSession(from)
@@ -2461,7 +2323,6 @@ func (m *OS) Cleanup() {
 	m.endConfigWatch()
 	m.endOmarchyFollow()
 	m.endInboxWatch()
-	m.endTransfersWatch()
 	m.stopFileWatch()
 	m.stopThreadWatch()
 	// Ends every listener command the model armed, and the video frame writer.

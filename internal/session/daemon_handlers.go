@@ -273,10 +273,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// again. With none recorded this is a scan of the sessions and no more.
 	d.kickPRPoll()
 
-	// Before the reply, so a pane that probes the moment this client can see
-	// it is already answered for this client's machine.
-	d.refreshLinkedViewer(session.ID)
-
 	clientCount := d.getSessionClientCount(session.ID)
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
 		cs.clientID, session.Name(), clientCount, payload.Width, payload.Height)
@@ -398,7 +394,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	d.sendPluginAsks(cs)
 
 	// A probe that has not reached a pane yet may still: see nest_probe.go.
-	if inside == nil && !cs.viaLink {
+	if inside == nil {
 		d.watchNestedAfterAttach(cs, session.ID, payload.NestProbe, payload.AllowNested)
 	}
 
@@ -1108,7 +1104,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	}
 	// A read-only viewer and a client on another machine never hold a pane
 	// that streams graphics. See holdForSlowSubscribers.
-	paces := !cs.viewOnly && !cs.viaLink
+	paces := !cs.viewOnly
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)

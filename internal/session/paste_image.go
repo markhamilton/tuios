@@ -1,17 +1,13 @@
 package session
 
 import (
-	"bufio"
 	"bytes"
-	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -95,11 +91,6 @@ const (
 // names with this prefix, so a directory shared with a standalone tuios, or a
 // file somebody put there by hand, is left alone.
 const pasteFilePrefix = "tuios-paste-"
-
-// pasteHostedBudget bounds a paste that crosses a link: dialing a stream, the
-// bytes, and the far daemon's write. It is longer than a control call because
-// eight megabytes over a slow ssh link takes a while.
-const pasteHostedBudget = 60 * time.Second
 
 // errPasteNotImage is a paste whose bytes are not an image tuios recognises.
 var errPasteNotImage = errors.New("the content is not a PNG, JPEG, GIF, WebP, BMP or TIFF image")
@@ -521,51 +512,9 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	w, pty, verr := d.resolveWindowPTY(sess, p.Window)
+	w, _, verr := d.resolveWindowPTY(sess, p.Window)
 	if verr != nil {
 		return nil, verr
-	}
-
-	if rp, ok := pty.pty.(*remotePane); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), pasteHostedBudget)
-		defer cancel()
-		path, err := rp.pasteImage(ctx, data)
-		if err != nil {
-			// A refusal by the far machine's link policy is passed on as it
-			// is, so the client can say which capability to add and where.
-			if far, ok := errors.AsType[*verbError](err); ok && far.Code == ErrVerbForbidden {
-				return nil, hintedVerbError(ErrVerbForbidden, "paste-image: "+rp.host+" refused the image: "+far.Message, refusedOn(far.Hint, rp.host))
-			}
-			return nil, hintedVerbError(ErrVerbHostUnreachable, "paste-image: the image did not reach "+rp.host+": "+err.Error(), &VerbHint{
-				Detail: "Nothing was pasted. Check that the link to " + rp.host + " is up and that its tuios is current.",
-			})
-		}
-		return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "host": rp.host, "path": path, "bytes": len(data)}, nil
-	}
-
-	// A pane whose shell is on another machine (ssh in the pane) gets the
-	// file on that machine. See paste_image_ssh.go.
-	host, elsewhere, err := d.paneRemoteHost(pty)
-	if refusal, ok := errors.AsType[pasteRefusal](err); ok {
-		hint := &VerbHint{Detail: refusal.detail}
-		if refusal.noLink {
-			hint.Command = "tuios hosts add <name> <addr>"
-		}
-		return nil, hintedVerbError(ErrVerbUnknownHost, "paste-image: "+refusal.detail, hint)
-	}
-	if elsewhere {
-		ctx, cancel := context.WithTimeout(context.Background(), pasteHostedBudget)
-		defer cancel()
-		path, err := d.pasteToHost(ctx, host, data)
-		if err != nil {
-			if far, ok := errors.AsType[*VerbCallError](err); ok && far.Code == ErrVerbForbidden {
-				return nil, hintedVerbError(ErrVerbForbidden, "paste-image: "+host+" refused the image: "+far.Message, refusedOn(far.Hint, host))
-			}
-			return nil, hintedVerbError(ErrVerbHostUnreachable, "paste-image: the image did not reach "+host+": "+err.Error(), &VerbHint{
-				Detail: "Nothing was pasted. Check that the link to " + host + " is up and that its tuios is current.",
-			})
-		}
-		return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "host": host, "path": path, "bytes": len(data)}, nil
 	}
 
 	path, err := d.pastes.save(data)
@@ -573,123 +522,4 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbInternal, "paste-image: cannot write the image: "+err.Error())
 	}
 	return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "path": path, "bytes": len(data)}, nil
-}
-
-// verbPastePaneImage writes an image for a pane this machine runs for another
-// machine. Only that machine's daemon holds the token it needs.
-func (d *Daemon) verbPastePaneImage(_ *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Pane    string `json:"pane"`
-		Token   string `json:"token"`
-		Content string `json:"content"`
-	}
-	if verr := decodeParams(params, &p); verr != nil {
-		return nil, verr
-	}
-	if p.Pane == "" {
-		return nil, invalidParam("pane", "paste-pane-image needs the pane id that open-pane returned.")
-	}
-	hp := d.lookupHostedPane(p.Pane)
-	if hp == nil {
-		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(p.Pane)+".")
-	}
-	if hp.callsToken == "" || subtle.ConstantTimeCompare([]byte(hp.callsToken), []byte(p.Token)) != 1 {
-		return nil, newVerbError(ErrVerbForbidden, "paste-pane-image: the token is not this pane's. Only the daemon that owns the window can paste into it.")
-	}
-	data, verr := decodePasteContent("paste-pane-image", p.Content)
-	if verr != nil {
-		return nil, verr
-	}
-	path, err := d.pastes.save(data)
-	if err != nil {
-		return nil, newVerbError(ErrVerbInternal, "paste-pane-image: cannot write the image: "+err.Error())
-	}
-	return map[string]any{"pane": p.Pane, "path": path, "bytes": len(data)}, nil
-}
-
-// maxPasteReply bounds the far daemon's answer to paste-pane-image.
-const maxPasteReply = 64 * 1024
-
-// pasteImage sends an image to the far machine and returns the path it was
-// written to there. The bytes go on a connection of their own: the link's
-// control stream carries every other call, and eight megabytes on it would
-// hold them all up.
-func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error) {
-	if p.fed == nil {
-		return "", errors.New("this daemon has no links")
-	}
-	if p.callsToken == "" {
-		return "", errors.New("the tuios there is too old to take a pasted image. Update it, then restart its daemon")
-	}
-	stream, err := p.fed.OpenConnection(ctx, p.host)
-	if err != nil {
-		return "", err
-	}
-	// Closing the stream is what ends a read that ctx has given up on.
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-done:
-		}
-		_ = stream.Close()
-	}()
-
-	params, err := json.Marshal(map[string]string{
-		"pane":    p.id,
-		"token":   p.callsToken,
-		"content": base64.StdEncoding.EncodeToString(data),
-	})
-	if err != nil {
-		return "", err
-	}
-	req, err := json.Marshal(verbRequest{ID: json.RawMessage(`1`), Verb: "paste-pane-image", Params: params})
-	if err != nil {
-		return "", err
-	}
-	if _, err := stream.Write(append(req, '\n')); err != nil {
-		return "", fmt.Errorf("cannot send the image: %w", err)
-	}
-	line, err := readLimitedLine(bufio.NewReader(stream), maxPasteReply)
-	if err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		if errors.Is(err, io.EOF) {
-			return "", errors.New("the far machine closed the connection")
-		}
-		return "", err
-	}
-	var resp struct {
-		Result *struct {
-			Path string `json:"path"`
-		} `json:"result"`
-		Error *verbError `json:"error"`
-	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", fmt.Errorf("the reply cannot be read by this build: %w", err)
-	}
-	if resp.Error != nil {
-		if resp.Error.Code == ErrVerbUnknownVerb {
-			return "", errors.New("the tuios there is too old to take a pasted image. Update it, then restart its daemon")
-		}
-		return "", resp.Error
-	}
-	if resp.Result == nil || resp.Result.Path == "" {
-		return "", errors.New("the reply named no path")
-	}
-	return resp.Result.Path, nil
-}
-
-// refusedOn is a copy of the far machine's hint with the host that refused,
-// as this machine names it.
-func refusedOn(h *VerbHint, host string) *VerbHint {
-	out := &VerbHint{}
-	if h != nil {
-		c := *h
-		out = &c
-	}
-	out.Host = host
-	return out
 }

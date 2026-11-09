@@ -70,14 +70,9 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 		return nil
 	}
 	var dir string
-	if m.AttachedHost != "" {
-		// Every pane is on the session's machine, so the folder is the
-		// focused pane's own path there, and this machine's home means
-		// nothing. scratchDir is not asked: it stats a folder here.
-		dir = m.remotePaneDir()
-	} else {
-		dir = m.scratchDir()
-	}
+
+	dir = m.scratchDir()
+
 	env := m.commandEnv(dir)
 	// scratch, popup and pane run on the session's machine, so their line is
 	// built for its OS. A shell entry runs here.
@@ -95,7 +90,6 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 			req := commandPopupRequest{
 				Session: m.SessionName, Title: c.Label(), Command: argv, Dir: dir,
 				Width: c.WidthSpec(), Height: c.HeightSpec(), Workspace: m.CurrentWorkspace,
-				Host: m.AttachedHost, Build: m.DaemonClient.ClientVersion(),
 			}
 			label := c.Label()
 			return func() tea.Msg { return CommandRanMsg{Label: label, Err: commandPopupOpener(req)} }
@@ -156,7 +150,7 @@ func (m *OS) addWindowInChecked(dir, name string, command ...string) error {
 		m.addDaemonWindow(dir, name, "", command)
 		err := m.windowIntentErr
 		m.windowIntentErr = nil
-		if err != nil && m.AttachedHost == "" {
+		if err != nil {
 			return errNoWindow
 		}
 		return err
@@ -182,45 +176,12 @@ func (m *OS) entryFailure(label string, err error) string {
 }
 
 // sessionCallFailure says, in words a person acts on, why a call to the
-// session's daemon failed: a refusal by the link's allow list, a link that
-// is down, or a host that tuios does not know. It is "" for any other error.
+// session's daemon failed. It is "" for any other error.
 func (m *OS) sessionCallFailure(err error) string {
-	host := m.AttachedHost
-	if refusal := linkRefusal(host, err); refusal != "" {
-		return refusal
+	if errors.Is(err, errNoWindow) {
+		return "The daemon on this machine did not answer. Try again in a moment."
 	}
-	if host == "" {
-		if errors.Is(err, errNoWindow) {
-			return "The daemon on this machine did not answer. Try again in a moment."
-		}
-		return ""
-	}
-	if connErr, ok := errors.AsType[*session.HostConnectError](err); ok {
-		switch connErr.Code {
-		case session.ErrVerbUnknownHost:
-			return "This machine has no host named " + host + ". Add it to [hosts] in the config, then attach again."
-		case session.ErrVerbProtocolMismatch, session.ErrVerbUnknownVerb:
-			return plainCause(connErr)
-		}
-		return linkDownNotice(host)
-	}
-	if _, ok := errors.AsType[*session.ProtocolMismatchError](err); ok {
-		return "The tuios on " + host + " is a different version. Update tuios on " + host + ", then try again."
-	}
-	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
-		if callErr.Code == session.ErrVerbHostUnreachable {
-			return linkDownNotice(host)
-		}
-		// The far daemon answered. Its own words say what is wrong.
-		return ""
-	}
-	// No answer at all: the link dropped, or the call timed out on it.
-	return linkDownNotice(host)
-}
-
-// linkDownNotice is the message for a call that did not reach host.
-func linkDownNotice(host string) string {
-	return "Cannot reach " + host + ". The link is reconnecting. Try again in a moment."
+	return ""
 }
 
 // plainCause is an error as a sentence: the daemon's message without its
@@ -242,25 +203,9 @@ func plainCause(err error) string {
 }
 
 // sessionGOOS is the OS of the machine that holds the session, as Go names
-// it. For a session on another machine it is what that daemon's hello said
-// when the client attached. Until that answer is in, or from a daemon too
-// old to say, a focused pane in a drive folder means Windows, and anything
-// else means a Unix.
+// it: this one.
 func (m *OS) sessionGOOS() string {
-	if m.AttachedHost == "" {
-		return runtime.GOOS
-	}
-	if v, ok := m.attachedView(); ok && v.OS != "" {
-		return v.OS
-	}
-	if w := m.GetFocusedWindow(); w != nil {
-		if dir := remoteFolder(w.Cwd); dir != "" {
-			if _, ok := winpath.ForOS(dir, "windows"); ok && !strings.HasPrefix(dir, "/") {
-				return "windows"
-			}
-		}
-	}
-	return "linux"
+	return runtime.GOOS
 }
 
 // commandScratchSpec is the scratch spec of a scratch entry.
@@ -282,7 +227,7 @@ func (m *OS) commandEnv(dir string) map[string]string {
 	}
 	// The socket is this machine's. A pane on another machine has its own
 	// daemon's socket set already.
-	if m.IsDaemonSession && m.AttachedHost == "" {
+	if m.IsDaemonSession {
 		if path, err := session.GetSocketPath(); err == nil {
 			env[session.SocketEnv] = path
 		}
@@ -385,15 +330,12 @@ type commandPopupRequest struct {
 	Dir            string
 	Width, Height  string
 	Workspace      int
-	// Host is the machine the session is on, "" for this one. Build is this
-	// client's version, for the handshake through the link.
-	Host, Build string
 }
 
 // openCommandPopup asks the session's daemon for a popup that closes when the
 // command exits, as tuios popup does.
 func openCommandPopup(req commandPopupRequest) error {
-	c, err := dialSessionDaemon(req.Host, req.Build)
+	c, err := session.DialVerbClient()
 	if err != nil {
 		return err
 	}
@@ -411,47 +353,6 @@ func openCommandPopup(req commandPopupRequest) error {
 	}
 	_, err = c.Call("popup", params)
 	return err
-}
-
-// dialSessionDaemon opens a verb connection to the daemon that holds a
-// session: this machine's for host "", else host's through the link, where
-// host's allow list for this machine applies. Nothing runs on this machine.
-func dialSessionDaemon(host, build string) (*session.VerbClient, error) {
-	if host == "" {
-		return session.DialVerbClient()
-	}
-	c, _, err := session.DialVerbClientThroughHost(host, build)
-	return c, err
-}
-
-// linkRefusal is the message for a call that the session's machine refused
-// by its link policy, or "" for any other error. That machine names the
-// capabilities it lacks and the config table that grants them. host is the
-// machine, "" when it is not known.
-func linkRefusal(host string, err error) string {
-	callErr, ok := errors.AsType[*session.VerbCallError](err)
-	if !ok || callErr.Code != session.ErrVerbForbidden || callErr.Hint == nil || len(callErr.Hint.Missing) == 0 {
-		return ""
-	}
-	if callErr.Hint.Host != "" {
-		host = callErr.Hint.Host
-	}
-	where := "The other machine"
-	on := "on the other machine"
-	if host != "" {
-		where = "Host " + host
-		on = "on " + host
-	}
-	quoted := make([]string, 0, len(callErr.Hint.Missing))
-	for _, c := range callErr.Hint.Missing {
-		quoted = append(quoted, `"`+c+`"`)
-	}
-	table := callErr.Hint.Table
-	if table == "" {
-		table = "[hosts]"
-	}
-	return where + " does not allow " + strings.Join(callErr.Hint.Missing, " and ") + " from this machine. Add " +
-		strings.Join(quoted, " and ") + " to the allow list in " + table + " " + on + "."
 }
 
 // paletteCategoryCommands is the palette category of the command entries.

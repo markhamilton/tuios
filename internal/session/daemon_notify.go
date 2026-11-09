@@ -184,10 +184,7 @@ func (n *pushNotifier) follow() {
 
 // note folds one attention event in.
 func (n *pushNotifier) note(action string, it AttentionItem) {
-	if it.Host != "" {
-		// Another machine's item. That machine sends its own.
-		return
-	}
+
 	n.web.note(action, it)
 	n.mu.Lock()
 	defer n.mu.Unlock()

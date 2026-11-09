@@ -115,7 +115,7 @@ func GroupByRepo(nodes []Node) []Node {
 // groupRepo is the repository a node is grouped under, or "" for a node that is
 // not grouped at all.
 func groupRepo(n Node) string {
-	if n.Kind != KindSession || n.Host != "" || n.Worktree == nil {
+	if n.Kind != KindSession || n.Worktree == nil {
 		return ""
 	}
 	return n.Worktree.Repo

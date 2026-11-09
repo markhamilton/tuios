@@ -125,7 +125,7 @@ exist is created:
 ```
 
 The daemon must run. Cron has a short `PATH`: write the full path of `tuios`
-and of the agent. For a machine named in `tuios hosts`, use `-s HOST:SESSION`.
+and of the agent.
 
 To give a running agent its next job, queue the prompt. It is typed when the
 agent next comes to rest:
@@ -152,8 +152,7 @@ command = 'dir=$(find ~/dev -mindepth 1 -maxdepth 1 -type d | fzf) && tuios swit
 description = "Open a project"
 ```
 
-The popup is a pane, so `switch-session` moves the client that shows it. Put
-`build:` before the name to open the project on a host.
+The popup is a pane, so `switch-session` moves the client that shows it.
 
 ## A fleet of agents on one task
 
@@ -187,7 +186,7 @@ Use `ask-agent --select ... --yes` only for a question any match may answer.
 ## Answering from the Inbox
 
 For the person. Every approval, question, error, finished turn and message from
-every session and machine is one list:
+every session is one list:
 
 1. Press the prefix key then `i` to open it, or the prefix key then `o` to go
    straight to the oldest item.
@@ -229,26 +228,6 @@ Only a call the Inbox can show whole on one line is held; the rest are asked in
 the pane. A held pane shows nothing on screen: wait on its state, not its
 screen. For a headless agent (`start-agent --protocol`) the Inbox holds such
 requests with no config.
-
-## Agents on another machine
-
-Run the work on a bigger machine, watch it here, and bring the result back:
-
-```sh
-tuios hosts add build gaurav@buildbox
-tuios hosts test build
-tuios fan 2 --host build --agent claude 'Profile the importer and make it faster.'
-tuios list-agents --all-hosts --select 'host:build'
-tuios list-attention --host build
-tuios worktree ls --host build
-tuios worktree pull build:api-fan-profile-importer-2
-```
-
-Run `fan --host` from inside your checkout: the repository is found on the other
-machine by its origin URL (`--clone` clones it there). `worktree pull` makes a
-new worktree session here with the commits and the uncommitted work, and changes
-nothing there. That machine's `[hosts]` policy decides what this one may do;
-a refusal is `forbidden`.
 
 ## MCP instead of shell commands
 
@@ -342,13 +321,9 @@ loop.
 
 The `[notify]` table sends an Inbox item to ntfy, Pushover or a webhook, with
 no script. It holds a notification while the person types at an attached
-client, and the link opens tuios-web on the item. `tuios notify test` checks
-each provider (`tuios --skill notify`):
+client. `tuios notify test` checks each provider (`tuios --skill notify`):
 
 ```toml
-[notify]
-web_url = "https://term.example.com/"
-
 [notify.ntfy]
 url = "https://ntfy.sh/your-private-topic"
 ```

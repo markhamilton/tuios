@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -539,45 +538,6 @@ func TestWorkspaceSwitchFromTheSplashStaysOnIt(t *testing.T) {
 	alive(t, term, "after opt+2 from the splash")
 }
 
-// renumberExitSetup is renumberSetup with REVW's two panes running a command
-// that exits once release is created, one of them with close_on_exit: the
-// daemon closes that one, and the attached client closes the other when its
-// process ends. The client is left on DPLY, workspace 3.
-func renumberExitSetup(t *testing.T) (term *tuitest.Terminal, base, release string) {
-	t.Helper()
-	base = t.TempDir()
-	release = filepath.Join(base, "release")
-	writeConfig(t, base, renumberConfig)
-	killDaemon(t, base)
-	if out, err := tuiosCLI(t, base, "new", renumberSession, "--detach"); err != nil {
-		t.Fatalf("create session: %v: %s", err, out)
-	}
-	verbs := dialVerbs(t, filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock"))
-	wait := []string{"/bin/sh", "-c", fmt.Sprintf("while [ ! -e %q ]; do sleep 0.1; done", release)}
-	for _, closeOnExit := range []bool{true, false} {
-		if _, verr := verbs.call("new-window", map[string]any{
-			"session": renumberSession, "workspace": 2, "focus": false,
-			"command": wait, "close_on_exit": closeOnExit,
-		}); verr != "" {
-			t.Fatalf("new-window on 2 (close_on_exit %v): %s", closeOnExit, verr)
-		}
-	}
-	for range renumberPanes["DPLY"] {
-		if out, err := tuiosCLI(t, base, "new-window", "-s", renumberSession, "--workspace", "3", "--no-focus"); err != nil {
-			t.Fatalf("new-window on 3: %v: %s", err, out)
-		}
-	}
-	for num, name := range map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"} {
-		if out, err := tuiosCLI(t, base, "set-workspace-name", num, name, "--session", renumberSession); err != nil {
-			t.Fatalf("name workspace %s: %v: %s", num, err, out)
-		}
-	}
-	term = attachIn(t, base, renumberSession, startOpts{})
-	waitPills(t, term, "1·EDIT", "2·REVW", "3·DPLY")
-	altReaches(t, term, '3', "DPLY")
-	return term, base, release
-}
-
 // subscribeLines streams `tuios subscribe` with args into a buffer until the
 // test ends. It returns once the subscription is acknowledged, so nothing that
 // happens after it can be missed, and read returns the event lines so far.
@@ -642,73 +602,6 @@ func waitPaneCount(t *testing.T, base string, n int) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("the session never came down to %d panes (by workspace %v)", n, last)
-}
-
-// TestWorkspaceSelfExitLeavesTheNumbers lets REVW's panes, below the workspace
-// on screen, exit on their own. Nobody closed anything, so the numbers stay:
-// DPLY is still workspace 3 on the dock and in the daemon, no window-moved
-// event goes out for its panes, and no workspace-switched fires for a switch
-// nobody made. Closing a pane is a person's act, and it closes the gap up.
-//
-// Negative control: see NEGATIVE_CONTROLS.md.
-func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
-	term, base, release := renumberExitSetup(t)
-	events := subscribeLines(t, base, "-s", renumberSession, "--types", "window-moved,workspace-switched")
-
-	if err := os.WriteFile(release, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	waitPaneCount(t, base, renumberPanes["EDIT"]+renumberPanes["DPLY"])
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "REVW") }, uiTimeout); err != nil {
-		t.Fatalf("REVW stayed on the dock after its panes exited: %v\n%s", err, term.Snapshot())
-	}
-	// Long enough for a renumber, which is one state push away, to land.
-	time.Sleep(2 * time.Second)
-	if err := term.WaitStable(uiTimeout); err != nil {
-		t.Fatalf("the screen never settled: %v", err)
-	}
-	info := wantNumbering(t, base, map[string]string{"1": "EDIT", "3": "DPLY"})
-	if info.CurrentWorkspace != 3 {
-		t.Fatalf("the workspace on screen became %d when panes below it exited, want 3", info.CurrentWorkspace)
-	}
-	wantPanesOn(t, base, map[int]string{1: "EDIT", 3: "DPLY"})
-	if !screenHas(term.Screen(), "1·EDIT", "3·DPLY") {
-		t.Fatalf("the dock renumbered when panes exited on their own, want 1·EDIT and 3·DPLY\n%s", term.Snapshot())
-	}
-	if m := renumberDockStatus(term.Screen()); m == nil || m[0] != "3:3" {
-		t.Fatalf("the dock status is %v, want 3:3\n%s", m, term.Snapshot())
-	}
-	if got := events(); len(got) > 0 {
-		t.Fatalf("panes exiting on their own sent %d window-moved or workspace-switched events, want none:\n%s", len(got), strings.Join(got, "\n"))
-	}
-
-	// opt+N past the last workspace opens the one after it, not the number
-	// of workspaces plus one, which with a gap is DPLY's.
-	if err := term.SendKeys(tuitest.Alt('5')); err != nil {
-		t.Fatalf("press alt+5: %v", err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		m := renumberDockStatus(s)
-		return m != nil && m[0] == "4:0"
-	}, uiTimeout); err != nil {
-		t.Fatalf("opt+5 with a gap at 2 did not open workspace 4: %v\n%s", err, term.Snapshot())
-	}
-	altReaches(t, term, '3', "DPLY")
-	wantNumbering(t, base, map[string]string{"1": "EDIT", "3": "DPLY"})
-
-	// A pane the person closes closes the gap: DPLY becomes 2.
-	if err := term.SendKeys(tuitest.Ctrl('b'), "x"); err != nil {
-		t.Fatalf("close a pane: %v", err)
-	}
-	waitPills(t, term, "1·EDIT", "2·DPLY")
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		m := renumberDockStatus(s)
-		return m != nil && m[0] == "2:2" && !screenHas(s, "3·")
-	}, uiTimeout); err != nil {
-		t.Fatalf("closing a pane did not close the gap up: %v\n%s", err, term.Snapshot())
-	}
-	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "DPLY"})
-	alive(t, term, "after panes exited and a pane was closed")
 }
 
 // TestWorkspaceShellExitClosesUp types exit in the only pane of workspace 2,

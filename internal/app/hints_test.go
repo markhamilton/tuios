@@ -1,9 +1,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -44,70 +41,6 @@ func hintsLastNote(m *OS) string {
 		return ""
 	}
 	return m.Notifications[len(m.Notifications)-1].Message
-}
-
-// A file named in a pane is opened only when every machine involved is this
-// one. Each case below is a pane whose file is somebody else's, and each must
-// copy the text, say why, and open nothing: a new pane would be an editor on a
-// local file that happens to share the name.
-func TestHintsDoNotOpenAnotherMachinesFile(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "notes.txt")
-	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cases := []struct {
-		name  string
-		text  string
-		setup func(m *OS, w *terminal.Window)
-		why   string
-	}{
-		{"a file:// link on a pane of another machine", "file://" + file,
-			func(m *OS, w *terminal.Window) { w.Host = "otherbox" }, "another machine"},
-		{"a file:// link naming another host", "file://otherbox" + file,
-			func(m *OS, w *terminal.Window) {}, "another machine"},
-		{"a path on a pane of another machine", file,
-			func(m *OS, w *terminal.Window) { w.Host = "otherbox" }, "another machine"},
-		{"a relative path whose folder the shell reported on another host", "notes/todo.md",
-			func(m *OS, w *terminal.Window) { w.Cwd = "file://otherbox/home/u" }, "folder is on another machine"},
-		{"a path in a session attached on another machine", file,
-			func(m *OS, w *terminal.Window) { m.AttachedHost = "otherbox" }, "session runs on another machine"},
-		{"a file:// link in a session attached on another machine", "file://" + file,
-			func(m *OS, w *terminal.Window) { m.AttachedHost = "otherbox" }, "session runs on another machine"},
-		{"a path on a remote client", file,
-			func(m *OS, w *terminal.Window) { m.RemoteClient = true }, "remote client"},
-		{"a path in a pane running ssh", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "ssh" }, "another machine"},
-		{"a path in a pane running kitty's ssh kitten", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "kitten" }, "another machine"},
-		{"a path in a pane running autossh", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "autossh" }, "another machine"},
-		{"a path in a pane running tsh", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "tsh" }, "another machine"},
-		{"a path in a pane running docker exec", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "docker" }, "another machine"},
-		{"a path in a pane running kubectl exec", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "kubectl" }, "another machine"},
-		{"a path in a pane running podman exec", file,
-			func(m *OS, w *terminal.Window) { w.ForegroundCmd = "podman" }, "another machine"},
-		{"a relative path while a program runs in front of the shell", "notes/todo.md",
-			func(m *OS, w *terminal.Window) {
-				w.Cwd = "file://localhost/srv/app"
-				w.ForegroundCmd = "make"
-			}, "folder is not known"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m, win := hintsTestOS(t, "see "+c.text+" here\r\n")
-			c.setup(m, win)
-			ctrlLabel(t, m, c.text)
-			if n := len(m.Windows); n != 1 {
-				t.Fatalf("a pane was opened for another machine's file (%d panes)", n)
-			}
-			if note := hintsLastNote(m); !strings.Contains(note, c.why) || !strings.Contains(note, "Copied") {
-				t.Errorf("the message does not say why and that it copied: %q", note)
-			}
-		})
-	}
 }
 
 // The positive half of the rule above: on a local pane the checks pass, and a

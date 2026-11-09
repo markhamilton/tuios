@@ -232,12 +232,6 @@ func (d *Daemon) shipTarget(cs *connState, sessionName, window string) (*Session
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
 	}
-	if target.Host != "" {
-		return nil, WindowState{}, reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its repository is there, not here", &VerbHint{
-			Command: "tuios worktree pull " + target.Host + ":<session>",
-			Detail:  "Nothing was changed. Shipping a pane on another machine is not supported yet. Attach to that machine and ship it there, or bring its work here with tuios worktree pull.",
-		})
-	}
 	repo, verr := d.paneRepo(sess, target)
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
@@ -272,7 +266,7 @@ func shipGitFailed(ctx context.Context, err error) *verbError {
 // shipPaneRefusal holds a pane caller without admin to the panes it could
 // type into, as restore-checkpoint does.
 func (d *Daemon) shipPaneRefusal(cs *connState, verb string, target WindowState) *verbError {
-	if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && !pa.grants.Has(GrantAdmin) {
+	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		if why := d.typingRefusal(pa, target, true); why != "" {
 			return grantForbidden(verb, pa, why+". "+verb+" changes the files that pane's agent works on")
 		}
@@ -716,7 +710,7 @@ func (d *Daemon) shipCallerIsPerson(cs *connState) bool {
 	if cs == nil {
 		return true
 	}
-	if cs.viaLink || cs.scope.Load() != nil {
+	if cs.scope.Load() != nil {
 		return false
 	}
 	return d.mayActAsHuman(cs)
@@ -743,11 +737,6 @@ func (d *Daemon) shipOutboundGate(cs *connState, verb, cli string, o shipOutboun
 			Confirm:   token,
 			Command:   retry + " --yes",
 			Detail:    detail,
-		})
-	}
-	if cs != nil && cs.viaLink {
-		return "", hintedVerbError(ErrVerbForbidden, verb+" is refused over a link: the person on this machine allows a push here", &VerbHint{
-			Detail: "Nothing was sent. Run it on the machine the repository is on.",
 		})
 	}
 	if d.shipCallerIsPerson(cs) {

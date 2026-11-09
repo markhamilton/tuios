@@ -223,9 +223,7 @@ time each one last changed. 'tuios tape dir' prints the directory.`,
 	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
 	var createIfMissing bool
-	var attachHost string
 	var attachHold bool
-	var attachSSH bool
 
 	attachCmd := &cobra.Command{
 		Use:   "attach [session-name]",
@@ -242,12 +240,7 @@ is an error unless -c is given.
 
 With -d every other client of the session detaches as this one attaches,
 as tmux attach -d does. Each of them exits with a message. To do this on
-every attach, set single_client = true in [daemon].
-
-With --host the session is on another machine. tuios runs ssh to the host
-named in the [hosts] table and attaches with the tuios on that machine. The
-client you see is the remote one. Press the prefix key twice to send it to
-the remote client. See 'tuios hosts --help'.`,
+every attach, set single_client = true in [daemon].`,
 		Example: `  # Attach to the most recent session
   tuios attach
 
@@ -258,28 +251,20 @@ the remote client. See 'tuios hosts --help'.`,
   tuios attach mysession -c
 
   # Attach and detach every other client of the session
-  tuios attach -d mysession
-
-  # Attach to a session on the machine named build
-  tuios attach --host build mysession`,
+  tuios attach -d mysession`,
 		Aliases: []string{"a"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
-			if attachHost != "" {
-				return runAttachOnHost(attachHost, name, createIfMissing, attachHold, attachSSH)
-			}
-			// A failure is held on the screen with --hold for the reason a
-			// host attach holds it: a pane that runs this command closes when
-			// it exits, and a popup that runs tuios attach is such a pane.
+			// A failure is held on the screen with --hold: a pane that runs
+			// this command closes when it exits, and a popup that runs tuios
+			// attach is such a pane.
 			return holdAfter(runAttach(name, createIfMissing), attachHold)
 		},
 	}
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
-	attachCmd.Flags().StringVar(&attachHost, "host", "", "Attach to a session on this host from the [hosts] table")
-	attachCmd.Flags().BoolVar(&attachSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
 	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
 	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
 	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session, as tmux attach -d does")
@@ -288,13 +273,8 @@ the remote client. See 'tuios hosts --help'.`,
 	// Set by the client a restart from the app starts. See restart_reattach.go.
 	attachCmd.Flags().BoolVar(&attachAfterRestart, "after-restart", false, "Say that the daemon restarted when the client starts")
 	_ = attachCmd.Flags().MarkHidden("after-restart")
-	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool
-	var newHost string
-	var newHold bool
-	var newGlobal bool
-	var newSSH bool
 	var newCwd string
 	var newSpace string
 	newCmd := &cobra.Command{
@@ -316,11 +296,6 @@ The session's windows start in the directory you run the command from.
 --cwd names another directory. A window opened later with no pane to take
 a directory from starts there too.
 
-With --host the session is created on another machine. tuios runs ssh to the
-host named in the [hosts] table and runs 'tuios new' there. The client you
-see is the remote one. With --detach the far side creates the session and
-returns. See 'tuios hosts --help'.
-
 With --space the session is filed under a space, a named group of related
 sessions that 'tuios ls' and the sidebar list together.`,
 		Example: `  # Create a new session with auto-generated name
@@ -336,27 +311,12 @@ sessions that 'tuios ls' and the sidebar list together.`,
   tuios new api --cwd ~/dev/api
 
   # Create a session in the space payments
-  tuios new api --space payments --detach
-
-  # Create a session on the machine named build and attach to it
-  tuios new --host build
-
-  # Create a named session on that machine without attaching
-  tuios new --host build mysession --detach`,
+  tuios new api --space payments --detach`,
 		Aliases: []string{"n"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
-			}
-			if newHost != "" {
-				if newCwd != "" {
-					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
-				}
-				if newSpace != "" {
-					return fmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
-				}
-				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
 			dir, err := newSessionStartDir(newCwd)
 			if err != nil {
@@ -364,16 +324,7 @@ sessions that 'tuios ls' and the sidebar list together.`,
 			}
 			newSessionDir = dir
 			if newSpace != "" {
-				if newGlobal {
-					return errors.New(session.GlobalSpaceRefusal)
-				}
 				return runNewSessionInSpace(name, newSpace, newDetach)
-			}
-			if newGlobal {
-				// A global session is created with no windows whether or not
-				// --detach was asked for: its first window names a machine,
-				// and there is nothing here to ask.
-				return runNewGlobalSessionDetached(name)
 			}
 			if newDetach {
 				return runNewSessionDetached(name)
@@ -382,17 +333,10 @@ sessions that 'tuios ls' and the sidebar list together.`,
 		},
 	}
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
-	newCmd.Flags().StringVar(&newHost, "host", "", "Create the session on this host from the [hosts] table")
-	newCmd.Flags().BoolVar(&newSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
-	newCmd.Flags().BoolVar(&newGlobal, "global", false, "Create a global session, which holds panes from more than one machine")
-	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
 	newCmd.Flags().StringVar(&newCwd, "cwd", "", "Directory the session's windows start in (default: the current directory)")
 	newCmd.Flags().StringVar(&newSpace, "space", "", "File the session under this space, a named group of related sessions")
-	registerHostNameCompletion(newCmd, "host")
 
 	var lsJSON bool
-	var lsAllHosts bool
-	var lsHost string
 	lsCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List TUIOS sessions",
@@ -405,25 +349,15 @@ marked "saved", and the command exits 3. Exit 3 lets a script tell a
 stopped daemon from a running daemon with no sessions, which exits 0
 with an empty list.
 
-Use --json for machine-readable output. Saved rows carry "saved": true.
-
-With --all-hosts the listing also covers every machine in the [hosts] config
-table. Local comes first. A host that does not answer gets a row saying so,
-and it never fails the command.`,
+Use --json for machine-readable output. Saved rows carry "saved": true.`,
 		Example: `  tuios ls
-  tuios ls --json
-  tuios ls --all-hosts`,
+  tuios ls --json`,
 		Aliases: []string{"list-sessions"},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if lsAllHosts || lsHost != "" {
-				return runListSessionsAllHosts(lsHost, lsJSON)
-			}
 			return runListSessions(lsJSON)
 		},
 	}
 	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
-	lsCmd.Flags().BoolVar(&lsAllHosts, "all-hosts", false, "List sessions on this machine and on every host in the [hosts] config table")
-	lsCmd.Flags().StringVar(&lsHost, "host", "", "List sessions on one host by name (\"local\" means this machine)")
 
 	var listClientsJSON bool
 	listClientsCmd := &cobra.Command{
@@ -1209,7 +1143,6 @@ It also needs the respond grant.`,
 	var newWindowWorkspace int
 	var newWindowCwd string
 	var newWindowNoFocus bool
-	var newWindowHost string
 	var newWindowGrants []string
 	var newWindowJSON bool
 	var newWindowPrintID bool
@@ -1245,12 +1178,6 @@ The output is the short id and the name, "d6b97fe4  build". Either one is a
 window target for -w. --print-id prints the full id alone, for a script:
 id=$(tuios new-window build --print-id).
 
---host runs the window's process on another machine from the [hosts] table. The
-window still belongs to this session and is drawn and sized here. Only the
-process is over there. There is no special mode to turn on: a session holding
-one is an ordinary session with a window that happens to be elsewhere, so it
-lists, scripts and restores like any other.
-
 --grants says what the window's process may do through tuios: read, write,
 fan, respond, admin, or none. Without it the window holds the default of
 [agents.permissions]. See 'tuios pane-grants'.
@@ -1281,10 +1208,7 @@ window as one line with its uri.`,
 
   # Run the tests beside you, wait, and read the output if they fail
   tuios new-window tests --no-focus --keep-open --wait -- go test ./... ||
-    tuios capture-pane -w tests --scrollback
-
-  # Open a window whose shell runs on another machine
-  tuios new-window deploy --host build`,
+    tuios capture-pane -w tests --scrollback`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
@@ -1295,7 +1219,7 @@ window as one line with its uri.`,
 			}
 			return runNewWindow(newWindowOptions{
 				session: newWindowSession, name: name, workspace: newWindowWorkspace, cwd: newWindowCwd,
-				focus: !newWindowNoFocus, command: command, host: newWindowHost, grants: newWindowGrants,
+				focus: !newWindowNoFocus, command: command, grants: newWindowGrants,
 				kind: newWindowKind, uri: newWindowURI, jsonOut: newWindowJSON, printID: newWindowPrintID,
 				keepOpen: newWindowKeepOpen, wait: newWindowWait, timeout: newWindowTimeout,
 			})
@@ -1305,7 +1229,6 @@ window as one line with its uri.`,
 	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the current one)")
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
-	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
 	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions])")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	newWindowCmd.Flags().BoolVar(&newWindowPrintID, "print-id", false, "Print only the new window's full id, for id=$(...)")
@@ -1317,7 +1240,6 @@ window as one line with its uri.`,
 	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")
 	newWindowCmd.MarkFlagsMutuallyExclusive("wait", "print-id")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
-	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 
 	var popupSession string
@@ -2407,7 +2329,7 @@ titles and paths.`,
 	// Inspection commands for scripting and hackability
 	var listWindowsSession string
 	var listWindowsJSON bool
-	var listWindowsAll, listWindowsAllHosts, listWindowsRail bool
+	var listWindowsAll, listWindowsRail bool
 	var listWindowsText int
 	listWindowsCmd := &cobra.Command{
 		Use:   "list-windows",
@@ -2428,14 +2350,11 @@ Use --json for machine-readable output that can be used for scripting.`,
   # Every pane of every session, with the last 20 lines of each screen
   tuios list-windows --all --text 20 --json
 
-  # Every pane on this machine and on each host
-  tuios list-windows --all --all-hosts
-
   # Include the pane the rail draws in its pane section
   tuios list-windows --rail`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if listWindowsAll || listWindowsAllHosts || listWindowsText > 0 {
-				return runListAllWindows(listWindowsSession, listWindowsAll, listWindowsAllHosts, listWindowsText, listWindowsJSON)
+			if listWindowsAll || listWindowsText > 0 {
+				return runListAllWindows(listWindowsSession, listWindowsAll, listWindowsText, listWindowsJSON)
 			}
 			return queryWindows(listWindowsSession, listWindowsJSON, listWindowsRail)
 		},
@@ -2443,7 +2362,6 @@ Use --json for machine-readable output that can be used for scripting.`,
 	listWindowsCmd.Flags().StringVarP(&listWindowsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listWindowsCmd.Flags().BoolVar(&listWindowsJSON, "json", false, "Output as JSON")
 	listWindowsCmd.Flags().BoolVar(&listWindowsAll, "all", false, "List the panes of every session on this machine, one row each")
-	listWindowsCmd.Flags().BoolVar(&listWindowsAllHosts, "all-hosts", false, "Also list the panes of every session on each host in [hosts]")
 	listWindowsCmd.Flags().BoolVar(&listWindowsRail, "rail", false, "Also list the pane the rail draws in its pane section")
 	listWindowsCmd.Flags().IntVar(&listWindowsText, "text", 0, fmt.Sprintf("Add the last N lines of each pane's screen, up to %d. capture-pane's grants apply", maxListText))
 	_ = listWindowsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -2644,9 +2562,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	var listAgentsSession string
 	var listAgentsAll bool
 	var listAgentsJSON bool
-	var listAgentsAllHosts bool
 	var listAgentsAllSessions bool
-	var listAgentsHost string
 	var listAgentsSelect string
 	listAgentsCmd := &cobra.Command{
 		Use:   "list-agents",
@@ -2667,25 +2583,16 @@ would accept a question right now.`,
   # Every agent in every session on this machine
   tuios list-agents --all-sessions
 
-  # Every agent in every session on every machine
-  tuios list-agents --all-hosts
-
   # Every codex agent that is at rest, in any session
   tuios list-agents --select 'harness:codex state:idle,done'
 
-  # Every agent of one fan-out that needs you, on every machine
-  tuios list-agents --all-hosts --select 'group:fan/add-retry needs:you'
+  # Every agent of one fan-out that needs you
+  tuios list-agents --select 'group:fan/add-retry needs:you'
 
   # Just the ids of the agents waiting for a human
   tuios list-agents --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if listAgentsAllHosts || listAgentsHost != "" {
-				if listAgentsSession != "" {
-					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
-				}
-				return runListAgentsAllHosts(listAgentsHost, listAgentsAll, listAgentsSelect, listAgentsJSON)
-			}
 			if listAgentsAllSessions && listAgentsSession != "" {
 				return fmt.Errorf("--all-sessions lists every session, so it takes no --session")
 			}
@@ -2697,8 +2604,6 @@ would accept a question right now.`,
 	listAgentsCmd.Flags().StringVarP(&listAgentsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAll, "all", false, "List every window, not just the panes identified as agents")
 	listAgentsCmd.Flags().BoolVar(&listAgentsJSON, "json", false, "Output result as JSON")
-	listAgentsCmd.Flags().BoolVar(&listAgentsAllHosts, "all-hosts", false, "List agents on this machine and on every host in the [hosts] config table")
-	listAgentsCmd.Flags().StringVar(&listAgentsHost, "host", "", "List agents on one host by name (\"local\" means this machine)")
 	_ = listAgentsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var sendMsgSession string
@@ -2931,109 +2836,6 @@ others still answer.`,
 	askAgentCmd.Flags().BoolVar(&askJSON, "json", false, "Output result as JSON")
 	_ = askAgentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	var hostsJSON bool
-	hostsCmd := &cobra.Command{
-		Use:   "hosts",
-		Short: "List the machines in the [hosts] config table and the state of each link",
-		Long: `List the other machines this daemon holds a link to.
-
-The daemon holds one ssh link to each host in the [hosts] table. This command
-shows what state each link is in, which tuios version the far side runs, and
-which control protocol it speaks.
-
-A session on a host opens in this client. The connection goes through the
-daemon on this machine and its link. The session is drawn here, with this
-machine's theme, config and prefix key. Nothing is nested.
-
-  tuios attach --host build api     # attach the session api on build
-  tuios new --host build            # create a session on build and attach it
-  tuios new --host build ci -d      # create the session ci on build and return
-
-In the rail, press enter on a session under a host to attach it. Press enter
-on the + beside a host to create a session there. While you are on a host, the
-rail lists this machine's sessions under a host named local. Press enter on
-one to come back.
-
-The session keeps running on the host when the link drops. The client keeps the
-pane on screen and connects again on its own. The dock says it is reconnecting.
-tuios stops after three minutes and says why. It then comes back to the session
-it left on this machine.
-
-Add --ssh to run ssh to the host and the tuios there instead. Use it when the
-tuios on the host is too old to serve this client. The client you see is then
-the one on the host, nested in this one. Press the prefix key twice to send a
-key to it.
-
-Statuses:
-  up            The link is open and the remote daemon answers.
-  no_daemon     The machine is up and no tuios daemon runs on it.
-  no_tuios      The machine is up and the link cannot find tuios on it. Run
-                'tuios hosts test' to see where it looked.
-  unreachable   The last attempt failed. The line below the table says why.
-  reconnecting  The link was up, it dropped, and tuios is dialing again.
-  incompatible  The remote daemon speaks a control protocol this build does not
-                serve. Upgrade tuios on one of the two machines.
-  connecting    The first attempt has not finished yet.
-  sign in       Tailscale SSH needs you to sign in before tuios can reach the
-                host. Run 'tuios hosts signin NAME' to open the sign-in page.
-                The JSON status is tailscale_check.
-
-Add a machine with 'tuios hosts add', remove one with 'tuios hosts remove', and
-dial one with 'tuios hosts test'. Each writes or reads the config file, and a
-running daemon follows the file, so no command here needs a restart.
-
-  tuios hosts add build gaurav@buildbox
-  tuios hosts test build
-  tuios hosts remove build
-
-The address is anything ssh understands, including an ssh_config alias. The
-daemon runs ssh with BatchMode on, so a link never asks for a password and never
-asks about a host key. Run ssh to the host once by hand to accept its key.
-
-The link finds tuios on the host by itself. It looks on the PATH, then at the
-known install paths, then in a login shell. 'tuios hosts test' prints the path
-it found. Add --command to 'tuios hosts add' to run a given binary instead.`,
-		Example: `  tuios hosts
-  tuios hosts --json
-  tuios hosts add build gaurav@buildbox`,
-		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListHosts(hostsJSON)
-		},
-	}
-	hostsCmd.Flags().BoolVar(&hostsJSON, "json", false, "Output as JSON")
-	hostsCmd.AddCommand(newHostsSubcommands()...)
-
-	stdioProxyCmd := &cobra.Command{
-		Use:    "stdio-proxy",
-		Short:  "Connect stdin and stdout to this machine's daemon socket",
-		Hidden: true,
-		Long: `Connect stdin and stdout to this machine's tuios daemon socket.
-
-A tuios daemon on another machine runs this over ssh to read this machine's
-listings. Do not run it by hand.
-
-It does not start a daemon. If no daemon runs here, the caller is told so.
-
---as pins the name the daemon here resolves the link policy for, from the
-[hosts] table, whatever the other machine calls itself. Put it in a forced
-command in authorized_keys to make the policy a boundary:
-
-  command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...`,
-		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			// The proxy keeps this process running; --pprof is a persistent
-			// flag that stdio-proxy used to accept and ignore.
-			startPprofServer()
-			if err := startCPUProfile(); err != nil {
-				return err
-			}
-			defer stopCPUProfile()
-			return runStdioProxy(stdioProxyAs)
-		},
-	}
-	stdioProxyCmd.Flags().StringVar(&stdioProxyAs, "as", "", "Name of the machine the link comes from, for its link policy. Overrides the name that machine gives")
-
 	rootCmd.AddCommand(configCmd, newLookCommand(), keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
@@ -3051,16 +2853,15 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
-	rootCmd.AddCommand(hostsCmd, stdioProxyCmd, newGUIBridgeCommand())
+	rootCmd.AddCommand(newGUIBridgeCommand())
 	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand())
 	rootCmd.AddCommand(newBufferCommands()...)
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand(), newClearHistoryCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
-	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand(), newPairCommand())
+	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 	rootCmd.AddCommand(newPluginsCommand())
-	rootCmd.AddCommand(newCpCommand(), newTransfersCommand())
 	rootCmd.AddCommand(newMermaidCommand())
 	rootCmd.AddCommand(newTMLCommand())
 

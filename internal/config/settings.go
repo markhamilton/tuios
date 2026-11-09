@@ -365,15 +365,6 @@ type Settings struct {
 
 	SessionBorder bool
 
-	// GlobalSession offers a session that holds panes from more than one
-	// machine, listed in the rail once a second machine is reachable.
-	//
-	// It is a session of its own rather than a thing any session can become.
-	// An ordinary session is the machine it is on, and a new pane in it is a
-	// pane there, with nothing to ask about. The global session is the one
-	// place the question is worth putting, so it is the one place it is asked.
-	GlobalSession bool
-
 	SessionColors bool
 
 	// DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
@@ -1012,7 +1003,6 @@ func DefaultSettings() Settings {
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,
-		GlobalSession:               true,
 		SidebarGitDirty:             true,
 		NiriClickReveals:            true,
 		NiriHoverReveals:            true,

@@ -24,9 +24,6 @@ const (
 	DockComponentRAM             = "ram"
 	DockComponentClock           = "clock"
 	DockComponentSessionControls = "session-controls"
-	// DockComponentTransfers is the copies between machines: a bar and a
-	// percent while a copy runs. It draws nothing while no copy exists.
-	DockComponentTransfers = "transfers"
 	// DockComponentSession is the session name with the current workspace and
 	// the focused pane's place in it, "main 2:1" by default. It is a cell, so
 	// it goes wherever it is listed, and it is in no default list.
@@ -52,7 +49,6 @@ var dockBuiltins = []string{
 	DockComponentRAM,
 	DockComponentClock,
 	DockComponentSessionControls,
-	DockComponentTransfers,
 	DockComponentSession,
 }
 
@@ -102,7 +98,6 @@ var (
 	defaultDockLeft   = []string{DockComponentMode, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
 	defaultDockCenter = []string{DockComponentWindows}
 	defaultDockRight  = []string{
-		DockComponentTransfers,
 		DockComponentNotifications, DockComponentCopyHelp,
 		DockComponentCPU, DockComponentRAM, DockComponentClock,
 		DockComponentSessionControls,

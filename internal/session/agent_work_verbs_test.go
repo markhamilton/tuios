@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // These tests pin the foundation of the agent review, triage, queue and
@@ -17,36 +15,34 @@ import (
 // table it checks.
 
 // agentWorkVerbTable is what each new verb needs: its restricted-connection
-// and pane-grant class, its link capabilities, and whether it types into a
-// pane.
+// and pane-grant class, and whether it types into a pane.
 var agentWorkVerbTable = []struct {
 	verb   string
 	scope  scopeKind
-	link   []string
 	typing bool
 }{
-	{"review-diff", scopeRead, []string{config.LinkAllowWrite}, false},
-	{"compare-fan", scopeRead, []string{config.LinkAllowList}, false},
-	{"agent-activity", scopeRead, []string{config.LinkAllowList}, false},
-	{"list-queued", scopeRead, []string{config.LinkAllowList}, false},
-	{"get-approval", scopeRead, []string{config.LinkAllowList}, false},
-	{"review-note", scopeWrite, []string{config.LinkAllowWrite}, false},
-	{"send-review", scopeWrite, []string{config.LinkAllowWrite}, true},
-	{"review-stage", scopeDeny, []string{config.LinkAllowWrite}, false},
-	{"queue-prompt", scopeWrite, []string{config.LinkAllowWrite}, true},
-	{"cancel-queued", scopeWrite, []string{config.LinkAllowWrite}, false},
-	{"verify-fan", scopeLaunch, []string{config.LinkAllowOpen, config.LinkAllowWrite}, false},
-	{"keep-fan", scopeDeny, []string{config.LinkAllowWrite}, false},
-	{"mark-attention", scopeDeny, []string{config.LinkAllowRespond}, false},
-	{"add-task", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"list-tasks", scopeRead, []string{config.LinkAllowList}, false},
-	{"get-task", scopeRead, []string{config.LinkAllowList}, false},
-	{"claim-task", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"finish-task", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"set-task-stage", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"block-task", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"release-task", scopeTask, []string{config.LinkAllowWrite}, false},
-	{"remove-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"review-diff", scopeRead, false},
+	{"compare-fan", scopeRead, false},
+	{"agent-activity", scopeRead, false},
+	{"list-queued", scopeRead, false},
+	{"get-approval", scopeRead, false},
+	{"review-note", scopeWrite, false},
+	{"send-review", scopeWrite, true},
+	{"review-stage", scopeDeny, false},
+	{"queue-prompt", scopeWrite, true},
+	{"cancel-queued", scopeWrite, false},
+	{"verify-fan", scopeLaunch, false},
+	{"keep-fan", scopeDeny, false},
+	{"mark-attention", scopeDeny, false},
+	{"add-task", scopeTask, false},
+	{"list-tasks", scopeRead, false},
+	{"get-task", scopeRead, false},
+	{"claim-task", scopeTask, false},
+	{"finish-task", scopeTask, false},
+	{"set-task-stage", scopeTask, false},
+	{"block-task", scopeTask, false},
+	{"release-task", scopeTask, false},
+	{"remove-task", scopeTask, false},
 }
 
 func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
@@ -60,9 +56,6 @@ func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 		}
 		if got := grantKind(row.verb); got != row.scope {
 			t.Errorf("%s needs %v from a pane, want %v", row.verb, got, row.scope)
-		}
-		if got := verbCapabilities[row.verb].list(); !slices.Equal(got, row.link) {
-			t.Errorf("%s needs %v over a link, want %v", row.verb, got, row.link)
 		}
 		if typingVerbs[row.verb] != row.typing {
 			t.Errorf("%s typing = %v, want %v", row.verb, typingVerbs[row.verb], row.typing)
@@ -209,47 +202,6 @@ func TestRestrictedConnectionsAndAgentWorkVerbs(t *testing.T) {
 	}
 }
 
-// TestAgentWorkVerbsAreHeldToTheLinkPolicy: a machine that may only list can
-// read the counts and states and not the diff, and a machine that may open
-// but not write cannot run a check.
-func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
-	t.Chdir(t.TempDir())
-	d, sp := startTestDaemon(t)
-	_, a, _ := twoWindowSession(t, d, "work")
-	d.SetLinkPolicies(map[string]config.HostConfig{
-		"viewer": {Allow: []string{"list"}},
-		"opener": {Allow: []string{"list", "open"}},
-	})
-	viewer := dialLink(t, sp)
-	result(t, linkPeer(t, viewer, "viewer"))
-	wantReached(t, "compare-fan from a machine that may list", callP(viewer, t, "compare-fan", map[string]any{"session": "work"}))
-	result(t, callP(viewer, t, "agent-activity", map[string]any{"session": "work", "window": a}))
-	result(t, callP(viewer, t, "list-queued", map[string]any{"session": "work", "window": a}))
-	mustRefuse(t, callP(viewer, t, "get-approval", map[string]any{"request_id": "9f86d081884c7d65"}), ErrVerbInvalidParams, "get-approval from a machine that may list")
-	for verb, params := range map[string]map[string]any{
-		"review-diff":    {"session": "work", "window": a},
-		"review-note":    {"action": "list", "session": "work", "window": a},
-		"send-review":    {"session": "work", "window": a},
-		"queue-prompt":   {"session": "work", "window": a, "text": "hi"},
-		"cancel-queued":  {"session": "work", "window": a, "all": true},
-		"keep-fan":       {"session": "work"},
-		"verify-fan":     {"session": "work", "command": "true"},
-		"mark-attention": {"id": "1", "action": "wake", "human_nonce": "x"},
-	} {
-		mustRefuse(t, callP(viewer, t, verb, params), ErrVerbForbidden, verb+" from a machine that may only list")
-	}
-	opener := dialLink(t, sp)
-	result(t, linkPeer(t, opener, "opener"))
-	mustRefuse(t, callP(opener, t, "verify-fan", map[string]any{"session": "work", "command": "true"}),
-		ErrVerbForbidden, "verify-fan from a machine that may open but not write")
-
-	// The default grants write and not respond.
-	anon := dialLink(t, sp)
-	wantReached(t, "review-diff with the default policy", callP(anon, t, "review-diff", map[string]any{"session": "work", "window": a}))
-	mustRefuse(t, callP(anon, t, "mark-attention", map[string]any{"id": "1", "action": "wake", "human_nonce": "x"}),
-		ErrVerbForbidden, "mark-attention with the default policy")
-}
-
 // TestNewParamsOfOlderVerbsDoNothingUntilBuilt: an older verb that takes a new
 // parameter refuses a call that sets it rather than dropping it, and does
 // nothing, except where dropping it is what keeps a report working.
@@ -338,26 +290,6 @@ func TestAttentionItemWireIsAdditive(t *testing.T) {
 	}
 }
 
-// TestAHostsRiskAndPlanLengthAreMirrored: display only, and a host cannot
-// hand this machine a plan digest to answer with.
-func TestAHostsRiskAndPlanLengthAreMirrored(t *testing.T) {
-	in := AttentionItem{ID: "7", Kind: AttentionPlan, Session: "work", Since: 1,
-		Risk: []string{"sudo\x1b[31m"}, PlanLines: 14, PlanSHA: "ab", DenyMessage: true, SnoozedUntil: 9, MarkedUnread: true}
-	out, ok := sanitizeHostItem("build", in, time.Now())
-	if !ok {
-		t.Fatal("the host's plan was not mirrored")
-	}
-	if len(out.Risk) != 1 || strings.ContainsRune(out.Risk[0], 0x1b) || out.PlanLines != 14 {
-		t.Errorf("mirrored %+v", out)
-	}
-	if out.PlanSHA != "" || out.DenyMessage || out.SnoozedUntil != 0 || out.MarkedUnread {
-		t.Errorf("a host item carries fields only this machine's own items may: %+v", out)
-	}
-	if !slices.Contains(hostCloseReasons, AttentionClosedSnoozed) {
-		t.Error("a host's snoozed close reads as resolved")
-	}
-}
-
 // TestTheQueueCountIsTheDaemons: no client sets it, so a client push neither
 // raises nor clears it, and a restore clears it.
 func TestTheQueueCountIsTheDaemons(t *testing.T) {
@@ -414,39 +346,5 @@ func TestTheFanVerifyFieldIsAdditive(t *testing.T) {
 	var out WorktreeInfo
 	if err := json.Unmarshal(raw, &out); err != nil || out.Verify == nil || *out.Verify.Exit != 1 || out.Verify.State != VerifyFailed {
 		t.Errorf("round trip gave %+v (%v)", out.Verify, err)
-	}
-}
-
-// TestHostAgentQueuedIsClamped holds a linked host's queue count to what a
-// queue of this build can hold: a host is untrusted, and the count is drawn
-// on the rail.
-func TestHostAgentQueuedIsClamped(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		in   int
-		want int
-	}{
-		{"negative", -5, 0},
-		{"zero", 0, 0},
-		{"inside", 3, 3},
-		{"at the cap", config.MaxQueueMax, config.MaxQueueMax},
-		{"over the cap", 1 << 30, config.MaxQueueMax},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			raw, err := json.Marshal(map[string]any{
-				"session": "work",
-				"agents":  []map[string]any{{"window_id": "w1", "name": "a", "state": "working", "queued": tc.in}},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			rows, err := decodeHostAgents(raw, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(rows) != 1 || rows[0].Queued != tc.want {
-				t.Fatalf("queued %d read as %+v, want %d", tc.in, rows, tc.want)
-			}
-		})
 	}
 }

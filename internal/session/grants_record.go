@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // What panes held on the default when the daemon last ran.
@@ -116,18 +114,14 @@ func (a *attentionStore) noteConfigNotice(name, summary string) {
 
 // verbApplyConfig applies config.toml for the person. A file change applies
 // only what narrows (applyUserConfig); this is how the person applies a change
-// that widens without restarting the daemon. With host it applies that one
-// host entry and nothing else, which is what tuios hosts add asks for: a
-// widening some other process wrote to the file is not applied with it.
+// that widens without restarting the daemon.
 func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Host string `json:"host"`
-	}
+	var p struct{}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if !d.mayActAsHuman(cs) {
-		return nil, hintedVerbError(ErrVerbForbidden, "apply-config is for the person: the caller runs inside a pane of this daemon or over a link", &VerbHint{
+		return nil, hintedVerbError(ErrVerbForbidden, "apply-config is for the person: the caller runs inside a pane of this daemon", &VerbHint{
 			Detail: "Nothing was applied. Run tuios config apply from a terminal outside tuios, or restart the daemon.",
 		})
 	}
@@ -156,14 +150,8 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	dropped := config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))
 
 	before := d.configSnapshot()
-	if p.Host != "" {
-		if verr := d.applyOneHost(cfg, p.Host); verr != nil {
-			return nil, verr
-		}
-	} else {
-		d.applyUserConfig(cfg, true)
-		log.Printf("config.toml was applied in full by the person")
-	}
+	d.applyUserConfig(cfg, true)
+	log.Printf("config.toml was applied in full by the person")
 	after := d.configSnapshot()
 	out := map[string]any{
 		"type":           "config_applied",
@@ -173,65 +161,17 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 		"still_waiting":  d.configWaiting(),
 		"dropped_keys":   dropped,
 	}
-	if p.Host != "" {
-		out["host"] = p.Host
-	}
 	return out, nil
-}
-
-// applyOneHost applies the entry of one host from cfg, or its removal, and
-// nothing else.
-func (d *Daemon) applyOneHost(cfg *config.UserConfig, name string) *verbError {
-	if d.federation == nil {
-		return newVerbError(ErrVerbCommandFailed, "this daemon dials no hosts")
-	}
-	var want *federation.Host
-	for _, h := range HostsFromConfig(cfg) {
-		if strings.TrimSpace(h.Name) == name {
-			h := h
-			want = &h
-		}
-	}
-	cur := d.federation.Table()
-	hosts := make([]federation.Host, 0, cur.Len()+1)
-	for _, n := range cur.Names() {
-		if n == name {
-			continue
-		}
-		if h, err := cur.Lookup(n); err == nil {
-			hosts = append(hosts, h)
-		}
-	}
-	if want != nil {
-		hosts = append(hosts, *want)
-	}
-	d.ApplyHosts(hosts)
-	log.Printf("[FEDERATION] Host %s was applied by the person", name)
-	return nil
 }
 
 // configSnapshot is what apply-config reports a change of.
 type configSnapshot struct {
 	mode   string
 	grants []string
-	hosts  map[string]federation.Host
-	links  map[string]config.HostConfig
 }
 
 func (d *Daemon) configSnapshot() configSnapshot {
-	s := configSnapshot{mode: d.permissionMode(), grants: d.manager.grants.defaults().Names(), hosts: map[string]federation.Host{}}
-	if d.federation != nil {
-		t := d.federation.Table()
-		for _, n := range t.Names() {
-			if h, err := t.Lookup(n); err == nil {
-				s.hosts[n] = h
-			}
-		}
-	}
-	if t := d.linkPolicies.Load(); t != nil {
-		s.links = *t
-	}
-	return s
+	return configSnapshot{mode: d.permissionMode(), grants: d.manager.grants.defaults().Names()}
 }
 
 // describeConfigChanges says in words what changed between two snapshots.
@@ -240,50 +180,6 @@ func describeConfigChanges(before, after configSnapshot) []string {
 	if before.mode != after.mode || !slices.Equal(before.grants, after.grants) {
 		out = append(out, fmt.Sprintf("Panes on the default: mode %s, grants %s. Before: mode %s, grants %s.",
 			after.mode, grantWords(after.grants), before.mode, grantWords(before.grants)))
-	}
-	for _, n := range slices.Sorted(maps.Keys(after.hosts)) {
-		old, had := before.hosts[n]
-		switch {
-		case !had:
-			out = append(out, "Host "+n+" is added.")
-		case !federation.SameHost(old, after.hosts[n]):
-			out = append(out, "Host "+n+" dials another way now.")
-		}
-	}
-	for _, n := range slices.Sorted(maps.Keys(before.hosts)) {
-		if _, ok := after.hosts[n]; !ok {
-			out = append(out, "Host "+n+" is removed.")
-		}
-	}
-	// The policy each machine gets, compared machine by machine: a host
-	// entry with no policy of its own adds a key and changes nothing.
-	peers := map[string]bool{config.LinkPolicyDefaultName: true}
-	for k := range before.links {
-		peers[k] = true
-	}
-	for k := range after.links {
-		peers[k] = true
-	}
-	for _, k := range slices.Sorted(maps.Keys(peers)) {
-		peer := k
-		if k == config.LinkPolicyDefaultName {
-			peer = ""
-		}
-		was, now := config.LinkPolicyFor(before.links, peer), config.LinkPolicyFor(after.links, peer)
-		sameRoots := slices.Equal(linkRootPaths(was), linkRootPaths(now))
-		if slices.Equal(was.Allow, now.Allow) && was.HoldMail == now.HoldMail && was.HostedGrace == now.HostedGrace && sameRoots {
-			continue
-		}
-		who := "Machine " + k
-		if peer == "" {
-			who = "A machine with no table of its own"
-		}
-		if !slices.Equal(was.Allow, now.Allow) || was.HoldMail != now.HoldMail || was.HostedGrace != now.HostedGrace {
-			out = append(out, fmt.Sprintf("%s may now do %s here. Before: %s.", who, grantWords(now.Allow), grantWords(was.Allow)))
-		}
-		if !sameRoots {
-			out = append(out, fmt.Sprintf("%s may now write files in %s here. Before: %s.", who, grantWords(linkRootPaths(now)), grantWords(linkRootPaths(was))))
-		}
 	}
 	return out
 }

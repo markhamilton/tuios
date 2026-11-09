@@ -302,9 +302,6 @@ const (
 // tmlCallerKey names the caller on cs for the surface cap: its pane, or ""
 // for a caller in no pane.
 func (d *Daemon) tmlCallerKey(cs *connState) string {
-	if cs.viaLink {
-		return "link:" + cs.linkPeer
-	}
 	if pa := d.paneAuthority(cs); pa != nil {
 		// A pane this daemon cannot place, or one it runs for another
 		// machine, is still not the person.
@@ -325,9 +322,6 @@ func (d *Daemon) tmlCallerKey(cs *connState) string {
 // with its first label in brackets. Never the pane's title or the name of
 // the program in it, which the program sets (OSC 2, argv[0]).
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
-	if cs.viaLink {
-		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
-	}
 	if ref := d.callerPaneRef(cs); ref != nil {
 		labels := d.tmlPaneLabels(ref.Window)
 		for _, l := range labels {

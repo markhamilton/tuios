@@ -329,7 +329,7 @@ func (m *OS) InboxApprovalFetch() tea.Cmd {
 		return nil
 	}
 	it, ok := m.inboxSelected()
-	if !ok || it.Kind != session.AttentionPlan || it.RequestID == "" || it.Host != "" {
+	if !ok || it.Kind != session.AttentionPlan || it.RequestID == "" {
 		return nil
 	}
 	pv := &m.Inbox.approvals.plan
@@ -667,7 +667,7 @@ func (m *OS) paneApprovalWord(windowID, kind string) string {
 		return kind
 	}
 	for _, it := range m.Inbox.Items {
-		if it.Window != windowID || it.Host != "" {
+		if it.Window != windowID {
 			continue
 		}
 		switch {

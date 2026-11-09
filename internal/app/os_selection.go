@@ -14,6 +14,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
@@ -119,8 +120,6 @@ func (m *OS) EditScrollbackInEditor() tea.Cmd {
 		req := scrollbackCaptureRequest{
 			Session: m.SessionName,
 			Window:  w.ID,
-			Host:    m.AttachedHost,
-			Build:   m.DaemonClient.ClientVersion(),
 		}
 		return func() tea.Msg {
 			history, lines, err := captureScrollbackToFile(req, path)
@@ -231,9 +230,6 @@ func editorLineArgs(editor, path string, line int) []string {
 // model so it can run off the update goroutine.
 type scrollbackCaptureRequest struct {
 	Session, Window string
-	// Host is the machine the session is on, "" for this one. Build is this
-	// client's version, for the handshake through the link.
-	Host, Build string
 }
 
 // captureScrollbackToFile asks the session's daemon for the pane's whole
@@ -243,7 +239,7 @@ type scrollbackCaptureRequest struct {
 // The capture verb answers with the text in one reply, so the reply is held
 // once. It is written out from there without another copy.
 func captureScrollbackToFile(req scrollbackCaptureRequest, path string) (int, int, error) {
-	c, err := dialSessionDaemon(req.Host, req.Build)
+	c, err := session.DialVerbClient()
 	if err != nil {
 		return 0, 0, err
 	}

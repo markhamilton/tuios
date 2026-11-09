@@ -101,14 +101,6 @@ type UserConfig struct {
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
 	Dock DockConfig `toml:"dock"`
-	// Hosts is the [hosts.NAME] set: the other machines this daemon may ask for
-	// listings. Outside the option registry for the same reason as the tables
-	// above. See hosts.go.
-	Hosts map[string]HostConfig `toml:"hosts,omitempty"`
-	// Tailscale is the [tailscale] table: which machines on your tailnet are
-	// offered as addresses when adding a host. It changes suggestions only;
-	// nothing is added on its own. See tailscale.go.
-	Tailscale TailscaleConfig `toml:"tailscale,omitempty"`
 	// Agents is the [agents] table: how tuios treats the coding agents in its
 	// panes. Outside the option registry for the same reason as the tables
 	// above. See agents.go.
@@ -457,7 +449,6 @@ type AppearanceConfig struct {
 	DockCompact            bool     `toml:"dock_compact"`              // One-row dock with no rule (default: false)
 	SessionColors          *bool    `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool    `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
-	GlobalSession          *bool    `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
 	NiriClickReveals       *bool    `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
 	NiriHoverReveals       *bool    `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
 	ZoomAnimation          *bool    `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
@@ -1098,9 +1089,6 @@ type KeybindingsConfig struct {
 	// Mail binds are live while the mailbox is open and no reply is being
 	// written.
 	Mail map[string][]string `toml:"mail"`
-	// Transfers binds are live while the Copies panel is open: the copies
-	// between machines. See getDefaultTransfersKeybinds.
-	Transfers map[string][]string `toml:"transfers"`
 	// CopyMode binds are live while a pane is in copy mode, in normal and
 	// visual selection. Copy mode's vim motions are fixed keys and are not
 	// here. See getDefaultCopyModeKeybinds.
@@ -1492,10 +1480,6 @@ func DefaultConfig() *UserConfig {
 				// list takes #, the key tmux gives list-buffers.
 				"paste_buffer":  {"]"},
 				"choose_buffer": {"#"},
-				// u for the copies between machines. f searches files, c
-				// makes a window and t is the window prefix. y is the key the
-				// multifocus docs tell people to bind, so it stays free.
-				"prefix_transfers": {"u"},
 				// E opens the scrollback in the editor, one shift from the e
 				// that focuses the rail. Copy mode has it on ctrl+g.
 				ActionEditScrollback: {"E"},
@@ -1603,7 +1587,6 @@ func DefaultConfig() *UserConfig {
 			Inbox:         getDefaultInboxKeybinds(),
 			InboxPeek:     getDefaultInboxPeekKeybinds(),
 			Mail:          getDefaultMailKeybinds(),
-			Transfers:     getDefaultTransfersKeybinds(),
 			CopyMode:      getDefaultCopyModeKeybinds(),
 			Review:        getDefaultReviewKeybinds(),
 			GUI:           getDefaultGUIKeybinds(),
@@ -1858,36 +1841,6 @@ func getDefaultInboxKeybinds() map[string][]string {
 	}
 }
 
-// The actions of the Copies panel, named once so the input path, the key
-// hints and the defaults cannot drift apart.
-const (
-	ActionTransfersDown   = "transfers_down"
-	ActionTransfersUp     = "transfers_up"
-	ActionTransfersPause  = "transfers_pause"
-	ActionTransfersCancel = "transfers_cancel"
-	ActionTransfersRetry  = "transfers_retry"
-	ActionTransfersClear  = "transfers_clear"
-	ActionTransfersAnswer = "transfers_answer"
-	ActionTransfersClose  = "transfers_close"
-)
-
-// getDefaultTransfersKeybinds returns the Copies panel's keys, live while it
-// is open. p pauses and resumes, x cancels after it asks, r tries a failed
-// copy again, c clears the copies that ended, and enter answers a copy that
-// waits for an answer.
-func getDefaultTransfersKeybinds() map[string][]string {
-	return map[string][]string{
-		ActionTransfersDown:   {"j", "down"},
-		ActionTransfersUp:     {"k", "up"},
-		ActionTransfersPause:  {"p"},
-		ActionTransfersCancel: {"x"},
-		ActionTransfersRetry:  {"r"},
-		ActionTransfersClear:  {"c"},
-		ActionTransfersAnswer: {"enter"},
-		ActionTransfersClose:  {"esc", "q"},
-	}
-}
-
 // getDefaultSidebarAgentsKeybinds returns the keys of the rail's agent rows,
 // live only while the rail owns the keyboard and the cursor is on an agent
 // row. They are consulted before the rail's own, like the files section's, so
@@ -1973,9 +1926,6 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// Enter on a folder opens it, so a folder's path needs a key of its
 		// own. Y is yank with shift, next to y for the file itself.
 		"file_copy_path": {"Y"},
-		// S sends the file or folder to another machine. Capital, because it
-		// starts a copy over a link, and one shift from nothing else here.
-		"file_send": {"S"},
 		// I pastes the path into the focused pane, quoted for its shell: the
 		// keyboard form of dragging the row onto the pane.
 		"file_insert_path": {"I"},
@@ -2822,9 +2772,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.DockModeIconTiling = cfg.Appearance.DockModeIconTiling
 	if cfg.Appearance.SessionColors != nil {
 		s.SessionColors = *cfg.Appearance.SessionColors
-	}
-	if cfg.Appearance.GlobalSession != nil {
-		s.GlobalSession = *cfg.Appearance.GlobalSession
 	}
 	if cfg.Appearance.SessionBorder != nil {
 		s.SessionBorder = *cfg.Appearance.SessionBorder
@@ -3683,9 +3630,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Mail == nil {
 		cfg.Keybindings.Mail = make(map[string][]string)
 	}
-	if cfg.Keybindings.Transfers == nil {
-		cfg.Keybindings.Transfers = make(map[string][]string)
-	}
 	if cfg.Keybindings.GUI == nil {
 		cfg.Keybindings.GUI = make(map[string][]string)
 	}
@@ -3789,8 +3733,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, inboxYield...)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
-	// The Copies panel's section is newer than every config written before it.
-	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
 	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
 	// The review overlay's section is newer than every config written before it.
@@ -3853,10 +3795,6 @@ var yieldingDefaults = map[string]bool{
 	// ] and # after the prefix, new in the release after v0.8.5.
 	"paste_buffer":  true,
 	"choose_buffer": true,
-	// u after the prefix and S on a rail file row, new with the copies
-	// between machines.
-	"prefix_transfers": true,
-	"file_send":        true,
 	// E after the prefix and ctrl+g in copy mode, new with the scrollback
 	// editor keys.
 	ActionEditScrollback: true,
@@ -4069,7 +4007,6 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{"inbox", c.Inbox, d.Inbox},
 		{"inbox_peek", c.InboxPeek, d.InboxPeek},
 		{"mail", c.Mail, d.Mail},
-		{"transfers", c.Transfers, d.Transfers},
 		{"copy_mode", c.CopyMode, d.CopyMode},
 		{"review", c.Review, d.Review},
 		{"gui", c.GUI, d.GUI},

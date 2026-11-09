@@ -32,8 +32,6 @@ TUIOS_PANE_GRANTS=admin
   shim (`tuios --skill tmux`).
 - `TUIOS_RESTORED=1` marks a pane that a daemon restart brought back. It is a
   new shell in the old place.
-- `TUIOS_PANE_HOSTED=1`, with no `TUIOS_ENV`, marks a pane whose process runs
-  on another machine (`tuios --skill hosts`).
 - A standalone `tuios` has no daemon and no socket. Check `TUIOS_ENV` before
   you call the daemon, and skip the call when it is not set.
 
@@ -175,8 +173,7 @@ type into all of them.
 ## Text from many panes
 
 `tuios list-windows --all --text 20 --json` lists every pane of every session
-with its folder, command and last 20 lines. `--all-hosts` adds the other
-machines. It reads with `capture-pane`, under the same grants: without `admin`
+with its folder, command and last 20 lines. It reads with `capture-pane`, under the same grants: without `admin`
 you get your own session and an `errors` entry for the rest.
 
 To read one session's panes in a loop, use `capture-pane`:

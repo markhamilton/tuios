@@ -189,13 +189,6 @@ func (d *Daemon) paneTTYs() map[int64]bool {
 			}
 		}
 	}
-	d.hostedPanesMu.Lock()
-	for _, hp := range d.hostedPanes {
-		if hp.cmd != nil && hp.cmd.Process != nil {
-			add(hp.cmd.Process.Pid)
-		}
-	}
-	d.hostedPanesMu.Unlock()
 	return ttys
 }
 
@@ -255,19 +248,10 @@ func humanForbiddenError(verb string) *verbError {
 //
 //   - A local connection may, unless its process runs inside a pane of this
 //     daemon.
-//   - A link connection may only when it arrived on the link-human socket,
-//     which the proxy dials only for a stream the hub vouched for, and the
-//     process that dialed it here, the proxy, is not inside a pane here either.
-//     The plain link socket never may: its stream came from a hub that did not
-//     vouch, either because the caller there runs inside one of the hub's panes
-//     or because the hub predates the check.
 //   - A call with no connection is the daemon itself, and may.
 func (d *Daemon) mayActAsHuman(cs *connState) bool {
 	if cs == nil {
 		return true
-	}
-	if cs.viaLink && !cs.linkHuman {
-		return false
 	}
 	if cs.pluginBound.Load() != nil {
 		// It presented a plugin's token, or the kernel placed it in a

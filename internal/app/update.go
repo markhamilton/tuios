@@ -11,7 +11,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -50,33 +49,7 @@ type ClipboardSetMsg struct {
 // not happen.
 type SessionCreatedMsg struct {
 	Name string
-	// Global says the session was created as a global one, which has no
-	// windows: its first pane is the one the user picks a machine for, so the
-	// picker is opened once the switch has landed.
-	Global bool
-	Err    error
-	// Client and State are set when the session was made on this machine's
-	// daemon from a client attached elsewhere (makeSessionHere). The
-	// connection is already open and attached, so the handler adopts it
-	// rather than switching over the current one.
-	Client *session.TUIClient
-	State  *session.SessionState
-	// Host is the machine Client is connected to, for a switch-session to
-	// another machine (switchToHostAsync). Empty means this machine.
-	Host string
-	// RequestID is the routed switch-session request this result answers.
-	// The answer goes over the connection being left, before it is closed.
-	RequestID string
-	// Switched marks a switch to a session that may already exist, rather
-	// than a session made here: [startup] applies only while nobody has
-	// arranged it.
-	Switched bool
-	// Create says the switch asked for the session to be made. A session an
-	// attach makes is empty, and switch-session's sessions get a first
-	// window, as they do on this machine (finishHostSwitch).
-	Create bool
-	// OpenGen is the rail click this dial answers, or 0. See host_open.go.
-	OpenGen uint64
+	Err  error
 }
 
 // SessionKilledMsg carries the result of killing a session this client is not
@@ -289,10 +262,7 @@ const (
 	ExitSessionKilled
 	// ExitDaemonLost means the daemon connection was lost unrecoverably.
 	ExitDaemonLost
-	// ExitHostLost means the connection through a host ended and there was no
-	// session on this machine to come back to. The session on the host keeps
-	// running.
-	ExitHostLost
+
 	// ExitNestedRefused means the daemon took this client off its session,
 	// because the client's output reached a pane of that session. The
 	// session keeps running.
@@ -396,7 +366,7 @@ func (m *OS) Init() tea.Cmd {
 		listenPTYDataUntil(m.stopSignal(), m.PTYDataChan),
 		listenClipboardSetUntil(m.stopSignal(), m.PendingClipboardSet),
 		listenSessionCreateUntil(m.stopSignal(), m.sessionCreateChan()),
-		listenAttachedHostsUntil(m.stopSignal(), m.attachedHostsChan()),
+
 		listenSessionKillUntil(m.stopSignal(), m.sessionKillChan()),
 		listenNotificationUntil(m.stopSignal(), m.ensureNotificationChan()),
 		listenCwdChangeUntil(m.stopSignal(), m.ensureCwdChangeChan()),
@@ -476,12 +446,6 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
-	// The copies between machines, kept current by the daemon's transfer
-	// events. See transfers.go.
-	if cmd := m.startTransfersWatch(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-
 	// Listen for the daemon events that end this client.
 	if cmd := listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -508,11 +472,6 @@ func (m *OS) Init() tea.Cmd {
 			cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient))
 		}
 		cmds = append(cmds, m.foreignSessionRefreshTick(after))
-
-		// One poll for the federated hosts. The answer says whether any are
-		// configured, and a daemon with none never gets asked again.
-		m.federationPolling = true
-		cmds = append(cmds, refreshFederationCmd())
 	}
 
 	return tea.Batch(cmds...)
@@ -584,8 +543,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return AgentMailMsg{Payload: event.Mail}
 	case "agent-mail-load":
 		return AgentMailLoadMsg{}
-	case "hosts-changed":
-		return HostsChangedMsg{}
+
 	case "sessions-changed":
 		return SessionsChangedMsg{}
 	case "pane-mark":
@@ -1543,26 +1501,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.quietFrame = changed
 		return m, ListenForDockComponents(m.dockEngine)
 
-	case AttachedHostsMsg:
-		m.applyAttachedHosts(msg)
-		return m, listenAttachedHostsUntil(m.stopSignal(), m.attachedHostsChan())
-
 	case SessionCreatedMsg:
 		cmd := listenSessionCreateUntil(m.stopSignal(), m.sessionCreateChan())
-		if msg.OpenGen != 0 {
-			return m, tea.Batch(cmd, m.finishHostOpen(msg))
-		}
-		if msg.Switched {
-			m.finishHostSwitch(msg)
-			return m, cmd
-		}
 		if msg.Err != nil {
 			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		if msg.Client != nil {
-			m.adoptHostClient(msg.Client, msg.State, federation.LocalHostName)
-		} else if err := m.SwitchToSession(msg.Name); err != nil {
+		if err := m.SwitchToSession(msg.Name); err != nil {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
@@ -1575,11 +1520,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// follow it by name so the cursor lands on it rather than on whatever
 		// took its index.
 		m.sidebarFollowSession = msg.Name
-		if msg.Global {
-			// A global session is created empty, so this is the first pane in
-			// it and the picker is the point.
-			m.NewWindowHere()
-		}
 		return m, cmd
 
 	case SessionKilledMsg:
@@ -1830,32 +1770,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, nil
 
-	case FederationHostsMsg:
-		// Storing a snapshot is the whole handler. The network work happened in
-		// the Cmd that produced this message, which is the rule this feature is
-		// most at risk of breaking.
-		m.applyFederationSnapshot(msg)
-		m.sidebarCache.invalidate()
-		// A rail click that waits for this machine dials when the link is up.
-		open := tea.Batch(m.advanceHostOpen(), m.resumeAfterHostOpen())
-		// A sign-in page the person asked for before the daemon had one
-		// opens on the snapshot that brings it.
-		signIn := tea.Batch(open, m.takePendingSignIns())
-		if after, refresh := m.federationRefreshPlan(); refresh {
-			return m, tea.Batch(signIn, m.federationRefreshTick(after))
-		}
-		return m, signIn
-
-	case hostRetryMsg:
-		return m, m.applyHostRetry(msg)
-
-	case NewWindowOnHostMsg:
-		// The window itself arrives on the daemon's state push, the way any
-		// window another client made arrives. This carries only the failure,
-		// which is the half a push cannot say.
-		m.ApplyNewWindowOnHost(msg)
-		return m, nil
-
 	case PasteRefusedMsg:
 		m.ShowNotification(msg.Message, "error", m.Settings.NotificationDuration)
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
@@ -1903,38 +1817,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.renderSkipped = true
 		}
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
-
-	case HostsChangedMsg:
-		// The daemon's host table changed under this client. The poll is armed
-		// again whatever it was doing, because the daemon with no hosts, which
-		// stopped it, may now have one; the answer says whether to keep going.
-		m.federationPolling = true
-		// The push came off the client event channel, which is read one
-		// event at a time, so the listener is armed again here. Without it the
-		// first host push was the last event this client heard: every later
-		// link change waited for the minute backstop poll, and in that minute
-		// the picker offered machines that were down and refused ones that
-		// were up.
-		return m, tea.Batch(refreshFederationCmd(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
-
-	case HostTestDoneMsg:
-		// Storing the results is the whole handler. The ssh children ran in the
-		// Cmd that produced this message.
-		m.applyHostTest(msg)
-		return m, nil
-
-	case FederationRefreshTickMsg:
-		if msg.Gen != m.federationTickGen {
-			// A timer the snapshot's own re-arm already replaced. Letting it
-			// fire would run a second poll loop beside the first, and the pair
-			// would double every period.
-			return m, nil
-		}
-		after, refresh := m.federationRefreshPlan()
-		if !refresh {
-			return m, nil
-		}
-		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
 
 	case subagentHideMsg:
 		// A finished subagent's row is due to go, so the rail is drawn now,
@@ -2516,27 +2398,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case inboxWatchMsg:
 		return m, m.handleInboxWatch(msg)
 
-	case transfersWatchMsg:
-		return m, m.handleTransfersWatch(msg)
-
-	case transfersLingerMsg:
-		m.applyTransfersLinger(msg)
-		return m, nil
-
-	case transferCallMsg:
-		return m, m.applyTransferCall(msg)
-
-	case transfersClearedMsg:
-		m.applyTransfersCleared(msg)
-		return m, nil
-
-	case dropProbeMsg:
-		m.applyDropProbe(msg)
-		return m, nil
-
-	case dropSentMsg:
-		return m, m.applyDropSent(msg)
-
 	case foreignListingRefreshedMsg:
 		return m, nil
 
@@ -2759,36 +2620,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// so the user is not left staring at a frozen, unresponsive session.
 		// After a deliberate quit the drop is the expected consequence of
 		// killing the session, not a failure, so leave the reason alone.
-		if m.AttachedHost != "" && !m.QuitRequested {
-			// A link to another machine dropping is recoverable, and the first
-			// thing to try is getting it back. The session on the host keeps
-			// running, so the panes on screen stay where they are while this
-			// client dials again. Only when that has genuinely failed does it
-			// come back to the session it left here.
-			//
-			// The client lives on in each case below, so the listener is
-			// armed again for the next connection's end. Without it the
-			// first drop was the last one heard, and a link that dropped a
-			// second time left a frozen session with no reconnect.
-			listen := listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan())
-			if cmd := m.beginHostReconnect(msg.Err); cmd != nil {
-				return m, tea.Batch(cmd, listen)
-			}
-			if m.ReconnectingToHost() {
-				// A connection that is already being replaced reporting its
-				// own end a second time must not start a second attempt, and
-				// must not throw the panes away.
-				return m, listen
-			}
-			if m.HostReconnectDeferred() {
-				// A rail click waits for another session. Its outcome
-				// decides: it lands and replaces this connection, or it
-				// fails and the reconnect starts then.
-				return m, listen
-			}
-			m.ExitReason = ExitHostLost
-			return m, m.QuitCmd()
-		}
+
 		// The daemon on this machine may be restarting: wait a moment for
 		// the new one, and attach to the session it restored.
 		if cmd := m.beginDaemonReconnect(); cmd != nil {
@@ -2810,12 +2642,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case restartPlanMsg, restartStepMsg, restartEndMsg, restartQuitMsg:
 		return m, m.handleRestartMsg(msg)
-
-	case hostReconnectTickMsg:
-		return m, m.handleHostReconnectTick(msg)
-
-	case hostReconnectResultMsg:
-		return m, m.handleHostReconnectResult(msg)
 
 	case SessionEndedMsg:
 		// The old daemon ending its sessions is part of a restart.
@@ -2948,10 +2774,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The rows changed, so the icons the visible ones want changed with
 		// them.
 		return m, m.LauncherIconWork()
-
-	case HostApplyFailedMsg:
-		m.ShowNotification("Host "+msg.Host+" is saved, but the daemon did not open it: "+msg.Err.Error()+". Run tuios config apply in a terminal outside tuios.", "warning", m.Settings.NotificationWarningDuration)
-		return m, nil
 
 	case settingsSaveFailedMsg:
 		// The write happens in a command now, so a failure has to come back here
@@ -3198,38 +3020,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ClientTitle = title
 		case "switch_session":
 			// herdr's workspace.focus and switch-session: show another
-			// session. TapeArgs are the name, and for switch-session to
-			// another machine the host, "create" or "", and the directory
-			// of a session create makes there.
+			// session. TapeArgs[0] is the name.
 			if len(msg.TapeArgs) < 1 || msg.TapeArgs[0] == "" {
 				err = fmt.Errorf("switch_session needs a session name")
 				break
 			}
 			name := msg.TapeArgs[0]
-			host := ""
-			if len(msg.TapeArgs) > 1 {
-				host = msg.TapeArgs[1]
-			}
-			if host == federation.LocalHostName && m.AttachedHost == "" {
-				host = ""
-			}
-			if host != "" && host != m.attachedMachine() {
-				// Another machine: the attach there is made off this
-				// goroutine, and the answer waits for it, so the caller
-				// learns whether the switch landed.
-				create := len(msg.TapeArgs) > 2 && msg.TapeArgs[2] == "create"
-				cwd := ""
-				if len(msg.TapeArgs) > 3 {
-					cwd = msg.TapeArgs[3]
-				}
-				if err = m.switchToHostAsync(host, name, create, cwd, msg.RequestID); err != nil {
-					break
-				}
-				return m, relisten
-			}
-			// This machine, or the one the client is attached to. The answer
-			// goes first, because the switch detaches this client from the
-			// session the daemon routed the request through.
+			// The answer goes first, because the switch detaches this client
+			// from the session the daemon routed the request through.
 			if m.DaemonClient != nil && msg.RequestID != "" {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
 			}
@@ -3299,7 +3097,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(cmd, persistCmd, relisten)
 
 	case remoteSwitchSessionMsg:
-		m.openSession("", msg.name)
+		m.openSession(msg.name)
 		m.MarkAllDirty()
 		return m, nil
 

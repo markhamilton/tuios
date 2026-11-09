@@ -65,12 +65,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture daemon reads no config file. The verb is proved in
 	// pane_grants_hold_test.go.
 	"apply-config#0":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},
-	"apply-config#1":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},
 	"list-dock-components#1": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"refresh-dock#0":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"switch-session#0":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
 	"switch-session#1":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
-	"switch-session#2":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
 	"detach-client#0":        {errCode: ErrVerbInvalidParams, why: "the example names a client id, and the fixture has no attached client"},
 	"refresh-dock#1":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"pip#0":                  {errCode: ErrVerbNeedsClient, why: "the picture-in-picture view is drawn by a client"},
@@ -120,28 +118,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"resume-agent#0": {errCode: ErrVerbNotResumable, why: "no conversation is recorded in the fixture"},
 	"resume-agent#1": {errCode: ErrVerbNotResumable, why: "no conversation is recorded in the fixture"},
 
-	// The fixture has no [hosts] table, so the one host name an example can
-	// use is not configured. The connection itself is proved with two daemons
-	// in host_connection_test.go.
-	"open-host-connection#0": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
-	"retry-host#0":           {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
-	// The host filter's example names a host; the fleet is proved with two
-	// daemons in host_fleet_test.go.
-	"list-attention#3": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
-
-	// resize-pane addresses a pane open-pane returned, and the example carries
-	// a literal id rather than one from this run. The pair is proved end to
-	// end against two daemons in remote_pane_test.go; what this run proves is
-	// that the verb is reachable and says which pane it could not find.
-	"resize-pane#0": {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	"pane-cwd#0":    {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	"pane-agent#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	"pane-calls#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	"close-pane#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	// paste-pane-image names a hosted pane by the same literal. The paste
-	// itself is proved in paste_image_test.go.
-	"paste-pane-image#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-	"pane-kitty-medium#0": {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	// paste-image is the person's act and needs a nonce no client here was
 	// issued. The allowed path is proved in paste_image_test.go.
 	"paste-image#0": {errCode: ErrVerbNotHuman, why: "the example's nonce is a placeholder, and no client here holds one"},
@@ -149,7 +125,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// link-peer names the machine a link connection came from, so it is only
 	// taken on a link socket. The allowed path is proved in
 	// link_policy_test.go.
-	"link-peer#0": {errCode: ErrVerbForbidden, why: "the fixture calls on the daemon's own socket, not a link socket"},
 	// release-agent-message passes on a held message for the person, and
 	// needs a nonce no client here was issued. The allowed path is proved in
 	// link_mail_test.go.
@@ -183,17 +158,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"file-hash#0":        {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
 	"file-preview#0":     {errCode: ErrVerbNoFile, why: "~/Pictures/cat.jpg does not exist here"},
 	"file-walk#0":        {errCode: ErrVerbNoFile, why: "~/photos does not exist here"},
-	"file-commit#0":      {errCode: ErrVerbNoFile, why: "no copy to ~/big.iso is in flight here"},
+	"file-commit#0":      {errCode: ErrVerbNoFile, why: "no part of ~/big.iso is here"},
 	"open-file-stream#0": {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
-	"open-file-stream#1": {errCode: ErrVerbInvalidParams, why: "no part of a copy to ~/big.iso is here to go on from"},
-	"drop-files#0":       {errCode: ErrVerbNoFile, why: "~/Desktop/screenshot.png does not exist here"},
-	"transfer-start#0":   {errCode: ErrVerbUnknownHost, why: "the fixture daemon has no hosts"},
-	"transfer-cancel#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
-	"transfer-pause#0":   {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
-	"transfer-resume#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
-	"transfer-answer#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
-	"host-speed-test#0":  {errCode: ErrVerbUnknownHost, why: "the fixture daemon has no hosts"},
-	"open-tree-stream#0": {errCode: ErrVerbNoFile, why: "~/src does not exist here"},
+	"open-file-stream#1": {errCode: ErrVerbInvalidParams, why: "no part of ~/big.iso is here to go on from"},
 	// A blocked agent's pane, named by an id the example invents. The pair is
 	// proved against a real pane running a fake agent in verb_respond_test.go.
 	"peek-prompt#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
@@ -220,16 +187,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// with claude installed does not get one started by this test. Starting
 	// and waiting are proved with fake agents in agent_launch_test.go and
 	// verb_start_agent_test.go.
-	"start-agent#0":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
-	"start-agent#1":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
-	"start-agent#2":     {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
-	"start-agent#3":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
-	"bundle-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-add-retry-2 does not exist here"},
-	"bundle-worktree#1": {errCode: ErrVerbInvalidParams, why: "the token is a placeholder, and only the connection that made a transfer can read it"},
-
-	// No hosts are configured in the fixture.
-	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},
-	"list-host-sessions#1": {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},
+	"start-agent#0": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#1": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#2": {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
+	"start-agent#3": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 
 	// Unsubscribing needs a subscription, and each example gets a new connection.
 	"unsubscribe#0": {errCode: ErrVerbInvalidRequest, why: "the connection has no subscription"},

@@ -363,46 +363,6 @@ func TestNavigatorScoresTheWholeOccurrence(t *testing.T) {
 	saveFrame(t, term, "navigator-whole-occurrence")
 }
 
-// TestNavigatorListsAHostPane: a pane on another machine is listed under its
-// session, found by its screen text through the link, and Enter takes the
-// client to it.
-func TestNavigatorListsAHostPane(t *testing.T) {
-	base := t.TempDir()
-	remote := remoteMachine(t)
-	ssh := writeFakeSSHTo(t, base, remote)
-	writeOneHostConfig(t, base, tuiosBin)
-	env := []string{"TUIOS_SSH=" + ssh}
-	for _, args := range [][]string{
-		{"new", "far-shell", "--detach"},
-		{"new-window", "farlog", "-s", "far-shell", "--no-focus"},
-	} {
-		if o, err := tuiosCLI(t, remote, args...); err != nil {
-			t.Fatalf("%v: %v\n%s", args, err, o)
-		}
-	}
-	printMarker(t, remote, "far-shell", "farlog", "printf 'far%s\\n' mark-5521", "farmark-5521")
-	farlog := windowIDByName(t, remote, "far-shell", "farlog")
-
-	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 140, rows: 40})
-	waitBoot(t, term)
-	toggleSidebarViaPalette(t, term)
-	railShows(t, term, "far-shell")
-	waitRailCurrent(t, term, "home")
-
-	openNavigator(t, term, "far-shell @ build")
-	searchNavigator(t, term, "farmark-5521", "farlog")
-	saveFrame(t, term, "navigator-host")
-	sendKeys(t, term, tuitest.Enter)
-	waitRailCurrent(t, term, "far-shell")
-	deadline := time.Now().Add(uiTimeout)
-	for focusedIn(t, remote, "far-shell") != farlog {
-		if time.Now().After(deadline) {
-			t.Fatalf("enter went to far-shell but did not focus farlog\n%s", term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
 // TestListWindowsAllHoldsToTheReadGrant: list-windows --all --text reads
 // screen text with capture-pane, so it is held to capture-pane's grants. Run
 // from outside every pane it lists the other session's pane with its text.

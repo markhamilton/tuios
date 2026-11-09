@@ -61,7 +61,7 @@ var (
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
-		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
+		EventAgentActivity, EventTranscript,
 		EventTML, EventTaskClaimed, EventTaskFinished, EventTaskChanged,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
@@ -105,10 +105,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNotAtPrompt, "run typed nothing because the pane's shell is not at its prompt: a command is running in it. The message names the command. Wait for it with wait-for command-finished, or run in another pane."},
 	{ErrVerbFullScreen, "clear-history cleared nothing because a full-screen program, such as an editor or a pager, uses the pane's alternate screen. Quit the program, then call again."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
-	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
-	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},
-	{ErrVerbHostRefused, "The host's link is up and cannot take another connection. Close one of the connections to it and try again."},
-	{ErrVerbUnknownPane, "This daemon is not running a pane with that id. The pane was real and is gone, so drop it rather than correct it."},
+	{ErrVerbUnknownPane, "The pane closed. It was real and is gone, so drop it rather than correct it."},
 	{ErrVerbNotWorktree, "The session is not in a git worktree, so there is nothing to remove or diff."},
 	{ErrVerbWorktreeDirty, "remove-worktree refused: the worktree holds uncommitted changes and neither stash nor force was passed. Nothing was removed."},
 	{ErrVerbWorktreeDetached, "remove-worktree refused: the worktree sits on a detached HEAD holding commits no branch has. Nothing was removed."},
@@ -140,8 +137,6 @@ var errorCodeCatalog = []struct {
 	{ErrVerbHashMismatch, "A copy's bytes did not match the original's sha256, so the copy was removed and nothing was put in place. The transfer starts that file again once by itself."},
 	{ErrVerbCrossDevice, "file-rename cannot move a path to another disk. Nothing was moved. Copy it with transfer-start and move set."},
 	{ErrVerbDiskFull, "The disk had no room for the write. What was written stays in the part file. Free space, then resume the transfer."},
-	{ErrVerbSourceChanged, "A file changed on its machine while it was copied: its size or time is not what the copy started from. Nothing was put in place for it. Copy it again when it is not being written."},
-	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},
 	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, a TML pane, or a pane that runs on another machine. Nothing moved."},
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
@@ -177,22 +172,12 @@ type VerbHint struct {
 	// it back as confirm and the write goes to that set, or is refused again
 	// if the set changed. See selector.go.
 	Confirm string `json:"confirm,omitempty"`
-	// Missing lists the link capabilities a forbidden refusal over a link
-	// lacks, such as "files".
-	Missing []string `json:"missing,omitempty"`
-	// Table is the config table on the refusing machine that grants Missing,
-	// such as [hosts.laptop].
-	Table string `json:"table,omitempty"`
-	// Host is the [hosts] entry, on the caller's side, of the machine that
-	// refused, when a daemon passes on a refusal it got over its link.
-	Host string `json:"host,omitempty"`
 }
 
 // empty reports whether the hint carries nothing worth serializing.
 func (h *VerbHint) empty() bool {
 	return h == nil || (h.Verb == "" && h.Command == "" && h.Param == "" &&
-		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "" &&
-		len(h.Missing) == 0 && h.Table == "" && h.Host == "")
+		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "")
 }
 
 // hintedVerbError builds a *verbError carrying a hint. A hint with no populated

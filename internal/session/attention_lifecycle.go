@@ -366,12 +366,12 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 	// (endHoldLocked), a plan comes back as the pane's approval, with no plan
 	// to serve and no deny to type a reason for. Another machine's item is
 	// that machine's to describe.
-	if it.Host == "" {
-		if it.Kind == AttentionPlan {
-			it.Kind = AttentionApproval
-		}
-		it.DenyMessage, it.PlanLines, it.PlanSHA = false, 0, ""
+
+	if it.Kind == AttentionPlan {
+		it.Kind = AttentionApproval
 	}
+	it.DenyMessage, it.PlanLines, it.PlanSHA = false, 0, ""
+
 	it.Closed = ""
 	a.undo = append(a.undo, attentionUndo{item: it, reason: reason, at: now})
 	if len(a.undo) > attentionUndoMax {
@@ -422,21 +422,7 @@ func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
 		return AttentionItem{}, invalidParam("id", "item "+echoName(id)+" is not asleep any more: it woke, or what it was about is over")
 	}
 	it := u.item
-	if it.Host != "" {
-		if _, hidden := a.hostHidden[id]; !hidden {
-			return AttentionItem{}, invalidParam("id", "the machine it came from changed or closed item "+echoName(id)+" since")
-		}
-		if _, open := a.hostItems[id]; open {
-			return AttentionItem{}, invalidParam("id", "item "+echoName(id)+" is open")
-		}
-		delete(a.hostHidden, id)
-		a.rev++
-		it.Seq = a.rev
-		item := it
-		a.hostItems[id] = &item
-		a.publish(attentionEvent(AttentionOpened, item))
-		return item, nil
-	}
+
 	key := attentionItemKey(&it)
 	if a.openOrSnoozedLocked(key) != nil {
 		return AttentionItem{}, invalidParam("id", "a newer item about the same thing is in the Inbox")
@@ -651,9 +637,7 @@ func (d *Daemon) markAttentionUnread(cs *connState, p markAttentionParams) (any,
 		if !ok {
 			return nil, attentionNoItem(p.ID)
 		}
-		if it.Host != "" {
-			return nil, invalidParam("id", "unread acts on this machine's panes: attach to "+echoName(it.Host)+" to mark its panes")
-		}
+
 		sessionName, window = it.Session, it.Window
 	}
 	sess, verr := d.resolveVerbSession(cs, sessionName)
@@ -703,7 +687,7 @@ func (d *Daemon) markAttentionRestore(p markAttentionParams) (any, *verbError) {
 	var sess *Session
 	var it AttentionItem
 	var verr *verbError
-	if u.item.Host == "" && u.reason == AttentionClosedDismissed {
+	if u.reason == AttentionClosedDismissed {
 		sess = d.manager.GetSession(u.item.Session)
 		if sess == nil {
 			return nil, invalidParam("id", "the session of item "+echoName(p.ID)+" ended")
@@ -769,7 +753,7 @@ func (d *Daemon) attentionItemAnywhere(id string) (AttentionItem, bool) {
 // humanNonceFor: "" for an item of another machine, or one not found.
 func (d *Daemon) attentionItemSession(id string) string {
 	it, ok := d.attentionItemAnywhere(id)
-	if !ok || it.Host != "" {
+	if !ok {
 		return ""
 	}
 	return d.sessionIDOf(it.Session)

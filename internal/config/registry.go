@@ -55,7 +55,7 @@ type sectionMaps struct {
 	debugPrefix, tapePrefix, layoutPrefix, tuiosPrefix    map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
-	transfers, lists, review                              map[string]string
+	lists, review                                         map[string]string
 	// menus holds each declared menu (see MenuConfig), by name.
 	menus map[string]map[string]string
 }
@@ -124,7 +124,6 @@ func (r *KeybindRegistry) buildMappings() {
 		inbox:           r.sectionKeyMap(kb.Inbox),
 		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
 		mail:            r.sectionKeyMap(kb.Mail),
-		transfers:       r.sectionKeyMap(kb.Transfers),
 		copyMode:        r.sectionKeyMap(kb.CopyMode),
 		review:          r.sectionKeyMap(kb.Review),
 		menus:           make(map[string]map[string]string, len(kb.Menus)),
@@ -385,11 +384,6 @@ func (r *KeybindRegistry) GetInboxKeys(action string) []string {
 	return nil
 }
 
-// GetTransfersAction returns the action a key runs in the Copies panel.
-func (r *KeybindRegistry) GetTransfersAction(key string) string {
-	return r.lookupKey(key, r.sections.transfers)
-}
-
 // GetReviewAction returns the action a key runs in the review overlay, or ""
 // for a key the section does not bind. The overlay reads its other keys itself.
 func (r *KeybindRegistry) GetReviewAction(key string) string {
@@ -400,12 +394,6 @@ func (r *KeybindRegistry) GetReviewAction(key string) string {
 // help overlay.
 func (r *KeybindRegistry) GetReviewKeys(action string) []string {
 	return r.config.Keybindings.Review[action]
-}
-
-// GetTransfersKeys is GetKeys for the Copies panel, for its key hints and the
-// help overlay.
-func (r *KeybindRegistry) GetTransfersKeys(action string) []string {
-	return r.config.Keybindings.Transfers[action]
 }
 
 // GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
@@ -568,7 +556,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeCopyMode, ScopeReview:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
@@ -611,17 +599,7 @@ var ActionDescriptions = map[string]string{
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
 	"file_quick_look":     "Files: show a preview of this file or folder",
-	"file_send":           "Files: send this file or folder to a host",
 	"file_insert_path":    "Files: paste the path into the focused pane",
-	// The Copies panel: the copies between machines.
-	"transfers_down":   "Copies: next copy",
-	"transfers_up":     "Copies: previous copy",
-	"transfers_pause":  "Copies: pause or go on with the copy",
-	"transfers_cancel": "Copies: cancel the copy, after a question",
-	"transfers_retry":  "Copies: try a failed copy again",
-	"transfers_clear":  "Copies: remove the copies that ended",
-	"transfers_answer": "Copies: answer a copy that waits for an answer",
-	"transfers_close":  "Copies: close the panel",
 
 	"list_up":        "Lists: up one row",
 	"list_down":      "Lists: down one row",
@@ -853,8 +831,6 @@ var ActionDescriptions = map[string]string{
 	"focus_sidebar":       "Focus sidebar",
 	"next_session":        "Next session",
 	"prev_session":        "Previous session",
-	"next_host":           "Go to the next machine",
-	"prev_host":           "Go to the previous machine",
 	"next_agent":          "Next agent pane, in the rail's order",
 	"prev_agent":          "Previous agent pane, in the rail's order",
 	"switch_session_1":    "Switch to session 1",
@@ -998,7 +974,6 @@ var ActionDescriptions = map[string]string{
 	"prefix_last_message":       "Show the last message in full",
 	"prefix_mail":               "Open the agents view on the mail for you",
 	"prefix_inbox":              "Open the agents view",
-	"prefix_transfers":          "Show the copies between machines",
 	"prefix_next_attention":     "Jump to the oldest item needing you",
 	"prefix_review":             "Review the focused pane's changes",
 	"prefix_next_finished":      "Jump to the newest unseen finished turn",

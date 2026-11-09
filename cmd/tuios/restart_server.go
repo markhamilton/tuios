@@ -201,11 +201,9 @@ func planRestart() *restartReport {
 	rep.Binary = bin
 	rep.Version = cmp.Or(ver, version)
 
-	t := &syncTarget{name: "this machine", local: true, runner: localSyncRunner{}}
-	ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), daemonReadTimeout)
 	defer cancel()
-	readLocalDaemon(ctx, t)
-	d := t.res.Daemon
+	d := readLocalDaemon(ctx)
 	rep.Daemon = &restartplan.Daemon{State: d.State, Version: d.Version, PID: d.PID, SessionCount: d.SessionCount, Sessions: d.Sessions, Unread: d.Unread}
 
 	cfg := session.DaemonConfigFromUser(nil)
@@ -376,7 +374,7 @@ func readRestartedDaemon() (string, []string, error) {
 // confirmRestart asks the question. Without a terminal there is no one to
 // ask, and the command refuses rather than guess.
 func confirmRestart(opts restartOptions) error {
-	if !syncIsTTY(syncOptions{tty: opts.tty}) {
+	if !isTTY(opts.tty) {
 		return &diagnosticError{
 			What:  "A restart needs your agreement, and there is no terminal to ask on.",
 			Cause: "a restart stops the programs listed above.",

@@ -80,7 +80,7 @@ func (m *OS) sidebarRepoGotoMain(repo string) bool {
 		return false
 	}
 	for _, n := range m.BuildSessionTree().Sessions {
-		if n.Kind == sessiontree.KindSession && n.Host == "" &&
+		if n.Kind == sessiontree.KindSession &&
 			n.Worktree != nil && n.Worktree.Repo == repo && n.Worktree.Main {
 			// Open the group, so the session the header pointed at is on
 			// screen under it rather than hidden behind a count.
@@ -95,22 +95,19 @@ func (m *OS) sidebarRepoGotoMain(repo string) bool {
 	return false
 }
 
-// sidebarSessionRows is the sessions section's own row list: the attached
-// machine's sessions under their space's heading and, inside that, the worktree
-// ones under their repository, with the members of a folded repository left
-// out, then laid out by machine with the other machines' rows (see
-// sidebarMachineRows).
+// sidebarSessionRows is the sessions section's own row list: the sessions
+// under their space's heading and, inside that, the worktree ones under their
+// repository, with the members of a folded repository left out.
 //
 // Only the sessions section reads it. The terminals and agents sections keep
-// reading the ungrouped list, so folding a repository or a machine hides its
-// rows here and never hides its panes or its waiting agents, which is the
-// difference between tidying a list and losing work.
+// reading the ungrouped list, so folding a repository hides its rows here and
+// never hides its panes or its waiting agents, which is the difference
+// between tidying a list and losing work.
 func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node {
-	local := localSessionNodes(sessions)
-	return m.sidebarMachineRows(m.sidebarGroupedRows(local), sessions[len(local):])
+	return m.sidebarGroupedRows(sessions)
 }
 
-// sidebarGroupedRows groups one machine's sessions by space and, inside each
+// sidebarGroupedRows groups the sessions by space and, inside each
 // space and inside the sessions in no space, gathers the worktree ones under
 // their repository. A folded repository's members are left out, in every
 // space they are in.

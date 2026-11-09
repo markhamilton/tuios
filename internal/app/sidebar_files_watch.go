@@ -8,7 +8,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/dirwatch"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // # Keeping the listing true to the disk
@@ -59,9 +58,6 @@ type fileWatcher struct {
 	mu  sync.Mutex // serialises retargeting, and guards the fields below
 	dir string
 	w   *dirwatch.Watcher
-	// remote is the daemon watching dir for this client, nil when the watch is
-	// local or there is none.
-	remote *session.TUIClient
 	// latest is the most recent target asked for, so a slow setup for a folder
 	// the user has already left does not install itself over a newer one.
 	latest fileWatchSpec
@@ -152,32 +148,19 @@ func listenForFileChange(stop <-chan struct{}, ch chan struct{}, last time.Time)
 	}
 }
 
-// fileWatchSpec is where the watch should be: a folder, and the daemon to ask
-// when the folder is not on this machine.
+// fileWatchSpec is where the watch should be: a folder.
 type fileWatchSpec struct {
 	dir string
-	// remote is the daemon to ask, nil for a folder on this machine.
-	remote *session.TUIClient
-	// origin is the pane the folder was listed for, which tells the daemon
-	// which machine the folder is on.
-	origin string
 }
 
 // fileWatchTarget is where the watch should be: the folder the section is
-// showing, when it was read cleanly. A folder on another machine is watched by
-// the daemon, when there is one to ask.
+// showing, when it was read cleanly.
 func (m *OS) fileWatchTarget() fileWatchSpec {
 	v := m.filesView
 	if v.Dir == "" || v.Err != "" {
 		return fileWatchSpec{}
 	}
-	if v.Host == "" && m.AttachedHost == "" {
-		return fileWatchSpec{dir: v.Dir}
-	}
-	if m.DaemonClient == nil {
-		return fileWatchSpec{}
-	}
-	return fileWatchSpec{dir: v.Dir, remote: m.DaemonClient, origin: v.Origin}
+	return fileWatchSpec{dir: v.Dir}
 }
 
 // syncFileWatch points the watch at fileWatchTarget. It is called wherever the
@@ -206,21 +189,9 @@ func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 		fw.w.Close()
 		fw.w = nil
 	}
-	if fw.remote != nil && fw.remote != target.remote {
-		// The daemon keeps one watch per connection, so a new remote target
-		// replaces the old one by itself. Only a move off that daemon has to
-		// end it.
-		_, _ = fw.remote.WatchDir("", "")
-	}
-	fw.dir, fw.remote = "", nil
+	fw.dir = ""
 	dir := target.dir
 	if dir == "" {
-		return
-	}
-	if target.remote != nil {
-		if offered, err := target.remote.WatchDir(target.origin, dir); offered && err == nil {
-			fw.dir, fw.remote = dir, target.remote
-		}
 		return
 	}
 	w, err := dirwatch.Watch(dir, func() {
@@ -253,32 +224,12 @@ func (m *OS) stopFileWatch() {
 		fw.w.Close()
 		fw.w, fw.dir = nil, ""
 	}
-	if fw.remote != nil {
-		_, _ = fw.remote.WatchDir("", "")
-		fw.remote, fw.dir = nil, ""
-	}
 	if fw.set != nil {
 		fw.set.Close()
 		fw.set, fw.setDirs = nil, nil
 	}
 	if fw.ch != nil {
 		close(fw.ch)
-	}
-}
-
-// remoteDirChanged takes the daemon's push that dir changed. It runs on the
-// daemon client's read goroutine, so it only signals, and only for the folder
-// the daemon is watching for this client now.
-func (fw *fileWatcher) remoteDirChanged(dir string) {
-	fw.mu.Lock()
-	defer fw.mu.Unlock()
-	if fw.stopped || fw.remote == nil || fw.dir != dir || fw.ch == nil {
-		return
-	}
-	fw.markRootDirty()
-	select {
-	case fw.ch <- struct{}{}:
-	default:
 	}
 }
 
@@ -303,12 +254,9 @@ func (m *OS) refreshChangedFolder() tea.Cmd {
 	return m.fileListCmd(v.Dir, v.Origin, v.Pinned, m.filesView.QuietReq)
 }
 
-// syncTreeWatch points the tree's watch at the open folders on screen. Only a
-// listing read from this machine's disk is watched: the daemon keeps one watch
-// per connection and it is the root's, so a folder open under a root on
-// another machine is read again only when it opens again or the root changes.
+// syncTreeWatch points the tree's watch at the open folders on screen.
 func (m *OS) syncTreeWatch(dirs []string) {
-	if t := m.fileWatchTarget(); t.dir == "" || t.remote != nil {
+	if t := m.fileWatchTarget(); t.dir == "" {
 		dirs = nil
 	}
 	key := strings.Join(dirs, "\x00")

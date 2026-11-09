@@ -53,7 +53,7 @@ func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
 		m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	client, host := m.DaemonClient, m.AttachedHost
+	client, host := m.DaemonClient, ""
 	m.fileSearch = true
 	m.fileSearchGen++
 	m.fileSearchScanning = true

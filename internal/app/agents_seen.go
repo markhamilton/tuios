@@ -92,9 +92,6 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		if !agentsTab {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentsSettingsPrefixKeybinding)
 		}
-		if len(m.transfers.rows) == 0 {
-			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsTransfersPrefixKeybinding)
-		}
 		if len(g.Bindings) > 0 {
 			out = append(out, g)
 		}

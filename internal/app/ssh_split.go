@@ -50,12 +50,6 @@ func (m *OS) FollowSSHOnNewWindow() bool {
 // ordinary one when src runs none.
 func (m *OS) newWindowFollowingSSH(src *terminal.Window) {
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		// A global session asks which machine first, as for every new pane,
-		// and the answer is the machine.
-		if m.newWindowShouldPickHost() {
-			m.OpenHostPicker()
-			return
-		}
 		m.addDaemonWindow("", "", src.ID, nil)
 		return
 	}

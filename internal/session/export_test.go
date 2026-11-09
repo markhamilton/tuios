@@ -1,9 +1,7 @@
 package session
 
 import (
-	"bufio"
 	"context"
-	"io"
 	"sync/atomic"
 	"time"
 
@@ -40,21 +38,6 @@ func StartPeriodicSave(getState func() *SessionState, dirty, stale *wakeLatch, w
 func setResurrectionDirOverride(dir string) string {
 	prev, _ := resurrectionDirOverride.Swap(dir).(string)
 	return prev
-}
-
-// openPaneOn is openPaneReply with only the pane id.
-func openPaneOn(stream io.ReadWriteCloser, spec hostedPaneSpec) (string, *bufio.Reader, error) {
-	opened, br, err := openPaneReply(stream, spec)
-	return opened.Pane, br, err
-}
-
-// refreshRemoteCwdOnOutput asks a pane on another machine where it is, if it
-// has been long enough since the last answer. Reading the cached value is what
-// starts the ask; see remotePane.Cwd.
-func (p *PTY) refreshRemoteCwdOnOutput() {
-	if rp, ok := p.pty.(*remotePane); ok {
-		rp.Cwd()
-	}
 }
 
 // closeDaemonLogFile releases the file. The daemon holds it for the life of the

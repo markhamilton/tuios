@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -29,32 +28,6 @@ import (
 // machine, and no clone was asked for. Its remedy is clone, a repos_root, or
 // a directory, which is why it does not share a code with git_failed.
 const ErrVerbRepoNotFound = "repo_not_found"
-
-// Link capabilities the repository and worktree verbs check at the point they
-// act, on top of the check every verb gets before its handler runs
-// (link_policy.go). A clone starts a program, git, so it is open, the
-// capability that starts sessions and windows. Reading a worktree's files
-// out is write: a machine that may type into a shell here can read every one
-// of them already, and list, which only reads screens, must not.
-const (
-	linkCapSpawn = config.LinkAllowOpen
-	// linkCapReadOut is write, not files: bundle-worktree reads a whole
-	// worktree out, which a machine that may type into a shell here can do
-	// already. files is the file verbs' own capability.
-	linkCapReadOut = config.LinkAllowWrite
-)
-
-// checkLinkPolicy holds a call from another machine to that machine's link
-// policy for one capability. A call that did not come over a link passes.
-// The verbs that reach it are also in verbCapabilities, so the check before
-// the handler already covers them; this one stays at the point of the action,
-// so a verb that gains a path to it later cannot skip it.
-func (d *Daemon) checkLinkPolicy(cs *connState, capability, verb string) *verbError {
-	if cs == nil || !cs.viaLink {
-		return nil
-	}
-	return d.checkLinkCaps(cs, verb, []string{capability})
-}
 
 // repoSource is the repository parameters new-worktree, fan and start-agent
 // share.
@@ -127,9 +100,6 @@ func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource, b
 			Param:  "repo_url",
 			Detail: "Pass clone to clone it, repos_root to look somewhere else, or repo to name the directory.",
 		})
-	}
-	if verr := d.checkLinkPolicy(cs, linkCapSpawn, verb); verr != nil {
-		return "", false, verr
 	}
 	if err := worktree.ValidCloneURL(url); err != nil {
 		return "", false, invalidParam("repo_url", err.Error()+". Only https, ssh and git URLs are cloned.")

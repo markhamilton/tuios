@@ -294,12 +294,12 @@ type RailPaneOpenedMsg struct {
 
 // railPaneRequest is what the daemon call needs, copied off the model.
 type railPaneRequest struct {
-	Session, Host, Build string
-	Key                  string
-	Command              []string
-	Dir                  string
-	Width, Height        int
-	Off                  bool
+	Session       string
+	Key           string
+	Command       []string
+	Dir           string
+	Width, Height int
+	Off           bool
 }
 
 // railPaneCaller makes the call. A variable so a test can stand in for the
@@ -307,7 +307,7 @@ type railPaneRequest struct {
 var railPaneCaller = callRailPane
 
 func callRailPane(req railPaneRequest) error {
-	c, err := dialSessionDaemon(req.Host, req.Build)
+	c, err := session.DialVerbClient()
 	if err != nil {
 		return err
 	}
@@ -352,16 +352,16 @@ func (m *OS) railPaneCreateCmd(key string) tea.Cmd {
 		return nil
 	}
 	dir := ""
-	if m.AttachedHost == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			dir = home
-		}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		dir = home
 	}
+
 	m.railPaneView.pending = true
 	m.railPaneView.pendingAt = time.Now()
 	req := railPaneRequest{
-		Session: m.SessionName, Host: m.AttachedHost, Build: m.DaemonClient.ClientVersion(),
-		Key: key, Command: commandArgv(key, nil), Dir: dir, Width: cols, Height: rows,
+		Session: m.SessionName,
+		Key:     key, Command: commandArgv(key, nil), Dir: dir, Width: cols, Height: rows,
 	}
 	return func() tea.Msg {
 		return RailPaneOpenedMsg{Key: key, Err: railPaneCaller(req)}
@@ -376,7 +376,7 @@ func (m *OS) railPaneCloseCmd(w *terminal.Window) tea.Cmd {
 		}
 		return nil
 	}
-	req := railPaneRequest{Session: m.SessionName, Host: m.AttachedHost, Build: m.DaemonClient.ClientVersion(), Off: true}
+	req := railPaneRequest{Session: m.SessionName, Off: true}
 	return func() tea.Msg {
 		return RailPaneOpenedMsg{Err: railPaneCaller(req)}
 	}

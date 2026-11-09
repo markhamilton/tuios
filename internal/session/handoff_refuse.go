@@ -108,19 +108,6 @@ func (d *Daemon) handoffRefusal() error {
 	if d.handoffArgs == nil {
 		return errHandoffEmbedded
 	}
-	d.hostedPanesMu.Lock()
-	hosted := len(d.hostedPanes)
-	d.hostedPanesMu.Unlock()
-	if hosted > 0 {
-		return hostedRefusal(hosted)
-	}
-	for _, sess := range d.manager.AllSessions() {
-		for _, p := range sess.allPTYs() {
-			if p.host != "" {
-				return fmt.Errorf("session %s has a pane running on %s, and a pane on another machine cannot be handed over. Close it first", sess.Name(), p.host)
-			}
-		}
-	}
 	if what := d.pipes.first(); what != "" {
 		return pipeRefusal(what)
 	}
@@ -130,19 +117,4 @@ func (d *Daemon) handoffRefusal() error {
 // pipeRefusal is the refusal while what reads a pipe.
 func pipeRefusal(what string) error {
 	return fmt.Errorf("%s, and the upgrade would close the pipe it reports on. Try again when it has finished", what)
-}
-
-// hostedRefusal is the refusal while n panes run here for another machine. A
-// hosted pane's master is not among the descriptors the exec keeps, so the
-// exec would close its terminal and end the pane on the machine that opened it.
-func hostedRefusal(n int) error {
-	return fmt.Errorf("%d %s here for another machine, and those cannot be handed over yet. Close them first", n, pluralWord(n, "pane runs", "panes run"))
-}
-
-// pluralWord is one or many.
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

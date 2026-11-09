@@ -382,18 +382,10 @@ func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, b
 		}
 	}
 	switch {
-	case cs != nil && cs.viaLink:
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		return queueOrigin{kind: "link", peer: peer, conn: cs.clientID}, true
 	case verifiedHuman:
 		return queueOrigin{kind: queueByHuman}, true
 	}
 	if pa := d.paneAuthority(cs); pa != nil {
-		if pa.hosted {
-			return queueOrigin{}, false
-		}
 		return queueOrigin{kind: "pane", window: pa.window, session: pa.session}, true
 	}
 	return queueOrigin{kind: queueByShell}, true

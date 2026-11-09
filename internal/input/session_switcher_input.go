@@ -69,12 +69,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// Renames the session through the daemon, so the new name is the
 		// one ls lists and attach takes.
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
-			if selected.Host != "" {
-				// Renames go to the daemon this client is connected to,
-				// which does not hold another machine's session.
-				o.ShowNotification("Switch to "+selected.Host+" to rename this session", "info", o.Settings.NotificationDuration)
-				return o, nil
-			}
 			o.BeginRenameSession(selected.ID)
 		}
 		return o, nil
@@ -82,10 +76,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	case "ctrl+d":
 		// Request delete confirmation for the selected session
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
-			if selected.Host != "" {
-				// The kill goes to this client's daemon too, for the same reason.
-				o.ShowNotification("Switch to "+selected.Host+" to delete this session", "info", o.Settings.NotificationDuration)
-			} else if selected.IsCurrent {
+			if selected.IsCurrent {
 				o.ShowNotification("Cannot delete the current session", "warning", o.Settings.NotificationDuration)
 			} else {
 				o.SessionSwitcherConfirmDelete = selected.ID

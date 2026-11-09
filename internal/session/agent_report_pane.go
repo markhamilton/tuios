@@ -65,7 +65,7 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	if harnessPID <= 1 || harnessPID == os.Getpid() {
 		return false
 	}
-	if cs != nil && (cs.viaLink || cs.paneOnly) {
+	if cs != nil && cs.paneOnly {
 		return false
 	}
 	windowID, root := sess.paneProcess(target)
@@ -101,7 +101,7 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 // server, is not judged by this pane's processes. So is anything that cannot
 // be read.
 func (d *Daemon) harnessLeftPane(cs *connState, sess *Session, target string, harnessPID int) bool {
-	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 1 || cs.peerPID == os.Getpid() {
+	if cs == nil || cs.paneOnly || cs.peerPID <= 1 || cs.peerPID == os.Getpid() {
 		return false
 	}
 	_, root := sess.paneProcess(target)
@@ -130,9 +130,9 @@ func (s *Session) paneProcess(target string) (string, int) {
 		return "", 0
 	}
 	w := &s.state.Windows[idx]
-	id, host, ptyID := w.ID, w.Host, w.PTYID
+	id, ptyID := w.ID, w.PTYID
 	s.stateMu.RUnlock()
-	if host != "" || ptyID == "" {
+	if ptyID == "" {
 		return id, 0
 	}
 	pty := s.GetPTY(ptyID)

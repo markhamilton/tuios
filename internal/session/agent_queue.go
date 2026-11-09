@@ -94,21 +94,11 @@ const queuePreviewLen = 80
 
 // queueOrigin is who queued an entry.
 type queueOrigin struct {
-	// kind is queueByHuman, queueByShell, "pane" or "link".
+	// kind is queueByHuman, queueByShell or "pane".
 	kind string
 	// window and session are the pane that queued it, for kind pane.
 	window  string
 	session string
-	// hosted marks a pane this machine runs for another machine. It holds
-	// this machine's default grants and no session here.
-	hosted bool
-	// peer is the linked machine, for kind link, as its link-peer handshake
-	// named it; empty for a link that gave no name.
-	peer string
-	// conn is the client id of the link connection that queued it, for kind
-	// link. Two machines that gave no name share the empty peer, so only
-	// the connection tells their entries apart.
-	conn string
 }
 
 // queueEntry is one queued message.
@@ -782,29 +772,7 @@ func (d *Daemon) queueOriginRefusal(e *queueEntry, sess *Session, target WindowS
 	switch o.kind {
 	case queueByHuman, queueByShell:
 		return ""
-	case "link":
-		var hosts linkPolicyTable
-		if t := d.linkPolicies.Load(); t != nil {
-			hosts = *t
-		}
-		if !config.LinkPolicyFor(hosts, o.peer).Allows(config.LinkAllowWrite) {
-			from := "a machine that gave no name"
-			if o.peer != "" {
-				from = o.peer
-			}
-			return "the link from " + from + " may no longer write here"
-		}
-		if hasFileParts(e.parts) && !d.linkAllowsFiles(o.peer) {
-			return "the link from " + firstNonEmpty(o.peer, "a machine that gave no name") + " may no longer put files here"
-		}
-		return ""
 	case "pane":
-		if o.hosted {
-			if !d.manager.grants.defaults().Has(GrantAdmin) {
-				return "the pane that queued it runs here for another machine, and the default grants no longer reach any session"
-			}
-			return ""
-		}
 		session := d.sessionOfWindow(o.window)
 		if session == "" {
 			return "window " + shortWindowID(o.window) + " that queued it is gone"

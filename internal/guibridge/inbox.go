@@ -32,9 +32,8 @@ type Notify struct {
 	// AgentState is the agent state the alert announces, empty for any other
 	// message.
 	AgentState string `json:"agent_state,omitempty"`
-	// Host, Session and Window name the pane the alert is about, empty when
-	// it is about none.
-	Host    string `json:"host,omitempty"`
+	// Session and Window name the pane the alert is about, empty when it is
+	// about none.
 	Session string `json:"session,omitempty"`
 	Window  string `json:"window,omitempty"`
 	// Desktop is the person's alert policy for a desktop notification now:
@@ -75,7 +74,7 @@ func (m *model) exportNotify() {
 		}
 		ev := Notify{ID: n.ID, Message: n.Message, Level: n.Type, AgentState: n.AgentState}
 		if n.Target != nil {
-			ev.Host, ev.Session, ev.Window = n.Target.Host, n.Target.SessionID, n.Target.WindowID
+			ev.Session, ev.Window = n.Target.SessionID, n.Target.WindowID
 		}
 		ev.Desktop = m.os.DesktopAlerts()
 		m.out.JSON(Event{Type: "notify", Notify: &ev})
@@ -102,8 +101,7 @@ func detachedEvent(o *app.OS) *Detached {
 		return &Detached{Reason: "detached", Message: msg}
 	case app.ExitDaemonLost:
 		return &Detached{Reason: "daemon_lost", Message: "The connection to the tuios daemon closed."}
-	case app.ExitHostLost:
-		return &Detached{Reason: "host_lost", Message: "The link to " + o.AttachedHost + " closed."}
+
 	case app.ExitNestedRefused:
 		msg := "The daemon refused this attach."
 		if o.DaemonClient != nil && o.DaemonClient.NestedRefusal() != "" {

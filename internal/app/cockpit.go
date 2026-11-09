@@ -154,9 +154,6 @@ type cockpitState struct {
 	// read for the rail signature branchesAt.
 	branches   map[string]ckWorktree
 	branchesAt uint64
-	// machines counts the agents on each machine, by host, "" for this
-	// one, from the last list no selector or search narrowed.
-	machines map[string]int
 	// tall is how many lines the fleet takes with two-line rows, whatever
 	// it is drawn with, so the choice of one-line rows does not feed back
 	// into itself.
@@ -370,12 +367,6 @@ func (m *OS) cockpitRows() []ckRow {
 	if sig := m.Inbox.agents.listAt.sig; ck.branches == nil || ck.branchesAt != sig {
 		ck.branches, ck.branchesAt = m.ckBranches(), sig
 	}
-	if m.Inbox.Select == "" && m.Inbox.agents.query == "" {
-		ck.machines = map[string]int{}
-		for _, e := range list {
-			ck.machines[e.Host]++
-		}
-	}
 	if ck.board {
 		ck.rows = m.buildBoardRows(list)
 	} else {
@@ -398,7 +389,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	used := make(map[int]bool)
 	// An agent whose item is snoozed rests out of sight with the item.
 	for _, it := range st.life.Snoozed {
-		if i, ok := byKey[it.Host+"\x00"+it.Session+"\x00"+it.Window]; ok && it.Window != "" {
+		if i, ok := byKey["\x00"+it.Session+"\x00"+it.Window]; ok && it.Window != "" {
 			used[i] = true
 		}
 	}
@@ -412,7 +403,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			continue
 		}
 		it := *r.item
-		if it.Kind == session.AttentionFinished && judges[it.Host+"\x00"+it.Window] {
+		if it.Kind == session.AttentionFinished && judges["\x00"+it.Window] {
 			// A judge's finished turn is told of on its fan's row.
 			continue
 		}
@@ -425,7 +416,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 		idx := -1
 		if it.Window != "" {
-			if i, ok := byKey[it.Host+"\x00"+it.Session+"\x00"+it.Window]; ok {
+			if i, ok := byKey["\x00"+it.Session+"\x00"+it.Window]; ok {
 				idx = i
 				used[i] = true
 			}
@@ -455,7 +446,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	// list, and the f filter keeps the agents that need you.
 	kindFilter := st.Filter != ""
 	for i, e := range list {
-		if used[i] || kindFilter || judges[e.Host+"\x00"+e.WindowID] {
+		if used[i] || kindFilter || judges["\x00"+e.WindowID] {
 			// A fan's judge is told of on the fan's row, not as a row.
 			continue
 		}
@@ -658,7 +649,7 @@ func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 			return ""
 		}
 		e := list[r.agent]
-		return ckFanKey(e.Host, m.ckWorktreeOf(e))
+		return ckFanKey("", m.ckWorktreeOf(e))
 	}
 	count := map[string]int{}
 	for _, r := range items {
@@ -1226,8 +1217,6 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.CockpitToggleBoard()
 	case "search":
 		m.InboxStartSelect()
-	case "scope":
-		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
 	case "a", "A", "r":
@@ -1258,13 +1247,7 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if strings.HasPrefix(action, "cmp:") {
 			return m.ckCompareAction(action)
 		}
-		if h, ok := strings.CutPrefix(action, "scope:"); ok {
-			if h == m.ckScope() {
-				h = ""
-			}
-			m.CockpitScope(h)
-			return nil
-		}
+
 		if id, ok := strings.CutPrefix(action, "art:"); ok {
 			m.ckArtShow(id, true)
 			return nil

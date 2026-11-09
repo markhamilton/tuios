@@ -173,8 +173,7 @@ group, so a foreground program that exits ends only its own records.
 A report from a background job (`job &`), or from a pane whose own process is
 the program (`tuios new-window -- cargo watch`), does not come from a
 foreground group, so its records stay until the program changes them or a
-prompt starts. For a pane on another machine, the group has ended when that
-machine says the pane's shell holds the foreground again.
+prompt starts.
 
 One case is not caught: a program that reports and exits in the same instant,
 such as `printf ...; exit`, or `tuios status working` typed at a prompt, can be
@@ -226,8 +225,6 @@ To turn this off:
 [agents]
 host_program_status = "off"   # "auto" is the default
 ```
-
-A browser client of `tuios-web` does not ask.
 
 ## Limits
 

@@ -88,7 +88,6 @@ type pushPayload struct {
 	Kind      string   `json:"kind"`
 	Session   string   `json:"session,omitempty"`
 	Window    string   `json:"window,omitempty"`
-	Host      string   `json:"host,omitempty"`
 	Harness   string   `json:"harness,omitempty"`
 	Name      string   `json:"name,omitempty"`
 	Summary   string   `json:"summary,omitempty"`
@@ -362,12 +361,12 @@ func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 	machine := w.n.d.manager.HostName()
 	p := pushPayload{
 		V: 1, Type: typ, ID: it.ID, Kind: it.Kind, Session: it.Session, Window: it.Window,
-		Host: it.Host, Harness: it.Harness, Name: it.Name, Summary: it.Summary,
+		Harness: it.Harness, Name: it.Name, Summary: it.Summary,
 		Risk: it.Risk, RequestID: it.RequestID, Options: it.Options, Machine: machine,
 	}
 	if typ == pushClose {
 		// A close needs only what names the item.
-		p = pushPayload{V: 1, Type: typ, ID: it.ID, Kind: it.Kind, Session: it.Session, Window: it.Window, Host: it.Host, Machine: machine}
+		p = pushPayload{V: 1, Type: typ, ID: it.ID, Kind: it.Kind, Session: it.Session, Window: it.Window, Machine: machine}
 	}
 	data, cut := fitPayload(p)
 	if cut {
@@ -442,7 +441,7 @@ func fitPayload(p pushPayload) ([]byte, bool) {
 		if data = marshal(p); len(data) <= pushnotify.MaxPayload || limit == 0 {
 			return data, true
 		}
-		for _, f := range []*string{&p.Summary, &p.Name, &p.Session, &p.Window, &p.Host, &p.Harness, &p.Machine} {
+		for _, f := range []*string{&p.Summary, &p.Name, &p.Session, &p.Window, &p.Harness, &p.Machine} {
 			*f = pushnotify.Clip(*f, limit)
 		}
 	}

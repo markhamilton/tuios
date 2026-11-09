@@ -225,7 +225,7 @@ func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
 		return session.AttentionItem{}, false
 	}
 	for _, it := range m.Inbox.Items {
-		if it.Kind == session.AttentionAsk && it.Host == "" && !it.Stale && it.Window == windowID {
+		if it.Kind == session.AttentionAsk && !it.Stale && it.Window == windowID {
 			return it, true
 		}
 	}

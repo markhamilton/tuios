@@ -1,8 +1,6 @@
 package session
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -40,24 +38,9 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 			Dir: payload.Dir, Err: "There is no folder to show.",
 		})
 	}
-	// A pane whose process is on another machine names a directory on that
-	// machine. Listing it here would read this filesystem and answer about a
-	// path that means nothing to the pane: either "that folder is gone", or,
-	// worse, a listing of an unrelated directory that happens to share the
-	// name. The machine that owns the process owns the filesystem the answer
-	// is about.
-	//
-	// This daemon is not that machine, so it says so rather than guessing.
-	if host := d.windowHost(cs.sessionID, payload.WindowID); host != "" {
-		return d.reply(cs, msg, MsgDirListing, d.remoteListing(host, dir, payload.Max))
-	}
-	// "~" is this machine's home. Only the daemon that owns the disk knows
-	// it, so a client asking for a pane on another machine sends it as typed.
+	// "~" is this machine's home.
 	dir = ExpandHome(dir)
 
-	if verr := d.checkLinkRead(cs, dir); verr != nil {
-		return d.reply(cs, msg, MsgDirListing, &DirListingPayload{Dir: payload.Dir, Err: verr.Message})
-	}
 	out := listDir(dir, payload.Max)
 	// Asked whether or not the directory could be read, because the two answers
 	// are independent and this is the one that changes what a person should do
@@ -97,24 +80,6 @@ func ExpandHome(dir string) string {
 // read off the same field.
 func spoofCheckWanted(p ReadDirPayload) bool {
 	return !p.Pinned && p.WindowID != ""
-}
-
-// windowHost is the machine a window's process runs on, empty for this one.
-func (d *Daemon) windowHost(sessionID, windowID string) string {
-	if sessionID == "" || windowID == "" {
-		return ""
-	}
-	sess := d.manager.GetSessionByID(sessionID)
-	if sess == nil {
-		return ""
-	}
-	state := sess.GetState()
-	for i := range state.Windows {
-		if state.Windows[i].ID == windowID {
-			return state.Windows[i].Host
-		}
-	}
-	return ""
 }
 
 // listDir reads one directory into the answer the client draws. Separate from
@@ -275,49 +240,4 @@ func lowerName(s string) string {
 		}
 	}
 	return string(b)
-}
-
-// remoteListing asks the machine a pane runs on to list one of its
-// directories.
-//
-// The rail's file section asks the daemon that owns the pane, which was the
-// whole fix for a pane reached over a link: a client listing its own disk
-// reported that the pane's directory did not exist. A window whose process is
-// on another machine moves that same mistake one step along, because the
-// daemon that owns the window is not the machine that owns the files either.
-// So it asks the one that is.
-//
-// A failure is reported as the listing's error rather than as a message
-// failure. The section has a row to say why it is empty, and "that machine did
-// not answer" is the honest thing to put in it.
-func (d *Daemon) remoteListing(host, dir string, maxEntries int) *DirListingPayload {
-	if d.federation == nil {
-		return &DirListingPayload{Dir: dir, Err: "No link to " + host + "."}
-	}
-	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
-	defer cancel()
-
-	raw, err := d.federation.Call(ctx, host, "read-dir", map[string]any{
-		"dir": dir,
-		"max": maxEntries,
-	})
-	if err != nil {
-		message, _ := federationErrorText(err)
-		if message == "" {
-			message = host + " could not list it."
-		}
-		return &DirListingPayload{Dir: dir, Err: message}
-	}
-	var out DirListingPayload
-	if json.Unmarshal(raw, &out) != nil {
-		return &DirListingPayload{Dir: dir, Err: host + " sent a listing this build cannot read."}
-	}
-	if out.Dir == "" {
-		out.Dir = dir
-	}
-	// The spoof question is never answered for a pane on another machine. It
-	// compares an announced directory against a shell's own, and this daemon
-	// holds neither: the shell is over there and the pid means nothing here.
-	out.Spoofed = false
-	return &out
 }

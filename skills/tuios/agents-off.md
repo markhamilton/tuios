@@ -21,8 +21,6 @@ tuios get-config agents.enabled
   window conditions still work.
 - The CLI prints `Agent features are off. Set agents.enabled = true in the
   config to use this command.`
-- A call to an agent on another machine whose features are off fails with
-  `agents_disabled` and names that machine.
 - Harness hooks report nothing, and no agent is detected. Your pane shows no
   agent state on the rail.
 - The typing rule fails closed. A pane without the `respond` grant can type

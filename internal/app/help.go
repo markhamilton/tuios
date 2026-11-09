@@ -38,7 +38,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 				"terminal_focus_left", "terminal_focus_right",
 				"terminal_focus_up", "terminal_focus_down",
 				"copy_selection", "focus_sidebar",
-				"next_session", "prev_session", "next_host", "prev_host",
+				"next_session", "prev_session",
 				"next_agent", "prev_agent",
 				"toggle_multifocus_active", "toggle_multifocus_all", "close_workspace",
 			}),
@@ -546,27 +546,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		fileRow("file_open", "Files: open the folder, or copy the file path"),
 		fileRow("file_edit", "Files: edit a text file in the configured editor"),
 		fileRow("file_copy_path", "Files: copy the path of the file or folder"),
-		fileRow("file_send", "Files: send the file or folder to a host"),
 		fileRow("file_insert_path", "Files: paste the path into the focused pane"),
 		fileRow("file_quick_look", "Files: show a preview of the file or folder"),
-	)
-
-	// The Copies panel's keys, live while it is open. They are read from
-	// their own section, so a key bound there again shows here.
-	copyRow := func(action, desc string) HelpBinding {
-		return HelpBinding{
-			Action:      action,
-			Keys:        registry.GetTransfersKeys(action),
-			Description: desc,
-			Category:    cat,
-		}
-	}
-	bindings = append(bindings,
-		copyRow(config.ActionTransfersPause, "Copies: pause the copy, or go on with it"),
-		copyRow(config.ActionTransfersCancel, "Copies: cancel the copy, after a question"),
-		copyRow(config.ActionTransfersRetry, "Copies: try a failed copy again"),
-		copyRow(config.ActionTransfersClear, "Copies: remove the copies that ended"),
-		copyRow(config.ActionTransfersAnswer, "Copies: answer a copy that waits for an answer"),
 	)
 
 	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.
@@ -839,7 +820,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_workspace_switcher", "choose_tree", "goto_picker", "new_worktree", "set_note",
 		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
-		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
+		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer",
 		config.ActionEditScrollback, config.ActionClearScrollback,
 		"hints", "hints_all_panes", "display_panes", "pick_path", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
 		// prefix_review and prefix_next_finished are listed only in the

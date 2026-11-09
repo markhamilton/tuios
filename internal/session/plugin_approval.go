@@ -114,7 +114,7 @@ func (d *Daemon) notePluginAsks(asks []PluginApprovalAsk) {
 func pluginAsksReader(cs *connState) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	return cs.isTUIClient && cs.attached && cs.pluginAsks && !cs.viaLink && !cs.passive
+	return cs.isTUIClient && cs.attached && cs.pluginAsks && !cs.passive
 }
 
 // sendPluginAsks sends a client that just attached the plugins that wait.

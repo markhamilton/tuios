@@ -84,7 +84,6 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, 
 		stages = append(stages, tk.Stage)
 	}
 	return SelectorTarget{
-		Host:     localAttentionHost,
 		Session:  sess.Name(),
 		Name:     windowLabelOf(w),
 		State:    w.ShownAgentState().Name(),

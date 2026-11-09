@@ -360,14 +360,9 @@ func xpanesCommandLine(o xpanesOptions) string {
 	return o.command
 }
 
-// xpanesShell is the shell of a pane with no command: $SHELL on this machine,
-// else /bin/sh. On another machine this machine's $SHELL path means nothing,
-// so it is "", and the daemon there chooses the shell.
-func xpanesShell(host, envShell string) string {
-	switch {
-	case host != "":
-		return ""
-	case envShell != "":
+// xpanesShell is the shell of a pane with no command: $SHELL, else /bin/sh.
+func xpanesShell(envShell string) string {
+	if envShell != "" {
 		return envShell
 	}
 	return "/bin/sh"
@@ -408,15 +403,8 @@ func runXpanes(o xpanesOptions, items []string) error {
 	if sessionName == "" {
 		sessionName = os.Getenv("TUIOS_SESSION")
 	}
-	host, _, _, err := resolveTarget(sessionName, "")
-	if err != nil {
-		return err
-	}
-	// A shell pane on this machine is $SHELL with the item in its
-	// environment. On another machine this machine's $SHELL path means
-	// nothing, so the daemon there chooses the shell, and the item is only
-	// the pane's name.
-	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")), speedy)
+	// A shell pane is $SHELL with the item in its environment.
+	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(os.Getenv("SHELL")), speedy)
 	if len(panes) > xpanesMaxPanes && !o.force {
 		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
 	}
@@ -463,9 +451,9 @@ func runXpanes(o xpanesOptions, items []string) error {
 	}
 
 	cwd := ""
-	if t.host == "" {
-		cwd, _ = os.Getwd()
-	}
+
+	cwd, _ = os.Getwd()
+
 	for i, p := range panes {
 		if i > 0 && speedy != xpanesInteractive {
 			// The command starts with its pane, so the wait is here.

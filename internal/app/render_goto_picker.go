@@ -90,9 +90,6 @@ func (m *OS) gotoPickerRow(r gotoRow, selected bool, rowBg color.Color, pal over
 // agent its harness first, "claude · payments › 1 › api".
 func gotoRowLabel(r gotoRow) string {
 	where := r.sessionLabel
-	if r.host != "" {
-		where += " @ " + r.host
-	}
 	switch r.kind {
 	case gotoWorkspace:
 		where += " › " + gotoWsWords(r)

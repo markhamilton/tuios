@@ -111,9 +111,7 @@ const scratchPendingHostMax = 45 * time.Second
 
 // scratchPendingLimit is the backstop in force for this session.
 func (m *OS) scratchPendingLimit() time.Duration {
-	if m.AttachedHost != "" {
-		return scratchPendingHostMax
-	}
+
 	return scratchPendingMax
 }
 
@@ -466,7 +464,7 @@ func (m *OS) PaneHeight() int {
 // when it is a folder on this machine, else the home folder.
 func (m *OS) scratchDir() string {
 	raw := ""
-	if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
+	if w := m.GetFocusedWindow(); w != nil {
 		raw = paneDir(w)
 	}
 	return localFolder(raw)
@@ -497,14 +495,9 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		return nil
 	}
 	var dir string
-	if m.AttachedHost != "" {
-		// The pane starts on the session's machine, so the folder is the
-		// focused pane's path there. Empty lets that daemon pick its own.
-		// scratchDir is not asked: it stats a folder here.
-		dir = m.remotePaneDir()
-	} else {
-		dir = m.scratchDir()
-	}
+
+	dir = m.scratchDir()
+
 	m.scratchPending = spec.Name
 	m.scratchPendingAt = time.Now()
 	req := scratchRequest{
@@ -516,8 +509,6 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		Width:     spec.Width,
 		Height:    spec.Height,
 		Workspace: m.CurrentWorkspace,
-		Host:      m.AttachedHost,
-		Build:     m.DaemonClient.ClientVersion(),
 	}
 	label, name := spec.Title, spec.Name
 	return func() tea.Msg {
@@ -587,15 +578,12 @@ type scratchRequest struct {
 	Dir           string
 	Width, Height string
 	Workspace     int
-	// Host is the machine the session is on, "" for this one. Build is this
-	// client's version, for the handshake through the link.
-	Host, Build string
 }
 
 // openScratchPopup asks the session's daemon for the scratch terminal. It
 // runs as a command, never from Update, for the reason labelVerbCmd gives.
 func openScratchPopup(req scratchRequest) error {
-	c, err := dialSessionDaemon(req.Host, req.Build)
+	c, err := session.DialVerbClient()
 	if err != nil {
 		return err
 	}

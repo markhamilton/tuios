@@ -791,11 +791,10 @@
         "session-controls",
         "tape",
         "trail",
-        "transfers",
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 24,
       "max_bytes": 32
     },
     {
@@ -820,18 +819,17 @@
         "session-controls",
         "tape",
         "trail",
-        "transfers",
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 24,
       "max_bytes": 32
     },
     {
       "path": "dock.right",
       "type": "list",
       "description": "The built-in cells on the right end of the dock, in order. An empty list draws nothing there.",
-      "default": "[\"transfers\", \"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]",
+      "default": "[\"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]",
       "items": [
         "clock",
         "copy-help",
@@ -843,11 +841,10 @@
         "session-controls",
         "tape",
         "trail",
-        "transfers",
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 24,
       "max_bytes": 32
     },
     {

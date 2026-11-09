@@ -606,7 +606,7 @@ func herdrHarness(agent string) string {
 func (d *Daemon) herdrPane(cs *connState, method, paneID string) (window string, outside bool, code, msg string) {
 	fromPane, window := d.peerPane(cs)
 	if !fromPane || window == "" {
-		if cs != nil && (cs.viaLink || cs.paneOnly) {
+		if cs != nil && cs.paneOnly {
 			return "", false, "forbidden", "a pane report from another machine is refused"
 		}
 		sess, win, ierr := d.herdrFindPane(paneID)
@@ -641,7 +641,7 @@ func (d *Daemon) herdrPane(cs *connState, method, paneID string) (window string,
 // a plugin's command, and this refuses its pane the same way. Only metadata
 // is let through: agent state stays with the pane that reports it.
 func (d *Daemon) pluginPaneMetadataTarget(cs *connState, method, own, paneID string) (string, bool) {
-	if method != "pane.report_metadata" || d.plugins == nil || cs == nil || cs.viaLink || cs.paneOnly || d.manager.grants.strict() {
+	if method != "pane.report_metadata" || d.plugins == nil || cs == nil || cs.paneOnly || d.manager.grants.strict() {
 		return "", false
 	}
 	d.plugins.mu.Lock()

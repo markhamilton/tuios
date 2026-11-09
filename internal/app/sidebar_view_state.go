@@ -9,7 +9,6 @@ type secondaryRailView struct {
 	hits             []sidebarRowHit
 	nav              []sidebarNavRow
 	sessionIDs       []string
-	hostIDs          []string
 	sectionY         [sidebarSectionCount][2]int
 	stripRows        []sidebarStripRow
 	scrollS, scrollT int
@@ -43,7 +42,6 @@ func (m *OS) swapSecondaryRail() {
 	m.SidebarHits, s.hits = s.hits, m.SidebarHits
 	m.SidebarNav, s.nav = s.nav, m.SidebarNav
 	m.SidebarSessionIDs, s.sessionIDs = s.sessionIDs, m.SidebarSessionIDs
-	m.SidebarHostIDs, s.hostIDs = s.hostIDs, m.SidebarHostIDs
 	m.sidebarSectionY, s.sectionY = s.sectionY, m.sidebarSectionY
 	m.sidebarStripRows, s.stripRows = s.stripRows, m.sidebarStripRows
 	m.SidebarScrollS, s.scrollS = s.scrollS, m.SidebarScrollS

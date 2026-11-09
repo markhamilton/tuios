@@ -342,9 +342,9 @@ func (d *Daemon) SetDisplay(mode string) {
 // be followed at all: a local, same-uid client that may act as the person.
 func (d *Daemon) displayOf(cs *connState) (ClientDisplay, bool) {
 	cs.mu.Lock()
-	viaLink, hello := cs.viaLink, cs.hello
+	hello := cs.hello
 	cs.mu.Unlock()
-	if viaLink || hello == nil || hello.Display.empty() {
+	if hello == nil || hello.Display.empty() {
 		return ClientDisplay{}, false
 	}
 	if !cs.peerUIDOK || cs.peerUID != os.Geteuid() {

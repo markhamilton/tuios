@@ -265,7 +265,7 @@ func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 // ckTakeWindow is the pane t takes a card for: the focused pane behind the
 // agents view, when it is in the card's session on this machine.
 func (m *OS) ckTakeWindow(c session.TaskRow) string {
-	if m.AttachedHost != "" || !m.IsDaemonSession || c.Session != m.SessionName {
+	if !m.IsDaemonSession || c.Session != m.SessionName {
 		return ""
 	}
 	if w := m.GetFocusedWindow(); w != nil {
@@ -650,8 +650,7 @@ func (m *OS) ckBoardEmptyLines() []string {
 		return []string{"This daemon has no task board.", m.restartHint()}
 	case st.ck.boardErr != "":
 		return []string{"tuios cannot list the cards: " + printableTitle(st.ck.boardErr), back}
-	case m.ckScope() != "" && m.ckScope() != "local":
-		return []string{"The board lists only the cards on this machine.", "It does not list the cards on " + ckHostLabel(m.ckScope()) + ". " + back}
+
 	case st.Select != "" || st.agents.query != "":
 		return []string{"No card matches the search.", "/ changes the search. " + back}
 	}

@@ -271,17 +271,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The rail pane's mark, the daemon's like the scratch one.
 	var rails map[string]string
 	workspaces := make(map[string]int, len(canonical.Windows))
-	// The machine a window's process runs on is stamped once, when the daemon
-	// creates the window, and nothing moves a process between machines
-	// afterwards. So canonical is always the truth and it is carried by id the
-	// way the popup mark is.
-	//
-	// Without this the first client sync wiped it, and everything downstream
-	// read the pane as local: the rail stopped naming the machine, and the
-	// file section asked this machine for a directory that is on another one.
-	// The field is daemon-owned like every other one in this block, and it was
-	// added without being put here.
-	hosts := make(map[string]string, len(canonical.Windows))
 	// What draws a window and what it shows are set when it is made and only
 	// the daemon sets them, so canonical wins the way the host does.
 	type viewMark struct{ kind, uri string }
@@ -350,9 +339,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			views[w.ID] = viewMark{w.Kind, w.URI}
 		}
 		workspaces[w.ID] = w.Workspace
-		if w.Host != "" {
-			hosts[w.ID] = w.Host
-		}
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
 		}
@@ -410,9 +396,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.Note = notes[w.ID]
 		if pid, ok := shellPIDs[w.ID]; ok || w.ShellPID == 0 {
 			w.ShellPID = pid
-		}
-		if host, ok := hosts[w.ID]; ok || w.Host == "" {
-			w.Host = host
 		}
 		// The foreground command is canonical's whatever the push says, empty
 		// included: a command that exited has to be able to clear.

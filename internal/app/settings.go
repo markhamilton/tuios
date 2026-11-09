@@ -258,7 +258,6 @@ func (m *OS) persistSettings() tea.Cmd {
 		m.ShowNotification("Could not save settings: "+err.Error(), "error", 0)
 		return nil
 	}
-	apply := m.applyHostsCmd()
 	// The agent switch applies on this client now. The daemon follows the
 	// file this writes. See agents_off.go.
 	agents := m.applyAgentsSwitch()
@@ -270,18 +269,8 @@ func (m *OS) persistSettings() tea.Cmd {
 		}
 		if !note.Empty() {
 			// The change is saved, in config.toml rather than the read-only
-			// file that holds the key. That is said, and a changed host still
-			// applies.
-			said := func() tea.Msg { return settingsSaveRedirectedMsg{note: note} }
-			if apply != nil {
-				return tea.Batch(said, apply)()
-			}
-			return said()
-		}
-		// A host the person changed here applies now. The daemon's own
-		// reload of the file waits for the person on a new host.
-		if apply != nil {
-			return apply()
+			// file that holds the key. That is said.
+			return settingsSaveRedirectedMsg{note: note}
 		}
 		return nil
 	}
@@ -499,11 +488,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// sit: the registry already calls it a sidebar option, it counts paths
 			// for the rail's git section, and Appearance had no room for it.
 			opt("appearance.git_dirty"),
-			// Moved here from Appearance when the pane background row joined it,
-			// which would otherwise have made Appearance scroll at a desktop
-			// height. It decides which sessions the rail offers, so it is a rail
-			// option in all but its key, like git_dirty above.
-			opt("appearance.global_session"),
 		}),
 	}
 	// The agent row's tokens, under the sections they belong to. With the
@@ -793,7 +777,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 	cats := []settingsCategory{
 		appearance, backgrounds, sidebar, selection, dock, behavior,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
-		m.hostsCategory(),
 	}
 	// The Agents tab goes with the agent features. See settings_agents.go.
 	m.agentsPage.tab = -1

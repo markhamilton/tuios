@@ -81,8 +81,6 @@ const (
 
 // quickLookTarget is the row the preview is for.
 type quickLookTarget struct {
-	// host is the machine the file is on, "" for this one.
-	host string
 	path string
 	name string
 	dir  bool
@@ -222,14 +220,6 @@ func (m *OS) quickLookMenu(f fileMenuTarget) tea.Cmd {
 
 // quickLookPlace sets the machine t is on, or why it cannot be read.
 func (m *OS) quickLookPlace(t *quickLookTarget) {
-	switch {
-	case m.filesView.Host != "" && m.AttachedHost != "":
-		t.refuse = "tuios cannot show a file on a host that you reach through another host."
-	case m.filesView.Host != "":
-		t.host = m.filesView.Host
-	case m.AttachedHost != "":
-		t.host = m.AttachedHost
-	}
 	if m.learnFiles() {
 		t.refuse = "Quick look is not in this demo."
 	}
@@ -341,9 +331,9 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 // quickLookFetch reads t off the loop.
 func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 	if t.dir {
-		client, attached, origin := m.DaemonClient, m.AttachedHost, m.filesView.Origin
+		client, origin := m.DaemonClient, m.filesView.Origin
 		return func() tea.Msg {
-			l := readListing(client, attached, origin, t.path, true, 0, false)
+			l := readListing(client, origin, t.path, true, 0, false)
 			res := &quickLookResult{target: t, kind: "dir", entries: l.Entries, capped: l.Capped}
 			if l.Err != "" {
 				res.kind, res.note = "error", l.Err
@@ -351,25 +341,14 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 			return quickLookMsg{res: res}
 		}
 	}
-	var call func(host, verb string, params map[string]any) (json.RawMessage, error)
-	if t.host != "" {
-		call = m.verbOnHostCaller()
-	}
 	ascii := overlay.UseASCII()
 	return func() tea.Msg {
 		var raw json.RawMessage
-		var err error
-		if t.host == "" {
-			ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
-			out, perr := session.PreviewLocalFile(ctx, t.path, quickLookMaxPx)
-			cancel()
-			if perr == nil {
-				raw, err = json.Marshal(out)
-			} else {
-				err = perr
-			}
-		} else {
-			raw, err = call(t.host, "file-preview", map[string]any{"path": t.path, "max_px": quickLookMaxPx})
+		ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
+		out, err := session.PreviewLocalFile(ctx, t.path, quickLookMaxPx)
+		cancel()
+		if err == nil {
+			raw, err = json.Marshal(out)
 		}
 		return quickLookMsg{res: quickLookDecode(t, raw, err, ascii)}
 	}
@@ -463,8 +442,6 @@ func quickLookErrorText(t quickLookTarget, err error) string {
 		return "The file is not there now."
 	case errors.Is(err, fs.ErrPermission):
 		return "tuios has no permission to read the file."
-	case t.host != "":
-		return "tuios could not reach " + t.host + "."
 	}
 	return "tuios could not read the file."
 }
@@ -687,9 +664,6 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	// The line that says what it is, and where when it is not here.
 	meta := quickLookMeta(r)
 	right := []ckSeg{}
-	if t.host != "" {
-		right = append(right, ckSeg{t: "on " + t.host, fg: pal.FgMute}, ckSeg{t: " "})
-	}
 	rx := c.textR(w, 0, right...)
 	c.text(1, 0, rx-1, ckSeg{t: meta, fg: pal.FgMute})
 

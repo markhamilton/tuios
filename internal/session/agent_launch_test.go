@@ -52,7 +52,7 @@ func TestCallerEnvRefusesWhatItMayNotSet(t *testing.T) {
 			t.Errorf("callerEnv(%v) = %v, want invalid_params", env, verr)
 		}
 	}
-	for _, cs := range []*connState{{viaLink: true}, {paneOnly: true}} {
+	for _, cs := range []*connState{{paneOnly: true}} {
 		if _, _, verr := callerEnv(cs, map[string]string{"PATH": "/usr/bin"}); verr == nil || verr.Code != ErrVerbForbidden {
 			t.Errorf("env from another machine (%+v) = %v, want forbidden", cs, verr)
 		}
@@ -215,11 +215,6 @@ func TestStartAgentStopsAtABlockedAgentAndAtNoEvidence(t *testing.T) {
 	res = out.(map[string]any)
 	if res["ready"] != false || res["outcome"] != string(agentStartTimeout) {
 		t.Errorf("a program with no evidence: %v, want ready false on timeout", res)
-	}
-
-	raw, _ = json.Marshal(map[string]any{"session": "start2", "agent": "claude", "env": map[string]string{"PATH": path}})
-	if _, verr := d.verbStartAgent(&connState{viaLink: true}, raw); verr == nil || verr.Code != ErrVerbForbidden {
-		t.Errorf("start-agent with env over a link: %v, want forbidden", verr)
 	}
 }
 

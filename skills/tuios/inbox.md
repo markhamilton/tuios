@@ -1,7 +1,7 @@
 # The Inbox, questions and approvals
 
-Everything waiting for the person, in every session on this machine and on every
-linked host, is one list the daemon keeps: the Inbox. The person opens it with
+Everything waiting for the person, in every session on this machine, is one
+list the daemon keeps: the Inbox. The person opens it with
 the prefix key then `i`, and jumps to the oldest item with the prefix key then
 `o`. This topic is about what lands there, how to ask the person something, and
 the prompts only the person may answer.
@@ -21,14 +21,12 @@ the prompts only the person may answer.
 - a pane on `errored`
 - a conversation a daemon restart left to resume (kind `resume`)
 - a finished turn nobody has looked at
-- mail waiting for another machine's link (kind `outbox`)
 
 You can read the same list:
 
 ```sh
 tuios list-attention
 tuios list-attention --kind approval --kind question
-tuios list-attention --host build
 tuios list-attention --select 'harness:codex needs:you'
 tuios list-attention --json
 ```
@@ -39,9 +37,6 @@ Approvals
 
 1 waiting. Open the agents view with the prefix key then i, or jump to the oldest with the prefix key then o.
 ```
-
-A row of another machine reads `build:api/claude` and its id is `build:17`.
-While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
 
 ## How to report so the Inbox helps
 
@@ -148,7 +143,7 @@ inbox, and reply with `--reply-to` its id.
 
 ```sh
 tuios peek-prompt -s work -w review
-tuios peek-prompt -w build:api:review --json
+tuios peek-prompt -s work -w review --json
 ```
 
 It prints the prompt as that pane shows it, its numbered options, how long it has

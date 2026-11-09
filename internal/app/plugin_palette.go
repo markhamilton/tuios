@@ -48,7 +48,7 @@ var errPluginsNeedDaemon = errors.New("plugins run in a daemon session on this m
 // qualified, and refuses a plugin that is not enabled.
 func (m *OS) runPluginActionKey(c config.CommandBinding) tea.Cmd {
 	label := c.Label()
-	if !m.IsDaemonSession || m.AttachedHost != "" {
+	if !m.IsDaemonSession {
 		return func() tea.Msg { return CommandRanMsg{Label: label, Err: errPluginsNeedDaemon} }
 	}
 	ctx := map[string]any{"invocation_source": "keybinding"}
@@ -61,7 +61,7 @@ func (m *OS) runPluginActionKey(c config.CommandBinding) tea.Cmd {
 
 // pluginPaletteItems are the rows of the enabled plugins.
 func (m *OS) pluginPaletteItems() []CommandPaletteItem {
-	if m.UserConfig == nil || len(m.UserConfig.Plugins.Enabled) == 0 || !m.IsDaemonSession || m.AttachedHost != "" {
+	if m.UserConfig == nil || len(m.UserConfig.Plugins.Enabled) == 0 || !m.IsDaemonSession {
 		return nil
 	}
 	path, err := config.GetConfigPath()

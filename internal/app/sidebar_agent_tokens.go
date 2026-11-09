@@ -89,8 +89,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		tk.Text = printableTitle(e.Message)
 	case "need":
 		tk.Text = m.sidebarAgentNeedText(e, variant, now)
-	case "host":
-		tk.Text = printableTitle(e.Host)
+
 	case "now":
 		// What a working agent is doing. The daemon clears it at rest, and a
 		// pane blocked on a prompt says what it asks in its need and message,

@@ -127,7 +127,7 @@ func (a *attentionStore) paneOpenItems(sessionName, window string) []AttentionIt
 	defer a.mu.Unlock()
 	var out []AttentionItem
 	for _, it := range a.items {
-		if it.Host == "" && it.Session == sessionName && it.Window == window {
+		if it.Session == sessionName && it.Window == window {
 			out = append(out, *it)
 		}
 	}

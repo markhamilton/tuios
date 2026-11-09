@@ -82,8 +82,8 @@ Name any session of the fan. HOST:SESSION compares a fan on another machine.`,
 }
 
 func runFanCompare(target string, changes, jsonOutput bool) error {
-	host, name := splitHostSession(target)
-	t, err := dialHost(host)
+	name := target
+	t, err := dialTarget("", "")
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func runFanCompare(target string, changes, jsonOutput bool) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Print(renderFanCompare(res, t.on(), time.Now()))
+	fmt.Print(renderFanCompare(res, "", time.Now()))
 	return nil
 }
 
@@ -225,10 +225,7 @@ func newFanDiffCommand() *cobra.Command {
 		Short: "Show what one attempt of a fan-out did differently from another",
 		Long: `Diff two attempts of a fan-out against each other: what the second one's
 files hold that the first one's do not, committed or not, untracked files
-included. Neither worktree is touched.
-
-The diff is made by git on this machine, so both sessions must be here. For a
-fan on another machine, bring the work here with 'tuios worktree pull'.`,
+included. Neither worktree is touched.`,
 		Example: `  tuios fan diff api-fan-retry api-fan-retry-2
   tuios fan diff api-fan-retry api-fan-retry-2 --stat`,
 		Args:              cobra.ExactArgs(2),
@@ -242,15 +239,6 @@ fan on another machine, bring the work here with 'tuios worktree pull'.`,
 }
 
 func runFanDiff(a, b string, stat bool) error {
-	for _, name := range []string{a, b} {
-		if host, s := splitHostSession(name); host != "" {
-			return &diagnosticError{
-				What:  fmt.Sprintf("fan diff reads the worktrees' files, and %s is on %s.", s, host),
-				Cause: "the diff is made by git on this machine.",
-				Fix:   fmt.Sprintf("run 'tuios worktree pull %s' to bring its work here, or 'tuios fan diff' on %s.", name, host),
-			}
-		}
-	}
 	rows, err := listWorktrees("", "", false)
 	if err != nil {
 		return err
@@ -382,8 +370,8 @@ func shellWord(w string) string {
 }
 
 func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutput bool) error {
-	host, name := splitHostSession(target)
-	t, err := dialHost(host)
+	name := target
+	t, err := dialTarget("", "")
 	if err != nil {
 		return err
 	}
@@ -394,7 +382,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 	}
 	// The check finds its tools where this shell does. A host looks them up
 	// on its own, and refuses variables from here.
-	if path := os.Getenv("PATH"); path != "" && t.host == "" {
+	if path := os.Getenv("PATH"); path != "" {
 		params["env"] = map[string]string{"PATH": path}
 	}
 	raw, err := t.client.CallWithTimeout("verify-fan", params, time.Minute)
@@ -417,7 +405,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 			return printVerbResultOn(t, raw, true)
 		}
 		fmt.Printf("Started %q in %d %s of %s%s. See how they end with 'tuios fan compare %s'.\n",
-			command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group, t.on(), target)
+			command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group, "", target)
 		for _, s := range started.Skipped {
 			fmt.Printf("  %s: not started, %s\n", s.Session, s.Reason)
 		}
@@ -427,7 +415,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 		return reportVerbError(errors.New("no check was started"), jsonOutput)
 	}
 	if !jsonOutput {
-		fmt.Printf("Running %q in %d %s of %s%s.\n", command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group, t.on())
+		fmt.Printf("Running %q in %d %s of %s.\n", command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group)
 	}
 	rows, err := waitFanVerify(t, started.Sessions[0], started.Sessions)
 	if err != nil {
@@ -444,9 +432,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 		if len(started.Skipped) > 0 {
 			out["skipped"] = started.Skipped
 		}
-		if t.host != "" {
-			out["host"] = t.host
-		}
+
 		if err := printJSON(out); err != nil {
 			return err
 		}
@@ -556,8 +542,8 @@ refused.`,
 				}
 				byAttempt[s] = append(byAttempt[s], text)
 			}
-			host, name := splitHostSession(args[0])
-			t, err := dialHost(host)
+			name := args[0]
+			t, err := dialTarget("", "")
 			if err != nil {
 				return err
 			}

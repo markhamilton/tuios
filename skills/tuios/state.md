@@ -273,8 +273,8 @@ tuios resume-agent -s work -w build             # type it into that pane's shell
 ```
 
 `resume-agent` types only into a shell at its prompt (`not_ready` otherwise) and
-answers `not_resumable` for a pane with no id, a harness with no `[resume]`
-block, or a pane on another machine. The command comes from the manifest, the
+answers `not_resumable` for a pane with no id, or a harness with no `[resume]`
+block. The command comes from the manifest, the
 stored id, and the flags the agent was started with that the manifest keeps
 (`--model` and `--permission-mode` for Claude Code, for example). A kept flag
 that turns approvals off is named on the Resume row, and `auto` leaves that

@@ -86,8 +86,6 @@ type selectorTerm struct {
 // field left empty matches no term on that key, so a term the source cannot
 // answer excludes the target rather than including it by accident.
 type SelectorTarget struct {
-	// Host is the machine, "local" (or empty) for this one.
-	Host     string
 	Session  string
 	Name     string
 	State    string
@@ -262,11 +260,7 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 	case SelectorGroup:
 		return glob(t.Group)
 	case SelectorHost:
-		host := t.Host
-		if host == "" {
-			host = localAttentionHost
-		}
-		return glob(host)
+		return glob(localAttentionHost)
 	case SelectorName:
 		return glob(t.Name)
 	case SelectorTask:

@@ -65,7 +65,7 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 	switch {
 	case cs == nil:
 		return nil
-	case cs.viaLink || cs.paneOnly:
+	case cs.paneOnly:
 		return refuse("a plugin token is good only on the machine that runs the plugin")
 	case !d.manager.VerifyPluginToken(id, token):
 		return refuse("plugin_token does not prove plugin_id")
@@ -95,7 +95,7 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 // protocol are held too. Where the environment cannot be read (Windows, the
 // BSDs), the CLI presents the token with pane-grants instead.
 func (d *Daemon) bindPeerPluginToken(cs *connState) {
-	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
+	if cs == nil || cs.paneOnly || cs.peerPID <= 0 {
 		return
 	}
 	if !cs.peerEnvOK {

@@ -18,7 +18,7 @@ type clearScrollbackDoneMsg struct{ err error }
 // clearScrollbackRequest is what the daemon clear needs, copied off the model
 // so it can run off the update goroutine.
 type clearScrollbackRequest struct {
-	Session, Window, Host, Build string
+	Session, Window string
 }
 
 // ClearScrollback clears the focused pane's scrollback and the rows above its
@@ -46,8 +46,6 @@ func (m *OS) ClearScrollback() tea.Cmd {
 		req := clearScrollbackRequest{
 			Session: m.SessionName,
 			Window:  w.ID,
-			Host:    m.AttachedHost,
-			Build:   m.DaemonClient.ClientVersion(),
 		}
 		return func() tea.Msg {
 			return clearScrollbackDoneMsg{err: clearScrollbackInDaemon(req)}
@@ -72,7 +70,7 @@ func (m *OS) ClearScrollback() tea.Cmd {
 
 // clearScrollbackInDaemon asks the session's daemon to clear the pane.
 func clearScrollbackInDaemon(req clearScrollbackRequest) error {
-	c, err := dialSessionDaemon(req.Host, req.Build)
+	c, err := session.DialVerbClient()
 	if err != nil {
 		return err
 	}
@@ -99,9 +97,6 @@ func (m *OS) applyClearScrollbackDone(msg clearScrollbackDoneMsg) {
 func clearScrollbackNote(err error) string {
 	if session.IsFullScreenError(err) {
 		return "A full-screen program uses the pane. Quit the program, then clear the scrollback."
-	}
-	if refusal := linkRefusal("", err); refusal != "" {
-		return refusal
 	}
 	return "tuios cannot clear the scrollback: " + err.Error()
 }

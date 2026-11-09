@@ -71,7 +71,7 @@ const gotoRecentMax = 16
 
 // gotoPlace is where the client was: a pane of a session.
 type gotoPlace struct {
-	host, session, window string
+	session, window string
 }
 
 // gotoRow is one place the picker lists.
@@ -79,7 +79,6 @@ type gotoRow struct {
 	kind gotoKind
 	// node is the session row's tree node, which OpenSessionNode takes.
 	node         sessiontree.Node
-	host         string
 	session      string
 	sessionLabel string
 	space        string
@@ -187,13 +186,13 @@ func (m *OS) GotoPickerActivate() {
 func (m *OS) gotoRow(r gotoRow) {
 	switch r.kind {
 	case gotoAgent:
-		m.inboxJump(session.AttentionItem{Session: r.session, Window: r.window, Host: r.host})
+		m.inboxJump(session.AttentionItem{Session: r.session, Window: r.window})
 	case gotoSession:
 		if !r.current {
 			m.OpenSessionNode(r.node)
 		}
 	case gotoWorkspace:
-		if r.session != m.sidebarCurrentSessionID() && !m.openSession("", r.session) {
+		if r.session != m.sidebarCurrentSessionID() && !m.openSession(r.session) {
 			return
 		}
 		if r.ws != m.dockWorkspace() {
@@ -214,7 +213,7 @@ func (m *OS) noteGotoPlace() {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) || m.Windows[m.FocusedWindow] == nil {
 		return
 	}
-	here := gotoPlace{host: m.AttachedHost, session: m.sidebarCurrentSessionID(), window: m.Windows[m.FocusedWindow].ID}
+	here := gotoPlace{session: m.sidebarCurrentSessionID(), window: m.Windows[m.FocusedWindow].ID}
 	g := &m.gotoPicker
 	if here == g.here {
 		return
@@ -240,11 +239,11 @@ func (m *OS) gotoRows() []gotoRow {
 	nodeOf := map[string]sessiontree.Node{}
 	for _, s := range tree {
 		if s.Kind == sessiontree.KindSession {
-			nodeOf[s.Host+"\x00"+s.ID] = s
+			nodeOf[s.ID] = s
 		}
 	}
 	for _, e := range m.agentEntries(tree) {
-		s := nodeOf[e.Host+"\x00"+e.SessionID]
+		s := nodeOf[e.SessionID]
 		r := gotoSessionRow(s)
 		r.kind = gotoAgent
 		r.window, r.title = e.WindowID, e.Title
@@ -257,23 +256,17 @@ func (m *OS) gotoRows() []gotoRow {
 			}
 		}
 		agents = append(agents, r)
-		agentPane[e.Host+"\x00"+e.SessionID+"\x00"+e.WindowID] = true
+		agentPane[e.SessionID+"\x00"+e.WindowID] = true
 	}
 	for _, s := range tree {
 		if s.Kind != sessiontree.KindSession {
 			continue
 		}
 		sessions = append(sessions, gotoSessionRow(s))
-		// Workspaces and panes are listed for the attached machine's sessions,
-		// which a switch over this connection reaches. A session on another
-		// machine is gone to by its own row.
-		if s.Host != "" || s.Global {
-			continue
-		}
 		count := map[int]int{}
 		for _, w := range s.Children {
 			count[w.Workspace]++
-			if agentPane["\x00"+s.ID+"\x00"+w.ID] {
+			if agentPane[s.ID+"\x00"+w.ID] {
 				continue
 			}
 			r := gotoSessionRow(s)
@@ -298,11 +291,8 @@ func (m *OS) gotoRows() []gotoRow {
 // starts from.
 func gotoSessionRow(s sessiontree.Node) gotoRow {
 	r := gotoRow{
-		kind: gotoSession, node: s, host: s.Host, session: s.ID,
+		kind: gotoSession, node: s, session: s.ID,
 		sessionLabel: s.Title, space: s.Space, panes: s.WindowCount, current: s.IsCurrent,
-	}
-	if s.Host != "" {
-		r.session = remoteSessionName(s)
 	}
 	if s.Worktree != nil {
 		r.group = s.Worktree.Group
@@ -451,7 +441,7 @@ func (q gotoQuery) match(r gotoRow) bool {
 		}
 	}
 	if q.sel != nil {
-		target := session.SelectorTarget{Host: r.host, Session: r.session, Group: r.group}
+		target := session.SelectorTarget{Session: r.session, Group: r.group}
 		switch r.kind {
 		case gotoAgent:
 			target.Name, target.State, target.Harness, target.NeedsYou = r.title, r.state, r.harness, r.needsYou()
@@ -489,7 +479,7 @@ func gotoSearchText(r gotoRow) string {
 	case gotoAgent:
 		return r.title + " " + r.harness + " " + r.sessionLabel + " " + r.wsLabel + " " + r.message
 	case gotoSession:
-		return r.sessionLabel + " " + r.session + " " + r.space + " " + r.host
+		return r.sessionLabel + " " + r.session + " " + r.space
 	case gotoWorkspace:
 		return r.sessionLabel + " " + r.wsLabel
 	}
@@ -589,7 +579,7 @@ func (m *OS) gotoRecentAt(r gotoRow) int {
 		if p == g.here {
 			continue
 		}
-		if p.session == r.session && p.window == r.window && p.host == r.host {
+		if p.session == r.session && p.window == r.window {
 			return at
 		}
 		at++

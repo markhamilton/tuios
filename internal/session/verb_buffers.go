@@ -116,10 +116,6 @@ func (c bufferCaller) lookup(name string) pastebuf.Filter {
 // the other machine reaches this machine's buffers only through its own
 // client here.
 func (d *Daemon) bufferAccess(cs *connState) bufferCaller {
-	if cs != nil && cs.viaLink {
-		id := "link:" + d.linkPolicy(cs).Peer
-		return paneBuffers(id)
-	}
 	pa := d.paneAuthority(cs)
 	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return bufferCaller{}

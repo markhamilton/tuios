@@ -280,7 +280,7 @@ func (m *OS) inboxCanMark(what string) bool {
 	if m.Inbox.call != nil {
 		return true
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		m.ShowNotification(what+" needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return false
 	}
@@ -664,7 +664,7 @@ func (m *OS) railPane(sessionID, windowID string) (state string, seq uint64, lab
 			}
 		}
 	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if m.DaemonClient == nil {
 		return "", 0, "", false
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
@@ -715,7 +715,7 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 	// count, which this client's copy of another session can trail.
 	// A daemon without mark-attention has no unread to set; the marks this
 	// client cleared are the whole of it there.
-	if !m.IsDaemonSession || !m.inboxMarkSupported() || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
+	if !m.IsDaemonSession || !m.inboxMarkSupported() || (m.Inbox.call == nil && (m.DaemonClient == nil)) {
 		m.ShowNotification("Marked "+who+" unread", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
@@ -732,7 +732,7 @@ func (m *OS) SidebarAgentSnooze(sessionID, windowID string) (tea.Cmd, bool) {
 	var found *session.AttentionItem
 	for i := range m.Inbox.Items {
 		it := &m.Inbox.Items[i]
-		if it.Host != "" || it.Window != windowID || (sessionID != "" && it.Session != sessionID) {
+		if it.Window != windowID || (sessionID != "" && it.Session != sessionID) {
 			continue
 		}
 		if found == nil || session.AttentionKindRank(it.Kind) < session.AttentionKindRank(found.Kind) {

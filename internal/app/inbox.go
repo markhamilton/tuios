@@ -17,7 +17,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -538,7 +537,7 @@ func (m *OS) foreignAgentRefreshCmd(events []InboxEvent) tea.Cmd {
 	}
 	attached := m.DaemonClient.SessionName()
 	for _, ev := range events {
-		if ev.Item != nil && ev.Item.Host == "" && ev.Item.Session != attached {
+		if ev.Item != nil && ev.Item.Session != attached {
 			client := m.DaemonClient
 			return func() tea.Msg {
 				client.TryRefreshSessionList()
@@ -580,7 +579,7 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	st := &m.Inbox
 	var fresh []session.AttentionItem
 	for _, it := range items {
-		if it.Kind != session.AttentionResume || it.Host != "" || st.announcedResume[it.ID] {
+		if it.Kind != session.AttentionResume || st.announcedResume[it.ID] {
 			continue
 		}
 		if st.announcedResume == nil {
@@ -701,7 +700,7 @@ func (m *OS) inboxChanged() {
 func (m *OS) inboxAttached(it session.AttentionItem) bool {
 	// Learn mode's pretend agents run in the one session the tour has, and
 	// the rail alerts on them as on any pane of it.
-	return it.Host == "" && m.AttachedHost == "" && (m.IsDaemonSession || m.LearnMode) && it.Session == m.sidebarCurrentSessionID()
+	return (m.IsDaemonSession || m.LearnMode) && it.Session == m.sidebarCurrentSessionID()
 }
 
 // inboxSeenUnderEyes dismisses a finished item for the pane this client is
@@ -874,7 +873,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 	if policy.Dock {
 		m.showAgentNotification(text, sev, inboxAlertMarkState(items, sev), m.Settings.NotificationDuration,
-			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window})
+			NotifTarget{SessionID: first.Session, WindowID: first.Window})
 	}
 	var seq []byte
 	if policy.Notify && !m.BrowserClient {
@@ -959,9 +958,7 @@ func (m *OS) inboxWhere(it session.AttentionItem) string {
 	if it.Kind == session.AttentionOutbox {
 		return "for " + printableTitle(it.ForHost)
 	}
-	if it.Host != "" {
-		return printableTitle(it.Host) + ":" + printableTitle(it.Session)
-	}
+
 	return printableTitle(m.sessionTitle(it.Session))
 }
 
@@ -1002,7 +999,7 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 	var c sidebarAgentCountInfo
 	rank := 0
 	for _, it := range m.Inbox.Items {
-		if it.Stale || (sessionName != "" && (it.Host != "" || it.Session != sessionName)) {
+		if it.Stale || (sessionName != "" && (it.Session != sessionName)) {
 			continue
 		}
 		switch it.Kind {
@@ -1021,33 +1018,16 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 
 // sidebarHeaderCounts is the agents header's readout. With a live Inbox it
 // counts the Inbox, which sees every session on this machine whether or not the
-// rail lists it and every linked host the daemon streams, plus any agent rows
-// of other machines the rail holds. Without one it counts the rows, as it
-// always has.
+// rail lists it. Without one it counts the rows, as it always has.
 func (m *OS) sidebarHeaderCounts(agents []sidebarAgentEntry) sidebarAgentCountInfo {
-	if !m.Inbox.Live || m.AttachedHost != "" {
+	if !m.Inbox.Live {
 		return sidebarAgentCounts(agents)
 	}
 	here := ""
 	if m.sidebarAgentsFilter() == sidebarAgentsSession {
 		here = m.sidebarCurrentSessionID()
 	}
-	c := m.inboxCounts(here)
-	var remote []sidebarAgentEntry
-	for _, e := range agents {
-		if e.Host != "" {
-			remote = append(remote, e)
-		}
-	}
-	if len(remote) > 0 {
-		r := sidebarAgentCounts(remote)
-		c.Blocked += r.Blocked
-		c.Done += r.Done
-		if sessiontree.AgentRank(r.Worst, false) > sessiontree.AgentRank(c.Worst, false) {
-			c.Worst = r.Worst
-		}
-	}
-	return c
+	return m.inboxCounts(here)
 }
 
 // inboxRow is one line of the overlay: a group heading, or an item.
@@ -1411,7 +1391,7 @@ type InboxAskAnsweredMsg struct {
 // inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string) tea.Cmd {
-	if m.DaemonClient == nil || m.AttachedHost != "" || it.Host != "" {
+	if m.DaemonClient == nil {
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1583,7 +1563,7 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 // a risky call carries the rules the person saw, and an allow of a plan the
 // digest of the plan they read (inboxReplyExtras).
 func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
-	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
+	if m.DaemonClient == nil && m.Inbox.call == nil {
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1674,40 +1654,8 @@ func inboxDecisionWords(decision string) string {
 	return decision
 }
 
-// inboxItemMachine is the machine an item is on, as attachedMachine names it.
-func inboxItemMachine(it session.AttentionItem) string {
-	if it.Host == "" {
-		return federation.LocalHostName
-	}
-	return it.Host
-}
-
-// inboxReach attaches the machine and the session an item is on, when the
-// client is on another machine, and reports whether the client is now on the
-// item's machine. A machine that cannot be reached says so, with when it was
-// last heard from, and nothing is given up.
-func (m *OS) inboxReach(it session.AttentionItem) bool {
-	target := inboxItemMachine(it)
-	if target == m.attachedMachine() {
-		return true
-	}
-	if it.Stale || !m.hostIsUp(target) {
-		m.ShowNotification(printableTitle(target)+" cannot be reached ("+inboxSeen(it.SeenAt, time.Now())+")", "warning", m.Settings.NotificationWarningDuration)
-		return false
-	}
-	if err := m.SwitchToHostSession(target, it.Session, false); err != nil {
-		m.ShowNotification(hostAttachRefusal(target, err), "error", m.Settings.NotificationDuration*3)
-		return false
-	}
-	return true
-}
-
-// inboxJump lands on an item's pane, attaching its machine first when it is on
-// another one.
+// inboxJump lands on an item's pane.
 func (m *OS) inboxJump(it session.AttentionItem) {
-	if !m.inboxReach(it) {
-		return
-	}
 	if it.Window == "" {
 		m.ShowNotification("That item has no pane to go to", "info", m.Settings.NotificationDuration)
 		return
@@ -1760,15 +1708,6 @@ func (m *OS) InboxReply() tea.Cmd {
 // line when reply is set. A thread in another session waits for that
 // session's mail to load.
 func (m *OS) inboxOpenMail(it session.AttentionItem, reply bool) tea.Cmd {
-	if inboxItemMachine(it) != m.attachedMachine() {
-		// Attaching the machine lands on the session and loads its mail, so
-		// the thread opens once that has arrived.
-		if !m.inboxReach(it) {
-			return nil
-		}
-		m.Inbox.pendingThread, m.Inbox.pendingReply = it.Thread, reply
-		return nil
-	}
 	if it.Session != m.sidebarCurrentSessionID() {
 		if err := m.SwitchToSession(it.Session); err != nil {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
@@ -1835,7 +1774,7 @@ func (m *OS) InboxDismiss() tea.Cmd {
 // marks a dismiss the client sends on its own, which shows nothing when it
 // cannot be sent or fails.
 func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
-	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
+	if m.DaemonClient == nil && m.Inbox.call == nil {
 		if !silent {
 			m.ShowNotification("Dismissing needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
 		}
@@ -1872,7 +1811,7 @@ func (m *OS) InboxRelease() tea.Cmd {
 	if m.refuseRemoteAnswer("A release") {
 		return nil
 	}
-	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+	if m.DaemonClient == nil {
 		m.ShowNotification("That mail is held on another machine; attach there to pass it on", "info", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1925,7 +1864,7 @@ func (m *OS) InboxResume() tea.Cmd {
 	if m.Inbox.agents.resuming[it.ID] {
 		return nil
 	}
-	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+	if m.DaemonClient == nil {
 		m.ShowNotification("That pane is on another machine. Attach there to resume it", "info", m.Settings.NotificationDuration)
 		return nil
 	}

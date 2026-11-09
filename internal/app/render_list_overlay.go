@@ -305,12 +305,6 @@ func (m *OS) LayoutPickerMove(delta int) {
 	m.moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, listOverlayRows, delta)
 }
 
-// HostPickerMove moves the machine picker's selection by delta.
-func (m *OS) HostPickerMove(delta int) {
-	n := len(FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery))
-	m.moveListSelection(&m.HostPickerSelected, &m.HostPickerScroll, n, listOverlayRows, delta)
-}
-
 // AggregateViewMove moves the window picker's selection by delta. The renderer
 // keeps it in view.
 func (m *OS) AggregateViewMove(delta int) {

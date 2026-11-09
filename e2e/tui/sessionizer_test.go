@@ -184,47 +184,6 @@ func TestSwitchSessionMovesTheClient(t *testing.T) {
 	alive(t, term, "after switching sessions from the command line")
 }
 
-// TestSwitchSessionReachesAHost: switch-session HOST:NAME moves the client
-// to a session on a machine from the [hosts] table, and --create --cwd make
-// it there first, with a first window in that directory. The machine is the
-// ssh stand-in the host tests use.
-//
-// On origin/main there is no switch-session command.
-func TestSwitchSessionReachesAHost(t *testing.T) {
-	base := t.TempDir()
-	remote := remoteMachine(t)
-	ssh := writeFakeSSHTo(t, base, remote)
-	writeOneHostConfig(t, base, tuiosBin)
-	env := []string{"TUIOS_SSH=" + ssh}
-
-	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
-		t.Fatalf("create the far session: %v\n%s", err, out)
-	}
-	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
-	waitBoot(t, term)
-	// The rail lists build's sessions once the link is up.
-	toggleSidebarViaPalette(t, term)
-	railShows(t, term, "far-shell")
-	waitRailCurrent(t, term, "home")
-
-	farDir := projectDir(t, remote, "far-proj")
-	out, err := tuiosCLIEnv(t, base, env, "switch-session", "--create", "--cwd", farDir, "build:far-new")
-	if err != nil {
-		t.Fatalf("switch-session build:far-new: %v\n%s", err, out)
-	}
-	waitRailCurrent(t, term, "far-new")
-	noSwitchFailure(t, term, "going to build,")
-	if ls, _ := tuiosCLI(t, remote, "ls"); !strings.Contains(ls, "far-new") {
-		t.Fatalf("ASSERTION: build has no session far-new\n%s", ls)
-	}
-	if ls, _ := tuiosCLI(t, base, "ls"); strings.Contains(ls, "far-new") {
-		t.Fatalf("ASSERTION: this machine made far-new, so the switch never left it\n%s", ls)
-	}
-	firstWindowCwd(t, remote, "far-new", farDir)
-	saveFrame(t, term, "switch-session-host")
-	alive(t, term, "after switching to a session on build")
-}
-
 // TestSwitchToAnUnarrangedSessionAppliesStartup: with [startup] tiled on, a
 // session made with tuios new --detach and then switched to in place comes
 // up tiled. Nobody had arranged it, so [startup] applies, as it does on a
@@ -260,57 +219,6 @@ func TestSwitchToAnUnarrangedSessionAppliesStartup(t *testing.T) {
 	}
 	saveFrame(t, term, "switch-session-startup-tiled")
 	alive(t, term, "after switching to an unarranged session")
-}
-
-// TestRemoteCreateAppliesStartup (#480): with [startup] tiled on in this
-// client's config, a session made on another machine is tiled, the same as
-// one made here. It holds for switch-session --create HOST:NAME from a tiled
-// session, and for tuios new --host. The far machine has no config, so the
-// tiling comes from the client's config, as it does for a local session.
-//
-// Negative control: in adoptEmptySessionVersion
-// (internal/app/daemon_wiring.go), cut the line that takes AutoTiling from
-// the empty session's state. The client then keeps the tiling of the
-// session it left, applyStartupTiling sees tiling on and does nothing, and
-// the far daemon makes the window floating.
-func TestRemoteCreateAppliesStartup(t *testing.T) {
-	base := t.TempDir()
-	remote := remoteMachine(t)
-	ssh := writeFakeSSHTo(t, base, remote)
-	writeOneHostConfig(t, base, tuiosBin)
-	appendConfig(t, base, "\n[startup]\nopen_default_window = true\ntiled = true\n")
-	env := []string{"TUIOS_SSH=" + ssh}
-
-	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
-		t.Fatalf("create the far session: %v\n%s", err, out)
-	}
-	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
-	waitWindowCount(t, term, 1, "home's first pane")
-	waitForSettledGeometryIn(t, base, "home", 1)
-	if info := sessionInfoOf(t, base, "home"); info.TilingMode != "tiling" {
-		t.Fatalf("home is %q, want it tiled from [startup]: the fixture does not hold", info.TilingMode)
-	}
-	toggleSidebarViaPalette(t, term)
-	railShows(t, term, "far-shell")
-	waitRailCurrent(t, term, "home")
-
-	// switch-session --create HOST:NAME, from a session that is tiled.
-	out, err := tuiosCLIEnv(t, base, env, "switch-session", "--create", "build:far-new")
-	if err != nil {
-		t.Fatalf("switch-session build:far-new: %v\n%s", err, out)
-	}
-	waitRailCurrent(t, term, "far-new")
-	noSwitchFailure(t, term, "going to build,")
-	farTiled(t, remote, "far-new")
-	saveFrame(t, term, "remote-create-tiled-switch")
-	alive(t, term, "after switch-session made a session on build")
-
-	// tuios new --host, from a new client.
-	fresh := startIn(t, base, startOpts{args: []string{"new", "--host", "build", "far-fresh"}, env: env})
-	waitWindowCount(t, fresh, 1, "far-fresh's first pane")
-	farTiled(t, remote, "far-fresh")
-	saveFrame(t, fresh, "remote-create-tiled-new-host")
-	alive(t, fresh, "after tuios new --host")
 }
 
 // TestSwitchToAnEmptySessionTakesItsLayout (#480): a session with no windows

@@ -79,9 +79,6 @@ unaffected.
 | `did_you_mean` | The closest match to what the caller asked for, when one is close enough to suggest. |
 | `available` | What does exist: session names, addressable windows, verb names, option keys. |
 | `detail` | One sentence of context that does not fit the fields above. |
-| `missing` | On a `forbidden` refusal over a link: the link capabilities the caller lacks, such as `files`. |
-| `table` | With `missing`: the config table on the refusing machine that grants them, such as `[hosts.laptop]`. |
-| `host` | With `missing`, when a daemon passes on a refusal it got from a host: that host's name on the caller's side. |
 
 A hint is advisory. Acting on `command` or `did_you_mean` is always optional, and
 the absence of a hint never changes what `code` means.
@@ -133,17 +130,11 @@ Result:
   "daemon_version": "1.4.0",
   "pid": 4242,
   "sessions": 2,
-  "link_policy": true,
   "pane_grants": true,
   "load": {"cores": 8, "load1": 0.84, "mem_pct": 41.5, "agents_working": 3},
   "os": "linux"
 }}
 ```
-
-`link_policy` says the daemon holds calls from other machines to a link
-policy (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
-`tuios stdio-proxy` reads it before it would reach the daemon on its own socket
-for a link, and refuses when it is set. It is absent from an older daemon.
 
 `pane_grants` says the daemon holds calls from panes to their grants (see
 [pane-grants](#pane-grants)) and takes a pane's token with `pane-grants`. On a
@@ -156,12 +147,10 @@ average), `mem_pct` (memory in use, Linux only), `agents_working` and
 `load_ok`. `load_ok` is false when the daemon could not read the load, as on
 Windows and FreeBSD: `load1` is then 0 and means nothing. It is absent from a
 daemon from before the field, whose `load1` was read. The daemon reads the
-system at most every 5 seconds. A linked daemon reads it off
-the hello its heartbeat sends, so `list-hosts` can report each host's load
-with no call of its own. It is absent from an older daemon.
+system at most every 5 seconds. It is absent from an older daemon.
 
 `os` is the operating system the daemon runs on, as Go names it: `linux`,
-`darwin`, `windows`. A client attached from another machine reads it to start
+`darwin`, `windows`. A client reads it to start
 a command entry with `sh -c` or `cmd /C`. It is absent from an older daemon.
 
 A client may also send `term` and `color_term`, its `TERM` and `COLORTERM`. A session the connection later creates, with `new-session`, `switch-session`'s `create` or `start-agent`, gives its panes that terminal, as a session made by attaching or by `tuios new` gets the client's. A caller with no terminal of its own (a script, CI, an agent) sends them empty or leaves them out, and its sessions get the daemon's fallback, `xterm-256color` and `truecolor`. The `tuios` CLI sends both.
@@ -186,8 +175,6 @@ Changes that alter what an existing verb does, for a caller that relied on the
 old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
-
-**The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
 **queue-prompt takes `client_id`.** A second call from the same sender with the
 same `client_id` for the same pane queues nothing and answers `duplicate: true`. A call without it
@@ -223,8 +210,7 @@ working.
 - `get-agent-state` and every `list-agents` entry gain `settled`. The synced
   window state and the session listing's window rows gain `agent_settled`,
   omitted when false and taken from the daemon's own state on every client
-  push. A row of another machine's agents (`list-hosts` with agents) carries
-  that host's `settled`, display only.
+  push.
 - The daemon clears the settle in the change that makes the agent need the
   person: it goes to `needs_input`, `errored` or `none`, it finishes a turn
   (`completion_seq` goes up), or it sends the person mail.
@@ -260,26 +246,12 @@ for the pane it opens. Both answer with the card's row in `task`, and take
 it and claim after. `claim-task` with `next` skips a card a fan of another
 session works on.
 
-**list-host-sessions rows carry agents.** A remote session row gains
-`agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
-`harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
-The agents view draws them as rows.
-
-**list-hosts reports each host's load.** A host row gains `cores`, `load1`,
-`mem_pct`, `agents_working`, `load_ok`, `load_at` and `rtt_ms`, from the last hello on the
-link: the handshake, then the heartbeat. A link that carries traffic is not
-pinged, so its heartbeat now pings once the load is older than a minute. The
-fields are absent until a hello from the host carried a load.
-
 **send-agent-message takes a message in parts.** `text` is no longer
 required when `parts` is given. `parts` is the form `queue-prompt` takes. A
 message that fits 8 KiB and holds no image has its blocks put in place. Any
 other has each paste and image written to the paste folder, attached, and
 named in the body. A daemon from before this answers `text is required` for a
 message sent in parts alone.
-
-**queue-prompt takes host.** A message for a pane on a linked machine is
-passed there over the link. See [The delivery queue](#the-delivery-queue).
 
 **queue-prompt takes images.** A part may be `{"kind":"image","data":…}`. A
 daemon from before this answers `invalid_params` for the kind. See
@@ -291,19 +263,6 @@ with a long paste can now put a file in the paste folder when it is typed. The
 queues are also bounded in bytes, 32 MiB a pane and 128 MiB in all, and
 `queue_full` covers both bounds. See [The delivery queue](#the-delivery-queue).
 A caller that sends only `text` sees no change.
-
-**A link checks that its host still answers.** A link that carried no frame
-for 15 seconds sends `hello`, with no params, on a stream of its own. A reply
-of any kind, an error included, counts as an answer. Two pings in a row with
-no answer in 5 seconds end the link, and it is dialed again. After this
-machine wakes from sleep, or after `retry-host`, one ping with no answer is
-enough. `retry-host` on a host that is up now sends that ping at once, and on
-a host that is not up it starts the backoff again from 1 second. The next
-dial after a ping ends a link, after a wake from sleep, or after a dial that
-timed out runs ssh with `-o ControlPath=none`, so a master connection that did
-not survive the sleep is not used. The drop reason is
-"The host stopped answering." An older far daemon answers the ping as it
-answers any `hello`.
 
 **list-worktrees reports a merged branch.** With `changes`, each row gains
 `merged`, and `merged_into` when `merged` is true. See
@@ -325,7 +284,7 @@ shows, and tell a client whether it is that client. An older peer ignores all
 of them.
 
 **A client that is not tuios can stream a pane and answer the Inbox.** Three
-additions serve a native phone app on `ssh host tuios stdio-proxy`:
+additions serve a native phone app:
 
 - The new verb [stream-pane](#stream-pane) streams one pane as bytes, with a
   sequence number on every frame, so a client resumes after a dropped network
@@ -345,8 +304,8 @@ presence made for one session acts only in that session. See
 [register-push, list-push and remove-push](#register-push) keep the person's
 phones. When an Inbox item of a kind a phone asked for opens or closes, the
 daemon sends an encrypted push to the phone's push service. The verbs take
-the person's `human_nonce`, from an attach or a presence with no session, and
-over a link the `respond` capability. Each registration opens an Inbox item.
+the person's `human_nonce`, from an attach or a presence with no session.
+Each registration opens an Inbox item.
 
 **A pane records the pane that started it.** When a process in a pane calls
 `new-window`, `split-window`, `start-agent`, `fan` or `new-worktree`, the pane
@@ -354,7 +313,7 @@ it makes records the caller's pane. What changes for a caller:
 
 - `list-windows`, `get-window` and every `list-agents` entry gain
   `started_by`, `{"session", "window"}`. It is omitted when no pane started
-  the window: the call came from outside every pane, or over a link.
+  the window: the call came from outside every pane.
 - The synced window state gains `started_by`, taken from the daemon's own
   state on every client push, and saved with the session. An older peer drops
   it. The gui-bridge `state` window rows gain it too.
@@ -384,24 +343,6 @@ A client now calls `set-buffer` for each yank. The tmux shim's buffer
 commands use these verbs when the daemon has them, so a buffer the shim set
 before is no longer read from its file. The error code `no_buffer` is in the
 catalog.
-
-**A host that waits for a Tailscale sign-in can be dialed again on request.**
-The new verb `retry-host` takes `host` and makes that link dial again now
-instead of after its backoff. While the host is in `tailscale_check`, the link
-then dials again every 5 seconds at most, for two minutes. A dial in progress
-is not stopped, and a call within 2 seconds of the start of the last dial wakes
-nothing. The result has `host`, `status` and, when the link has one,
-`approval_url`. A restricted connection and a linked machine may not call it.
-`approval_url` is only an https address on `login.tailscale.com`,
-`controlplane.tailscale.com` or the host's `tailscale_login`, matched exactly.
-For any other address the banner named, the row has no `approval_url` and has
-`approval_refused: true`. A caller over a link gets neither field, and the
-`reason` of such a host without the address.
-`host-changed`, and the push to attached clients, now also fire when a link in
-`tailscale_check` gets a new `approval_url`, so a client sees the new sign-in
-page at once. The `reason` of such a host is reworded to "Tailscale SSH needs
-you to sign in before tuios can reach this machine." and goes on to name the
-page. The status value is unchanged.
 
 **remove-worktree removes the worktree's checkpoints.** The daemon saves a
 pane's work tree under `refs/tuios/checkpoints/` when its agent finishes a turn
@@ -491,114 +432,7 @@ default of that release, `smallest`, nothing changes. What changes for a caller:
   its type's limit.
 - An attach can carry `ViewOnly`, for a client that sends no input. Under
   `largest` and `latest` such a client does not count toward the size.
-  `tuios-web --read-only` sets it. An older daemon ignores it.
-
-**A call from another machine is held to a link policy.** Every verb and
-every binary message that arrives over a link is checked against what the
-`[hosts]` table on the receiving machine lets the calling machine do, before
-it runs (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
-A refused call does nothing and fails with `forbidden`, and a hint naming the
-capability and the table that grants it. The default lets a link do what it
-could before, with these exceptions:
-
-- `respond`, `reply-approval`, `dismiss-attention` and the new
-  `release-agent-message` need the `respond` capability, which the default
-  does not grant. Over a link they used to be refused only for want of a
-  verified nonce (`not_human`); with the default policy they are now
-  `forbidden` first. `tuios respond -w HOST:SESSION:WINDOW` needs
-  `allow = [..., "respond"]` on that host for this machine.
-- `open-host-connection` over a link, which relays on to the far machine's own
-  hosts, needs every capability, so the default refuses it.
-- A binary message a policy refuses is answered with `MsgError` code 10
-  (`ErrCodeForbidden`), and the connection stays open.
-- Calls on the daemon's own socket are unchanged.
-
-**Mail from another machine can be held for the person.** With
-`hold_mail = true` for the sending machine, `send-agent-message` over a link
-to anyone but `human` stores the message addressed to `human`, with `held`,
-`held_for` and `held_for_label` naming the window it was for. The reply
-carries `held: true` and `held_for`, and `to` is `human`. The agent does not
-see it until the person passes it on with `release-agent-message`. The Inbox
-mail item carries `held_id` and `held_for`. Without `hold_mail` nothing
-changes.
-
-**A pane on another machine can outlive a dropped link.** `open-pane` takes
-`resumable`, and the far daemon then keeps the process for its
-`hosted_grace` for the asking machine after the connection drops, returning
-`resume_token` and `grace` (seconds). `open-pane` with `resume` reattaches it.
-The asking daemon now always sends `resumable`; a far daemon that does not
-know it refuses it with `invalid_params`, and the asking daemon sends the
-request again without it, as it does for `window`. What changes:
-
-- A window on another machine no longer closes when the link drops, for up to
-  the far grace. `list-windows`, `session-info` and the state pushed to clients
-  carry `host_link: "reconnecting"` and `host_link_until` (unix seconds) while
-  it is being reattached. A caller that waited for `window-exit` on a link drop
-  now waits for the grace, or for the process to exit.
-- Keystrokes to such a window while it is reconnecting are refused, not queued.
-- Closing such a window sends `close-pane` to the far daemon, which ends the
-  process at once.
-- On the far machine, a pane opened with `resumable` is still read while no
-  connection is attached, so its process no longer blocks on a full pty while
-  the link is down. A pane opened without it behaves as before.
-
-**Mail for a machine whose link is down can wait for it.** `send-agent-message`
-takes `host`, a machine in the `[hosts]` table: the daemon delivers the message
-to `session` there over its link and returns that machine's answer with `host`
-and `queued: false`. When the link is down it keeps the message instead, on
-disk, and answers `{"type": "agent_message_queued", "queued": true,
-"queue_id": 3, "waiting": 1, ...}`; the messages go in order when the link is
-back. At most 64 wait per machine and 256 in all; past that the send is
-`rate_limited`. A send is also queued when the call fails without an answer
-from the far machine while the link stays up (a timeout, no room for another
-stream), and when earlier mail for that machine still waits or is being
-delivered, so it cannot arrive ahead of it. With the link up the queue is
-tried again at once, then after 1 second, doubling to 30 seconds. An error
-the far machine answers is returned as before and is not queued. What changes
-for existing callers:
-
-- `list-attention` has a seventh kind, `outbox`, one item per machine with
-  mail waiting or refused. A consumer that switched on the six kinds sees a
-  kind it does not know.
-- `dismiss-attention` on an `outbox` item discards the mail still waiting for
-  that machine, and answers `for_host` and `discarded`.
-- `list-hosts` rows carry `queued`.
-- `tuios send-agent-message -s HOST:SESSION` falls back to this when the host
-  is unreachable, instead of failing with `host_unreachable`.
-- A message queued from `human` arrives on the far machine as `claimed_human`:
-  no nonce the far daemon would honour survives the wait. `host` is refused
-  over a link and dropped from a hosted pane's report channel.
-
-**A result from another machine is marked untrusted.** The CLI reaches a
-session on another machine with a host-qualified target (`-s HOST:SESSION`,
-`-w HOST:SESSION:WINDOW`) through `open-host-connection`, and speaks that
-machine's own verbs. The daemon relays the bytes and decodes none of them, so
-the rules below are the CLI's. The verbs on the wire do not change.
-
-- Every `--json` result from another machine carries `host` and
-  `"untrusted": true`. It used to carry `host` only. This covers
-  `list-windows`, `capture-pane`, `wait-for`, `list-agents`,
-  `send-agent-message`, `ask-agent`, `stash get` and every other verb that
-  prints its result with `--json`. A `--json` error another machine answered
-  carries them too.
-- In `tuios ls --all-hosts --json` and `tuios list-agents --all-hosts --json`,
-  each other machine's entry in `hosts` carries `"untrusted": true`. The
-  `local` entry does not.
-- `tuios capture-pane` takes `--json`. Its plain output from another machine
-  is fenced as untrusted content, as mail is, with `│ ` before every line.
-  Control characters, bidi controls and zero-width characters are removed.
-  With `--ansi` or `--resolved`, SGR sequences (`CSI ... m`) are kept and
-  every other escape (OSC, DCS, cursor moves, modes) is removed. A local
-  capture prints as before.
-- `tuios send-agent-message --attach PATH` to another machine first asks that
-  machine for its session's stash root with `stash-list`. A path under that
-  root passes through as written. Every other path must be a regular file on
-  this machine: it is put in the far stash with `stash-put`, the stored path
-  is attached, and one line on stderr says so ("Sent notes.txt to build's
-  stash."). A file over 8 MB is refused before it is sent. The far daemon
-  checks its link policy (`mail`) on `stash-list` and each `stash-put`, so a
-  link without it refuses the message before it is sent. A message queued for
-  a host whose link is down keeps its paths as written.
+  An older daemon ignores it.
 
 **An agent on `needs_input` or `unknown` is not ready to be asked.** The
 states that count as ready are now `idle`, `done`, `errored` and `none`. They
@@ -657,8 +491,7 @@ leaving has already ended, so its answers are unchanged.
 `resume` kind.** A daemon restart used to bring every window back with its
 `agent_session_id` empty, although the state file held it: the restore's state
 push took daemon-owned fields from the empty session it had just made. The id
-now comes back on every restored window that ran on this machine (a window that
-ran on another machine drops it, since the conversation is over there), so
+now comes back on every restored window, so
 `get-agent-state` and `list-agents` return it after a restart. With it, the
 restore offers to resume each conversation whose harness has a `[resume]`
 command and whose pane had an agent running when the state was saved (a saved
@@ -776,16 +609,10 @@ exactly like the person's reply from the mail overlay. Now:
   it with a reply from the mail overlay, and only when it has one, since an
   older daemon refuses the param.
 - A message from `human` is stored with `verified_human: true` when
-  `human_nonce` matches a client attached to the same session now, over the
-  same kind of connection: a nonce issued to an attach on the link socket
-  verifies only a send on the link socket, and a local one only a local send.
+  `human_nonce` matches a client attached to the same session now.
   Otherwise it is stored with `claimed_human: true`. The send result and
   `read-agent-messages` both report the two fields, and the mail overlay and
   `tuios read-agent-messages` show a claimed one as unverified.
-- Over a link, the hub relays the stream without reading it, so no flag in the
-  request can stand for a check the hub made. A client attached through the
-  link got its nonce from this daemon, and its reply verifies against that
-  attach; every other `from: "human"` over the link is claimed.
 
 The nonce alone is not an identity, since an agent can attach too. The next
 entry closes that.
@@ -808,12 +635,11 @@ daemon's `humanNonceFor` (`internal/session/human_sender.go`). The verbs are
 - The nonce of an attach proves the person for an act in any session, because
   the Inbox of one client answers for every session. `send-agent-message` and
   `paste-image` also need the attach to be to the session of the act.
-- An act that is in no single session, such as an Inbox item of another
-  machine, takes the nonce of an attach or of a presence with no session. A
-  phone for Web Push gets the Inbox of every session, so `register-push`,
+- An act that is in no single session takes the nonce of an attach or of a
+  presence with no session. A phone for Web Push gets the Inbox of every session, so `register-push`,
   `list-push` and `remove-push` are such acts.
-- The sender rules apply to both kinds: the caller is outside every pane,
-  comes over the same kind of connection, and is the process that holds the
+- The sender rules apply to both kinds: the caller is outside every pane
+  and is the process that holds the
   nonce when the kernel gives the process ids.
 
 **A process inside a pane cannot act as the person.** The daemon reads the
@@ -843,17 +669,6 @@ act as the person", has the threat model.
 - A state push from an attached client inside a pane no longer marks the
   focused window's finished turn seen, so `finished_unread` stays true until
   the person looks.
-- Over a link, only a stream the hub vouched for can verify. The hub puts
-  `{"human":true}` in the stream's open frame when the process that called
-  `open-host-connection` may act as the person on the hub; the open frame's
-  payload used to be empty, and an empty payload still means not vouched. The
-  proxy on the far machine dials the new link-human socket
-  (`<socket>.link-human`) for a vouched stream and the plain link socket for
-  any other. An attach through the plain link socket gets no nonce, and a
-  `from: "human"` send over it is `claimed_human`. A far daemon from before
-  this change has no link-human socket, so the proxy falls back to the plain
-  one; a hub from before it vouches for nothing, so no attach through it
-  verifies on a far daemon that has the change.
 - Windows and the BSDs do not give this build the peer's pid. There every
   caller is treated as before, and the nonce is the only proof.
 
@@ -956,89 +771,7 @@ an existing caller:
   [respond](#respond): the hook keeps the prompt off the pane, so there is
   nothing to read. The TUI says to answer with `1`, `2` or `3` instead.
 
-**The Inbox and the host listings cover every machine.** A daemon with a
-`[hosts]` table now keeps one stream per linked host over the link: it lists
-the host's Inbox, then subscribes to the host's `attention`, `agent-state`,
-`agent-message`, session and window events from the position the listing was
-current to, resuming with `after_seq` after a redial and listing again after a
-`gap` (see [Following linked hosts](#following-linked-hosts)). What changes for
-an existing caller:
-
-- `list-attention` also lists the items of every linked host, with `host` set
-  and an id of the form `host:id`, and `counts` counts them. It used to list
-  this machine's items only. A caller that wants the old answer passes the new
-  param `host: "local"`. `session` without `host` still names a session on this
-  machine, so a far session of the same name is not in it.
-- Items gain `stale` and `seen_at`: while a host's link is down its items stay,
-  with `stale: true` and when the host was last heard from, and the item is
-  updated (an `attention` event with action `update`) each time the mark
-  changes.
-- A host item never carries `request_id`, `expires` or `always_scope`, and
-  `options` is display only: a held approval is answered on the machine that
-  holds it, so `reply-approval` never sees a host item's id.
-- `dismiss-attention` accepts a host item's id. It hides the item on this
-  daemon only, until the host changes it, and marks nothing on the host; the
-  result carries `host`. A dismiss is the person's fact, and a second hub or a
-  client on the host still sees the item.
-- `attention` events of a host item carry `host`. A subscriber that names a
-  `session`, `window` or `pane` does not get them, because it reads those
-  names as this machine's; one that names none does.
-- `subscribe` takes the new param `hosts`. With it, the `agent-state`,
-  `session-created` and `session-closed` events of linked hosts are delivered
-  too, each with `host` set and only its identifying fields, and `session` and
-  `window` match events of other machines. Without it nothing relayed from a
-  host is delivered, so an existing subscriber sees what it saw.
-- The new event type `host-changed` (in `EventTypeNames` and the accepted set
-  of `types`) says a host's link changed state or what the host holds changed.
-  It carries `host` and `status` and nothing else. `subscribe` with no `types`
-  filter delivers it.
-- `list-hosts` gains `events_push: true` at the top and, per host, `events`
-  (`live`, `polling`, or empty while the link is not up) and `events_note`,
-  which says why a host is polled: its tuios is too old to have an Inbox or to
-  resume its stream, and the note names the update.
-- `list-host-agents` lists every session on each host, where it used to list
-  only the host's most recently active one. Each row gains `session`, and the
-  rows gain `agent_state_at`, `cwd`, `blocked_by`, `completion_seq` and
-  `finished_unread`. The entry's `session` is set only when every row is in the
-  same session. Hosts are asked at once rather than one after another. A host
-  that predates `all_sessions` on `list-agents` is asked session by session.
-- `list-host-sessions` and `list-host-agents` answer for a host that did not
-  answer with the rows it last gave, with `stale: true` and `fetched_at` (unix
-  seconds), beside the `error` it always had. Both gain `events`.
-- `list-agents` takes the new param `all_sessions`, and every row gains
-  `session`.
-- The `MsgHostsChanged` push to attached clients gains `Changed`, the hosts
-  whose link, sessions or agents changed. The daemon now sends it on such a
-  change too, not only when the `[hosts]` table changes. An older client reads
-  it as it always did, as a reason to list the hosts once.
-
-**A pane on another machine reports to the daemon that holds its window.**
-`open-pane` takes the new param `window`, the asking daemon's id for the
-window, and then returns `calls_token`; the asking daemon opens the new verb
-`pane-calls` with it (see [Reports from a pane on another
-machine](#reports-from-a-pane-on-another-machine)). What changes:
-
-- A hosted pane's process gets `TUIOS_PANE_ID`, the owner's window id. It used
-  to get none.
-- On the machine running the process, `set-agent-state`, `set-agent-meta`,
-  `set-agent-session` and `wait-for` (condition `agent-message`) with `window`
-  set to a hosted pane's id or window id, `read-agent-messages` with `to` set
-  to it, and `send-agent-message` with `from` set to it are no longer answered
-  there. They are sent to the owner and its answer is returned. A caller that
-  is not in that pane gets `forbidden`, and when the owner is too old to take
-  the call, `protocol_mismatch`. Such a call used to fail there with
-  `window_not_found` or `session_not_found`. A forwarded
-  `send-agent-message` may attach only paths in the owner session's stash,
-  like a message from the link, and a forwarded `wait-for` is capped at one
-  hour on the owner and ends if the report channel drops.
-- The asking daemon may send `open-pane` twice on one connection. A far
-  daemon from before this refuses `window` with `invalid_params`, and the
-  asking daemon then asks again without it, so a window still opens on that
-  machine, with no reports from the pane.
-- The `session` param of `open-pane` was documented as exported as
-  `TUIOS_SESSION`. It is exported as `TUIOS_SESSION_REMOTE`, as it has been
-  since hosted panes stopped exporting `TUIOS_SESSION`; the description now
-  says so.
+**list-agents takes all_sessions.** With it, every row gains `session`.
 
 **A connection can restrict itself.** The new verb `restrict-connection` (see
 [restrict-connection](#restrict-connection)) narrows what one connection may
@@ -1118,13 +851,12 @@ existing callers:
   before.
 
 **Selectors address many panes.** A new param `select` takes a selector (see
-[Selectors](#selectors)) on `list-agents`, `list-host-agents`,
+[Selectors](#selectors)) on `list-agents`,
 `list-attention`, `wait-for`, `send-agent-message` and `ask-agent`. A call that
 sends none of the new params is answered as before. What changes:
 
 - Every `list-agents` row gains `group`, the fan-out group of the pane's
-  session, empty outside one. `list-host-agents` rows carry it from a host that
-  sends it.
+  session, empty outside one.
 - `list-agents` with `select` and no `session` lists every session, as
   `all_sessions` does, and answers with `select` and, without `all`, `confirm`.
   With `session` it narrows that session and carries no `confirm`, since a
@@ -1138,8 +870,6 @@ sends none of the new params is answered as before. What changes:
   still `invalid_params`.
 - `wait-for` takes `select` and `every` for `agent-state`. With `every` the
   result carries `panes` and `total` instead of one `window`.
-- A pane on another machine that sends its calls through its owner is refused
-  with `forbidden` when a call names `select`.
 
 **fan starts any program, several at once, from the caller's PATH.** `fan`
 takes the new params `agents`, `prompts` and `env`, and the new verb
@@ -1170,13 +900,11 @@ takes the new params `agents`, `prompts` and `env`, and the new verb
   `prompt_ready_by`. Sessions of `fan_started` gain `agent` and `command`, and
   the top-level `command` is an absolute path when the caller sent a `PATH`.
 - The `tuios fan` CLI sends its `PATH` in `env`. Against a daemon from before
-  `env` it retries without it, unless `--env` was passed. `tuios fan --host`
-  sends no `env`, since a call over a link may not carry any, and refuses an
-  explicit `--env`.
+  `env` it retries without it, unless `--env` was passed.
 
 **A repository can be named by its origin URL.** `new-worktree`, `fan` and
 `start-agent` take the new params `repo_url`, `repos_root` and `clone` (see
-[new-worktree](#new-worktree)), so a caller on another machine can name a
+[new-worktree](#new-worktree)), so a caller can name a
 repository without a path. What changes:
 
 - `repo` is no longer required when `repo_url` is passed. Passing both is
@@ -1191,11 +919,6 @@ repository without a path. What changes:
 - `start-agent` also takes `repo` and `args`, creates a named session that
   does not exist, and answers with `session_id`, `created_session`,
   `workspace` and `cwd`.
-
-The new verb `bundle-worktree` changes no old one. A daemon from before it,
-or from before `start-agent`, answers `unknown_verb`, and one from before
-`repo_url` answers `invalid_params` naming it; the CLI turns both into "tuios
-on HOST is too old".
 
 **start-agent can run an agent headless over a protocol.** `start-agent`
 takes the new param `protocol`, `acp` or `codex` (see
@@ -1357,14 +1080,11 @@ caller that sends nothing new is answered as before:
   sorts right after `approval`.
 - Attention items gain `snoozed_until`, `marked_unread`, `risk`,
   `deny_message`, `plan_lines` and `plan_sha`, each omitted when unset, and a
-  close may carry the new reason `snoozed`. An item mirrored from a linked
-  host keeps that host's `risk` and `plan_lines`, display only.
+  close may carry the new reason `snoozed`.
 - `get-agent-state` and every `list-agents` entry gain `queued`, the length of
   the pane's delivery queue, 0 until the queue is built. The synced window
   state gains `agent_queued`, omitted when zero and taken from the daemon's
-  own state on every client push. A row of another machine's agents
-  (`list-hosts` with agents) keeps that host's `queued`, held to 0 through
-  `[agents.queue]`'s ceiling of 64, display only.
+  own state on every client push.
 - A worktree's record gains `verify`, the last `verify-fan` check in it,
   omitted when none has run.
 - The event type `agent-activity` exists and is opt-in: a subscription
@@ -1482,9 +1202,6 @@ has no queue until something is queued. For one that does:
 - `cancel-queued` of a stalled message closes its question, and the messages
   behind it are typed at the pane's next rest, not in the rest the stalled one
   was typed into: its text may still sit in the agent's input box.
-- A linked machine that gave no name drops, with `cancel-queued`, only what it
-  queued on the same connection. `queue-prompt` and `cancel-queued` from a pane
-  on another machine, forwarded through its report channel, are `forbidden`.
 
 **The tuios client replies, and reads the recap.** No verb changed; the
 client now calls three it did not:
@@ -1552,7 +1269,7 @@ caller of the older verbs and for a subscriber:
   took the `snoozed` close as final gets a `close` for an id it no longer
   holds, which changes nothing for it.
 - `dismiss-attention` accepts the id of a snoozed item. A dismiss of
-  anything but an `outbox` item or an `ask` can be undone for 10 seconds with
+  anything but an `ask` can be undone for 10 seconds with
   `mark-attention` `restore`, which reopens it with its id and `since`. A
   held approval or plan comes back without `request_id`, since the dismiss
   ended its hold, and a plan comes back as kind `approval`, without
@@ -1597,16 +1314,12 @@ an existing caller:
   `forbidden` and nothing is queued. Before this, a pane's note sent by the
   person was typed under the header "from the person" with nothing to tell it
   apart.
-- A pane whose process runs on another machine is `not_repo`, and its hint
-  now points at `tuios worktree pull` instead of a `HOST:SESSION` review:
-  reviewing a session on a linked machine is not supported yet, and
-  `tuios review` refuses a `HOST:` target before it dials.
 - A message has a state between unread and read: seen. `read-agent-messages`
   with `to` set to a window and `peek: true` stamps `seen_at` (unix
   nanoseconds) on the unread directed messages it returns, and leaves
   `read_at` at zero, but only when the caller is that inbox's reader: the
   caller runs in the pane `to` names. A peek of a pane's inbox from another
-  pane, from outside every pane, or over a link stamps nothing, because
+  pane or from outside every pane stamps nothing, because
   nobody looked as the recipient. For `to: "human"` the reader is a caller
   that may act as the person (the CLI outside every pane, an attached
   client). A peek that gets `peek_forced`, and a read with no `to`, stamp
@@ -1692,7 +1405,7 @@ catalog.
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `not_ready` | The target agent was mid-turn, so the call declined to type at it. `resume-agent` raises it for a pane whose shell is not at its prompt. |
-| `not_resumable` | `resume-agent` found no conversation it can resume in the pane: none recorded, a harness with no `[resume]` command, an id that is not one plain shell token, or a pane on another machine. Nothing was typed. |
+| `not_resumable` | `resume-agent` found no conversation it can resume in the pane: none recorded, a harness with no `[resume]` command, or an id that is not one plain shell token. Nothing was typed. |
 | `no_shell_integration` | The pane's shell has sent no OSC 133 marks, or marks its prompts and not its commands, so `run` cannot tell where a command starts and ends, and `capture-pane` with `last-command-output` has no finished command to read. Nothing was typed, except by a `run` that found out after typing, which says so. |
 | `not_at_prompt` | `run` typed nothing because a command is running in the pane. The message names it; the hint names the `wait-for command-finished` call that waits for it. |
 | `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
@@ -1705,11 +1418,8 @@ catalog.
 | `confirm_required` | A write by `select`, or a `ship-push` or `ship-pr`, sent nothing: it carried no `confirm` token, or a token for something other than what would be sent now. The hint lists the panes, or what the push would send, in `available`, and carries the token in `confirm`. |
 | `no_transcript` | `agent-transcript` found no transcript for the pane: it is not joined to one, or the file is gone. Nothing was read. |
 | `unsupported_harness` | `agent-transcript` cannot read the transcript of the pane's harness. Supported readers are listed under [agent-transcript](#agent-transcript). |
-| `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
+| `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
-| `unknown_host` | No host by that name is configured. Host names are matched exactly. |
-| `host_unreachable` | The host is configured and is not answering: its link is down, or the far side does not reply. Nothing was queued; only `send-agent-message` with `host` keeps a message for a host that is down, and it answers `queued` instead of this. A write to a window on another machine whose link is being restored also answers it. |
-| `host_refused` | The host's link is up and cannot take another connection. |
 | `unknown_pane` | This daemon is not running a pane with that id. |
 | `internal` | An unexpected server side failure. |
 | `not_worktree` | The session is not in a git worktree, so there is nothing to remove or diff. |
@@ -1731,15 +1441,11 @@ catalog.
 | `no_buffer` | No paste buffer has the name given, or there are no buffers when none was named. Nothing was read, pasted or deleted. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 | `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
-| `no_file` | A file verb was given a path that does not exist on that machine. Nothing was read or changed. |
-| `file_exists` | The destination exists, and the call was not told what to do with it (`conflict`, or `replace` for `file-rename`). Nothing was changed. |
+| `no_file` | A file verb was given a path that does not exist. Nothing was read or changed. |
+| `file_exists` | The destination exists, and the call was not told what to do with it (`replace` for `file-rename`). Nothing was changed. |
 | `no_permission` | The user the daemon runs as may not read or change that path. Nothing was changed. |
-| `hash_mismatch` | A part's bytes did not match the sender's sha256, so the part was removed and nothing was put in place. A transfer copies that file once more by itself. |
-| `source_changed` | A file changed on its machine while it was copied: its size or modification time is not what the copy started from. Nothing was put in place for that file. |
 | `cross_device` | `file-rename` cannot move a path to another disk. Nothing was moved. |
-| `disk_full` | The disk had no room for the write. What was written stays in the part. |
-| `no_transfer` | No transfer has that id. A finished one leaves the list 30 minutes after it ends. |
-| `busy` | The daemon had no room for the request now, or (`transfer-start`) another copy writes that destination now. Nothing was done. |
+| `busy` | The daemon had no room for the request now. Nothing was done. |
 | `invalid_tml` | The TML document does not parse or does not validate. Nothing was opened or changed. The error carries `problems`: each one has `at` (a JSON Pointer to the node), `code`, `message`, and where it helps `did_you_mean`, `accepted` or `available`. |
 | `no_surface` | No open TML surface has that id. It closed, or the id is wrong. `list-windows` names the surface of each TML window. |
 | `too_many_surfaces` | The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. |
@@ -1881,9 +1587,7 @@ pane is `pane_id` checked against `pane_token`, an HMAC of the window id under
 a key the daemon picks at start and never writes down. A `pane_id` that
 disagrees with the kernel's answer is refused with `forbidden`, and so is a
 token that does not match. A caller placed in no pane gets an empty `window`
-and no error; under `own` it then reaches no session at all. Over a link the
-kernel's answer is the local proxy's, and tokens are never good there, so a
-restricted link connection reaches nothing under `own`.
+and no error; under `own` it then reaches no session at all.
 
 A later call may narrow further (turn on `read_only`, or go from `all` to
 `own`) and never widen: lifting `read_only`, going back to `all`, or naming
@@ -1906,7 +1610,7 @@ What a restricted connection may call:
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
@@ -1922,14 +1626,11 @@ Under `own`:
 - A verb that takes `session` and names none gets the caller's own session.
   `subscribe` with no session streams every session in reach, and each event
   is checked as it is written, so a session that joins the reach later is
-  streamed from then on. Events that name no session, and events relayed
-  from linked hosts, are not written.
-- `all_sessions` on `list-agents` and `list-tasks`, `any_session` on
-  `wait-for` and `hosts` on `subscribe` are refused.
+  streamed from then on. Events that name no session are not written.
+- `all_sessions` on `list-agents` and `list-tasks` and `any_session` on
+  `wait-for` are refused.
 - `select` is refused on every verb but `list-agents`, where it reads only the
   caller's own session: a selector reaches every session.
-- A `host` naming another machine, such as `send-agent-message`'s outbox
-  delivery, is refused: no session on another machine is in reach.
 - `set-agent-state`, `set-agent-meta`, `set-agent-session` and
   `report-agent-activity` with no `window` land on the caller's own pane, and
   naming another pane is refused.
@@ -1959,7 +1660,7 @@ person configured) is held to nothing new.
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | What `write` allows, in the sessions of its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane in its reach, and type into a pane on `needs_input` |
-| `files` | The transfer verbs, held to two rules. `transfer-start`: each end on this machine is inside the pane's folder (its session's worktree when tuios made it, else the folder the pane started in; a `cd` or an OSC 7 does not move it, and the home folder, a folder above it or a folder another user owns is never one. The folder is resolved through its links once, when it is recorded), and every file the copy reads or writes here goes through an os.Root at that folder, and each end on a host is under that host's home or is its receive folder (no `path`). The other transfer verbs see and act on only the copies the pane started. A pane without admin starts windows (new-window, new-session, popup, start-agent, a plugin pane) only inside its folder, and types only into panes whose files folder is inside its own |
+| `files` | Kept so a config that names it still parses; it grants no verb of its own. The pane's folder is its session's worktree when tuios made it, else the folder the pane started in (a `cd` or an OSC 7 does not move it). A pane without admin starts windows (new-window, new-session, popup, start-agent, a plugin pane) only inside its folder, and types only into panes whose files folder is inside its own |
 | `task` | The task verbs that change a card (`add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`) in the pane's own session. A pane claims only for itself and changes only the card it holds. See [Task verbs](#task-verbs) |
 | `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, any task card and `remove-task`, and the client protocol (attach, and `run-command`, which sends a client protocol message). Implies `read`, `write`, `fan`, `files` and `task`, never `respond` |
 
@@ -1979,7 +1680,7 @@ know is read as strict, and an unknown grant name is dropped.
 A pane can never hand out more than it holds. From a pane that does not hold
 `admin`, a launch that names no `grants` gives the new pane the caller's own,
 and a `grants` the caller does not hold is `forbidden`. `admin` cannot give
-`respond`. A link or a pane run for another machine cannot give `respond`.
+`respond`.
 
 A pane cannot gain grants by typing either. What is typed into a pane runs
 with that pane's grants, so a pane without `admin` that calls `send-text`,
@@ -2032,17 +1733,6 @@ none of them, such as a process the daemon starts outside every pane shell
 (a hook, git, or what ssh runs); under `open` it holds `admin`, as a pane on
 the default does. A process placed only by its environment is not held.
 
-A connection on a link socket whose process runs inside a pane of this
-daemon, or was started by the daemon, is refused with `forbidden` for every
-verb and message: those sockets are for the link proxy, which sshd starts.
-
-A connection over a link is held to that link's policy instead (see
-[What a linked machine may do here](#what-a-linked-machine-may-do-here)), and
-a report from a pane run for another machine is held on the machine that owns
-the pane. A call such a process makes to this machine's daemon directly holds
-this machine's default and reaches no session here, so under `strict` it may
-call only the verbs every pane may.
-
 Params:
 
 - `pane_id`, `pane_token`: the caller's `$TUIOS_PANE_ID` and
@@ -2093,8 +1783,7 @@ outside every pane `session` defaults to the most recently active one),
 From outside every pane anything may be given. From a pane, the target must be
 its own pane unless it holds `admin`, and what it gives, or the default for
 `reset`, must be something it holds, so a pane can narrow itself and never
-widen itself. Refused over a link and for a window on another machine. The
-change applies to the pane's next call; `TUIOS_PANE_GRANTS` in the running
+widen itself. The change applies to the pane's next call; `TUIOS_PANE_GRANTS` in the running
 process is not rewritten. The grants are saved with the window and hold again
 after a restore.
 
@@ -2170,13 +1859,11 @@ and `attached: true` for each client in the session.
 Switch an attached client to a different session, in place, as the session
 switcher does.
 
-Params: `name` (required), `host`, `create`, `cwd`, `session`, `client`.
+Params: `name` (required), `create`, `cwd`, `session`, `client`.
 
-- `name` is the session to show. `host` is a machine from the client's
-  `[hosts]` table. Omit it, or pass `local`, for this daemon.
-- `create` makes the session when it is missing. On this daemon it is made as
-  `new-session` makes one, with `cwd` as its directory. On a host, the client
-  makes it there and opens its first window. `cwd` needs `create`.
+- `name` is the session to show.
+- `create` makes the session when it is missing, as `new-session` makes one,
+  with `cwd` as its directory. `cwd` needs `create`.
 - The client to switch is the one `client` names, else the one that shows
   `session`, else the one that shows the caller's session when the caller
   runs in a pane, else the only TUI client attached. With more than one
@@ -2194,10 +1881,10 @@ Response:
 {"result": {"type": "session_switched", "session": "api", "client_id": "client-1790941960197517900", "created": true}}
 ```
 
-On this daemon the answer comes when the client shows the session. A missing
+The answer comes when the client shows the session. A missing
 session without `create` fails with `session_not_found`. No client to switch
 fails with `needs_client`. `already: true` says the client showed the session
-already. A pane needs the `admin` grant. Over a link the verb needs `write`.
+already. A pane needs the `admin` grant.
 
 ### detach-client
 
@@ -2231,7 +1918,7 @@ Response:
 ```
 
 An unknown `client` fails with `invalid_params`. A pane needs the `admin`
-grant. Over a link the verb needs `write`.
+grant.
 
 ### ssh-agent-path
 
@@ -2264,17 +1951,7 @@ Response:
 ```
 
 `target` is absent when there is no link. The verb reads one session: a pane
-needs `read` and the session in reach. Over a link it needs `list`.
-
-The hub side: `open-host-connection` takes `ssh_auth_sock`, the caller's
-socket, because the caller's hello goes to the host and not to this daemon.
-While `ssh_agent` is `"follow"`, this daemon keeps one link for each host
-whose link forwards the agent, `agent-link-<host>-<hash>.sock`. It points at the
-socket of the client that opened a connection to that host, or sent input
-through one, last. Input counts at most once a second. The link ssh to such a
-host starts with `SSH_AUTH_SOCK` naming that host's link. The link ssh to any
-other host starts with the daemon's environment, unchanged. A daemon too old to know `ssh_auth_sock` refuses it with
-`invalid_params`, and the client asks again without it.
+needs `read` and the session in reach.
 
 ### display-env
 
@@ -2287,9 +1964,9 @@ Params: `session` (required).
 
 The client sends `display` in its hello: `wayland_display`,
 `xdg_runtime_dir`, `display` and `xauthority`, each as the client has it.
-Only `tuios attach` and `tuios new` send it, and never through a host. A
+Only `tuios attach` and `tuios new` send it. A
 daemon that predates the field ignores it. The daemon follows a client only
-when the client is on its own socket, not over a link, has the daemon's uid
+when the client is on its own socket, has the daemon's uid
 by peer credentials, and may act as the person. A `wayland_display` name is
 looked up in the client's `xdg_runtime_dir`, then the daemon's, then
 `/run/user/<uid>`. The resolved path must be a Unix socket the user owns,
@@ -2315,7 +1992,7 @@ Response:
 
 `target` is absent when there is no link, and `env` is empty when the session
 has no display to give. The verb reads one session: a pane needs `read` and
-the session in reach. Over a link it needs `list`.
+the session in reach.
 
 ### session-info
 
@@ -2404,17 +2081,12 @@ Response:
 A window that runs a program other than its shell has `foreground_cmd`, the
 program's name. It is omitted at a shell prompt.
 
-A window whose process runs on another machine also has `host`. While the link
-to it is lost and the pane is being reattached, it has `host_link:
-"reconnecting"` and `host_link_until`, the unix time the far machine stops
-keeping the process (see [A pane that outlives its link](#a-pane-that-outlives-its-link)).
-
-A window with a pane on this daemon also has `history_rows` and `revision`,
+A window also has `history_rows` and `revision`,
 the numbers [capture-pane](#capture-pane) reports. A reader can compare
 `revision` with the one it last captured and skip the panes that did not
 change.
 
-A window whose process runs on this machine also has `pid`, the process the
+A window also has `pid`, the process the
 pane started, and `tty`, the path of its terminal device. A zoomed window has
 `zoomed: true`. A floating window has `floating: true`. It sits over the tiled
 windows at its own rectangle.
@@ -2462,18 +2134,16 @@ title), `workspace` (workspace number; omit for the current one), `cwd`
 (directory to start in; omit to inherit the daemon's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a
 shell, not parsed by any shell; with a client attached, the window closes when
-it exits), `host` (run the window's process on a machine from the `[hosts]`
-table; omit or pass `local` for this machine), and `close_on_exit` (default
+it exits), `close_on_exit` (default
 false; close the window when its process exits, also with no client attached.
 Without it, a detached session keeps the window until something closes it),
 `keep_open` (default false; keep the window after its process exits, with a
 line that shows the exit status under the last output; not with
 `close_on_exit`), `wait` (default false; answer when the process exits, with
-`exit_code` and, when a signal stopped it, `signal`; not for a window on
-another machine), `timeout` (with `wait`, milliseconds before the
-`timeout` error; 0 waits with no limit), and `env` (an object of variables
-to set in the process; checked as `start-agent` checks its `env`; not for a
-window on another machine, and refused from another machine). `new-session`
+`exit_code` and, when a signal stopped it, `signal`), `timeout` (with `wait`,
+milliseconds before the `timeout` error; 0 waits with no limit), and `env` (an
+object of variables to set in the process; checked as `start-agent` checks its
+`env`). `new-session`
 takes the same `env` for its first window, and refuses it with `window` false.
 
 A daemon that does not know `keep_open` and `wait` refuses them with
@@ -2578,9 +2248,7 @@ The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
 (`tuios://tml/<surface>`) and `surface`. Like a `view` window it has a PTY,
 whose program prints one line for a client that does not draw TML. A popup
 closes on an esc the document does not use. Focus, close-window and the
-layout treat it as any window, but it cannot move to another session. A
-client draws the surfaces of its own machine's daemon only: a client attached
-through a host shows the placeholder line.
+layout treat it as any window, but it cannot move to another session.
 
 The surface's local actions run in the client: tabs, sorting, the cursor,
 folding, scrolling, `set` and `toggle`. A change to the state goes back to the
@@ -2602,7 +2270,7 @@ long to show in the window is not run. The question is drawn whole or not at
 all: when the window is too small for it, it asks for room, and y and n do
 nothing until it fits. The client sends the session by name. A `new-window` from a surface takes only `session`, `name`, `workspace`,
 `cwd`, `focus` and `command`. A refusal shows as a message. A surface opened
-over a link, or by a pane this daemon cannot place, runs no pane action.
+by a pane this daemon cannot place runs no pane action.
 `open` and links do nothing yet.
 
 Who may change a surface: a caller in a pane may patch, replace and close only
@@ -3081,28 +2749,9 @@ the rest need `write`.
 
 ### paste-image
 
-Writes an image to a file on the machine where a window's process runs, and
-returns the path of the file there. The client calls it when the person pastes
-an image. Then the client pastes the path into the window as text. For a
-window whose process runs on a host, the daemon sends the image to that host
-with `paste-pane-image` on a new link connection. The host writes the file.
-
-A window of this daemon with an `ssh` or `mosh` client in its foreground gets
-the file on the machine of that client. The daemon reads the command line from
-the process, never from what the pane prints. It resolves the line and each
-`[hosts]` entry (`ssh_options` and `addr`) with `ssh -G`, through the same
-program the links use. An entry matches only when the host name, the user, the
-port, `proxyjump` and `proxycommand` are the same. A remote command, such as
-`ssh -t host tmux`, is a session over there. With exactly one match, the daemon
-asks the host for a drop folder (`file-drop-dir`), copies the image there with
-a transfer, and answers with the host and the path there.
-
-The paste is refused with `unknown_host`, and the sentence for the person in
-`hint.detail`, when no entry matches, when more than one does, when the line
-cannot be read (`-F`, an `-o` the daemon does not know), or when the shell
-over there reports, with OSC 7, a folder on another `[hosts]` machine (ssh
-inside ssh). Nothing is written then. A tunnel (`-N`, or `-f`, `-n` or `-W`
-without `-t`) reads no keys, and its image is written here.
+Writes an image to a file for a window's process, and returns the path of the
+file. The client calls it when the person pastes an image. Then the client
+pastes the path into the window as text.
 
 Params: `session` (optional), `window` (optional, the focused window when
 empty), `content` (required), `human_nonce` (required).
@@ -3130,15 +2779,8 @@ Request:
 Response:
 
 ```json
-{"id": 1, "result": {"type": "pasted_image", "session": "work", "window": "a1b2", "host": "build", "path": "/run/user/1000/tuios/paste/tuios-paste-20261001-101500-3f2a9c0d1e2b.png", "bytes": 48213}}
+{"id": 1, "result": {"type": "pasted_image", "session": "work", "window": "a1b2", "path": "/run/user/1000/tuios/paste/tuios-paste-20261001-101500-3f2a9c0d1e2b.png", "bytes": 48213}}
 ```
-
-`host` is present only when the file is on another machine. A host that
-cannot take the image is `host_unreachable`. Over a link, `paste-image` needs
-`write` and `files`, and the nonce must come from an attach on the
-`link-human` socket. A host whose policy refuses the image gives `forbidden`.
-The daemon passes that refusal on with the host's hint and sets `hint.host` to
-the host's name here.
 
 ### run
 
@@ -3309,8 +2951,8 @@ The `seq` also moves past some bytes that the daemon does not send: a kitty
 graphics frame that a newer frame of the same image replaced while the client
 was behind.
 
-An `I` frame passes the checks that `send-text` passes: the link policy needs
-`write`, the pane grants of the caller, and a restricted connection. An `L`
+An `I` frame passes the checks that `send-text` passes: the pane grants of
+the caller, and a restricted connection. An `L`
 frame passes the checks that `resize` passes. A refused frame gets an `E`
 frame, and the stream continues. A frame from the client larger than 64 KiB
 ends the stream. Send a longer paste as more than one `I` frame.
@@ -3321,10 +2963,8 @@ frames wait for the pane. The next `I` frame gets an `E` frame with code
 `busy`, and the daemon does not type it.
 
 The daemon checks the caller again each second, as it checks a new
-`stream-pane`. When a pane loses its read grant, or the link policy no longer
-allows `list`, the stream ends with an `X` frame.
-
-Link capability: `list` for the verb. `write` for `I` and `L` frames.
+`stream-pane`. When a pane loses its read grant, the stream ends with an `X`
+frame.
 
 Errors: `invalid_params` when `window` is missing or a lease size is not
 between 1 and 4096. `window_not_found` and `session_not_found` as for every
@@ -3397,14 +3037,10 @@ verb that takes `human_nonce` accept this nonce. A presence made with
 in every session. See [Nonce scope](#nonce-scope). The other rules are the
 same as for the nonce of an attach:
 
-- The caller must be outside every pane of this daemon. Over a link, the
-  stream must come on the link-human socket, so the hub must open it with
-  `{"human":true}`. Otherwise the call fails with `forbidden`.
-- A verb that uses the nonce must come over the same kind of connection: a
-  local socket, a plain link or a link-human stream.
+- The caller must be outside every pane of this daemon. Otherwise the call
+  fails with `forbidden`.
 - When the kernel gives the process ids, the verb must come from the same
-  process. All streams of one `tuios stdio-proxy` come from the same process,
-  so a phone can send the nonce on any stream of that link.
+  process.
 
 The presence is not an attach. It does not change the session size, it does
 not count as a client that shows or focuses a pane, and it gets no
@@ -3412,26 +3048,6 @@ broadcasts. So `request-approval` holds a prompt for the Inbox and does not
 answer `viewed`. The connection continues to take verbs. The presence ends
 when the connection closes, or when the connection calls
 `restrict-connection`. A second call replaces the nonce.
-
-Link capability: `list`. The verbs that use the nonce need their own
-capability, for example `respond` for `reply-approval`.
-
-### list-routes
-
-List the addresses this machine has now. A phone asks after it connects and
-keeps them as more routes to the same machine, so it can reach the machine from
-another network. The phone still checks the ssh host key on every route.
-
-Takes no params. Over a link it needs `list`.
-
-```json
-{"id": 1, "result": {"type": "route_list", "routes": [{"host": "studio.example.ts.net", "kind": "tailnet"}, {"host": "192.168.1.20", "kind": "lan"}]}}
-```
-
-`kind` is `tailnet`, `lan` or `public`. The list has at most three LAN
-addresses and leaves out loopback and the interfaces of containers and VPNs.
-`host` has no port: the ssh port is the one the phone already uses. An older
-daemon answers `unknown_verb`.
 
 ### register-push
 
@@ -3453,8 +3069,7 @@ Params:
   (65 bytes, first byte `0x04`), base64url. Padding is optional.
 - `auth` (required): the phone's authentication secret, 16 bytes, base64url.
 - `device` (required): a name for the phone, 1 to 64 bytes of printable
-  text. A second call with the same name replaces the phone. Over a link,
-  a call with the name of a registered phone fails with `forbidden`.
+  text. A second call with the same name replaces the phone.
 - `kinds` (optional): the Inbox kinds to push. The default is `approval`,
   `plan`, `ask` and `question`.
 - `human_nonce` (required): the nonce of an attach, or of an
@@ -3489,15 +3104,11 @@ Who may call it:
   session covers only that session. With such a nonce, `register-push`,
   `list-push` and `remove-push` fail with `not_human`, and the message says
   the nonce is for another session.
-- Over a link, the link needs the `respond` capability. Without it the call
-  fails with `forbidden`. A link can not replace a registered phone.
 - A restricted connection cannot call it.
 
 Each registration opens an Inbox item of kind `errored`, with no session,
-named `phone NAME`. Its summary says who registered the phone (this machine,
-or the link from a named machine) and whether it replaced a phone of that
-name. A `remove-push` over a link opens the same item. A `remove-push` on
-this machine closes it.
+named `phone NAME`. Its summary says whether it replaced a phone of that
+name. A `remove-push` closes it.
 
 At most 16 phones. A bad endpoint or key fails with `invalid_params`.
 
@@ -3567,7 +3178,6 @@ The plain text is JSON, at most 3 KiB, with no HTML escapes:
 | `id` | The Inbox item's id. A `close` has the id of its `open`. |
 | `kind` | The Inbox kind. |
 | `session`, `window` | The pane the item is about. |
-| `host` | The linked machine the item is on, empty for this one. |
 | `harness`, `name`, `summary` | What the Inbox row shows. |
 | `risk` | The risk rules the call matched, as the Inbox item has them. |
 | `request_id`, `options` | A held prompt's request and its answers, for `reply-approval`. |
@@ -3578,7 +3188,7 @@ An empty field is left out. A payload that does not fit 3 KiB is cut, not
 dropped: first the `summary`, then the `risk`, then each text field. The
 `id`, `request_id` and `options` are never cut, because an answer gives them
 back. A `close` carries only `v`, `type`, `id`, `kind`,
-`session`, `window`, `host` and `machine`.
+`session`, `window` and `machine`.
 
 The daemon sends an `open` when an item opens. It sends the `open` again,
 with the same `id`, when the item gets a held prompt, or loses one: then
@@ -3591,11 +3201,7 @@ gets no answer, `429` or a `5xx` is tried again after 1, 4 and 15 seconds.
 When the push service answers `404` or `410`, the daemon removes the phone,
 logs it, and opens the Inbox item `phone NAME` to say so.
 `[notify] enabled = false` stops the opens. A close still goes, so a phone
-can remove what it shows. `max_per_hour` limits the opens to each phone. An
-item from another machine is not pushed: that machine pushes to its own
-phones.
-
-Link capability: `respond`.
+can remove what it shows. `max_per_hour` limits the opens to each phone.
 
 ### list-push
 
@@ -3613,8 +3219,6 @@ Response:
 to the phone, so no verb shows it. `last_error` says why the last push
 failed.
 
-Link capability: `respond`.
-
 ### remove-push
 
 Remove a phone. Params: `device` (required), `human_nonce` (required). The
@@ -3626,8 +3230,6 @@ Response:
 ```json
 {"id": 1, "result": {"type": "push_removed", "device": "pixel", "removed": true}}
 ```
-
-Link capability: `respond`.
 
 ### capture-pane
 
@@ -3767,8 +3369,7 @@ character offsets in `text`. In each pane the newest match comes first, and
 the pane with the newest output comes first. Each pane gets 50 ms. `truncated`
 is true when `max` or `per_pane` cut the matches, or when a pane took longer.
 
-A restricted connection under scope own may not call it. Over a link it needs
-`list`.
+A restricted connection under scope own may not call it.
 
 ### command-history
 
@@ -3819,15 +3420,13 @@ the address the socket listens on (`0.0.0.0` or `::` for every address).
 `worktree` is the session's worktree folder, empty for a session that is not a
 worktree session. An answer can be up to 1 second old.
 
-Over a link it needs `list`.
-
 ### Which pane started a pane
 
 When a process in a pane calls `new-window`, `split-window`, `start-agent`,
 `fan` or `new-worktree`, each pane the call makes records the caller's pane as
 `started_by`, `{"session": "work", "window": "7e02..."}`. The daemon finds the
 caller's pane the way pane grants do, from the kernel's record of its pid. A
-call from outside every pane, or over a link, records nothing. `list-windows`,
+call from outside every pane records nothing. `list-windows`,
 `get-window` and `list-agents` show it, and it is saved with the session. A
 session rename updates it.
 
@@ -3945,7 +3544,7 @@ Response:
 {"result": {"type": "session_space_set", "session": "work", "space": "payments"}}
 ```
 
-Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
+Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant.
 
 ### set-session-order
 
@@ -3965,7 +3564,7 @@ Response:
 {"result": {"type": "session_order_set", "order": ["work", "notes", "scratch"]}}
 ```
 
-`order` in the result is every session, in the order the daemon lists them now. Only this verb writes a session's rank: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
+`order` in the result is every session, in the order the daemon lists them now. Only this verb writes a session's rank: a client's state sync never moves it. A pane needs the `admin` grant.
 
 ### new-worktree
 
@@ -3981,8 +3580,7 @@ Params: `repo` (a directory inside the repository, required unless
 `repo_url` is passed), `branch` (required), `base`, `name`, `command` (argv
 for the first window instead of a shell), `repo_url`, `repos_root`, `clone`.
 
-`repo_url` names the repository by its origin URL, for a caller on another
-machine where a path means nothing. The daemon finds its own checkout whose
+`repo_url` names the repository by its origin URL. The daemon finds its own checkout whose
 origin is the same repository, after folding the spellings git accepts for one
 remote (`https://github.com/o/r`, `git@github.com:o/r.git` and
 `ssh://git@github.com/o/r` are one repository). It looks under `repos_root`
@@ -4168,9 +3766,7 @@ programs are looked up), and `repo_url`, `repos_root` and `clone` as for
 `env` rules: at most 64 variables, a value at most 32 KiB and all of them at
 most 256 KiB; a name is `[A-Za-z_][A-Za-z0-9_]*`; `TUIOS_` names, `TMUX` and
 `TMUX_PANE` are refused with `invalid_params`, since tuios sets the first for
-every pane and strips the others on purpose; a call from another machine (over
-a link, or from a hosted pane) that passes `env` is refused with `forbidden`,
-because its variables describe that machine. The variables go to the process
+every pane and strips the others on purpose. The variables go to the process
 only: they are not logged, not saved, and a pane a restore brings back starts
 with the daemon's environment. The `TUIOS_` variables and `TERM` are set after
 them, so they cannot be overridden.
@@ -4214,8 +3810,7 @@ harness or program when there is none. The pane starts in `cwd`, or in the
 main checkout of the repository `repo` or `repo_url` names (see
 [new-worktree](#new-worktree) for `repo_url`, `repos_root` and `clone`), or
 else in the focused pane's directory. Passing `cwd` and a repository is
-`invalid_params`. From another machine it is reached like every session verb,
-with a host-qualified session, and names the repository by `repo_url`.
+`invalid_params`.
 
 Params: `session`, `agent` (required, written as for `fan`), `args` (more
 argv after the agent's own words), `name` (the window's name, which
@@ -4223,12 +3818,7 @@ argv after the agent's own words), `name` (the window's name, which
 `repos_root`, `clone`, `workspace`, `focus` (default false), `prompt`,
 `ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`),
 `protocol` (`acp` or `codex`; see below).
-The agent is checked before a clone, so a missing agent does not cost one. A
-call that reaches the daemon
-over a host link is refused with `forbidden` when it carries `env`, since the
-variables describe the caller's machine. `tuios start-agent -s host:session`
-therefore sends no `env` unless `--env` was passed, and the agent is looked up
-on the far machine's `PATH`.
+The agent is checked before a clone, so a missing agent does not cost one.
 
 Response:
 
@@ -4303,8 +3893,7 @@ program's. `list-agents` shows `protocol` for the pane.
 What the agent in a pane changed. The pane is `window` (default the focused
 one) of `session`, and the repository is the session's worktree when the pane
 is in it, else the repository holding the pane's directory; none is
-`not_repo`, and so is a pane whose process runs on another machine. The
-working state, committed or not, untracked files included and ignored files
+`not_repo`. The working state, committed or not, untracked files included and ignored files
 left out, is written as a git tree through a temporary copy of the worktree's
 index, so its index, its files and what the agent staged are not changed.
 An untracked file larger than `[agents.checkpoints] max_untracked_mb` is left
@@ -4373,8 +3962,7 @@ coloured as one text. A truncated file, a binary file and a very large text
 are not coloured.
 
 A pane without `admin` reads its own session and fan group, and the session
-`against` names must be in its reach too. Over a link it needs `write`, since
-it returns file contents.
+`against` names must be in its reach too.
 
 ### review-stage
 
@@ -4420,7 +4008,7 @@ count; omit for the whole hunk), `context` (the context of that diff, default
 ```
 
 It is the person's tool: refused on a restricted connection, `admin` for a
-pane, `write` over a link. A `human_nonce` that is given must be live. The
+pane. A `human_nonce` that is given must be live. The
 review overlay calls it with the keys `a`, `d`, `A`, `D` and `z`.
 
 ### review-note
@@ -4455,18 +4043,17 @@ Params: `action` (required: `add`, `edit`, `remove`, `list`, `clear`),
 ```
 
 A note carries `id`, `path`, `side`, `line`, `quote` or `hunk_header`,
-`text`, `by` (`human`, a pane's window id, `shell`, or `link:HOST`), `at`,
+`text`, `by` (`human`, a pane's window id, or `shell`), `at`,
 `sent_at` once sent, and `outdated` when its line could not be found again.
 Notes are listed by path, then line.
 
-Who may change a note: the person any note, a pane or a linked machine only
-the notes it wrote, a caller outside every pane every note but the person's.
+Who may change a note: the person any note, a pane only the notes it wrote,
+a caller outside every pane every note but the person's.
 Another's note is `forbidden`. A pane needs `write` and reaches its own
-session and fan group; over a link it needs `write`. A note is typed into its
+session and fan group. A note is typed into its
 pane when it is sent, so a pane without `admin` may add or edit notes only on
 itself or a pane that holds nothing it does not, the rule `send-text` follows;
-elsewhere it is `forbidden`. A pane on another machine calling through its
-report channel is `forbidden`.
+elsewhere it is `forbidden`.
 
 ### send-review
 
@@ -4493,7 +4080,7 @@ then one numbered entry per note (`path:line`, `on "quote"` cut to 120
 characters, or the hunk's range and header; `outdated` said when it is), the
 note's text indented under it, and "Address each note, then say which you
 changed." The sender is "the person" only with a live `human_nonce`, "pane
-NAME" from a pane, "a caller on HOST" over a link, and "a script" otherwise.
+NAME" from a pane, and "a script" otherwise.
 A note written by someone other than the sender carries a line under its
 place naming its author, "(written by pane NAME)", with ", not by the
 person" when the person sends it, so no pane's note reads as the person's.
@@ -4501,8 +4088,7 @@ person" when the person sends it, so no pane's note reads as the person's.
 Each note is typed with the authority of whoever wrote it, checked as it is
 now: a note by a pane that no longer holds `write` reach to the session, or
 may not type into the pane (it holds more than the author), or whose pane is
-gone, and a note by a linked machine whose link may no longer write, is
-withheld. It is left out, not marked sent, and listed in `withheld` with
+gone, is withheld. It is left out, not marked sent, and listed in `withheld` with
 `withheld_reason`. When every note picked is withheld the call is `forbidden`
 and nothing is queued. Editing a note makes it the editor's.
 BASE is the base of the pane's last `review-diff`. A message over 16 KiB is
@@ -4512,7 +4098,7 @@ BASE is the base of the pane's last `review-diff`. A message over 16 KiB is
 It types into the pane, so it is held like `queue-prompt`: a pane needs
 `write`, may send only to a pane that holds nothing it does not and is not on
 `needs_input` unless it holds `respond`, and is checked again when the
-message is typed. Over a link it needs `write`.
+message is typed.
 
 ### list-checkpoints
 
@@ -4520,8 +4106,7 @@ The checkpoints of a pane, oldest first. A checkpoint is the pane's git work
 tree saved as a commit under `refs/tuios/checkpoints/<window id>/<n>`: when
 its agent finishes a turn that changed a file, and before each restore. See
 [Turn checkpoints](AGENT_STATE.md#turn-checkpoints) for when one is taken.
-The repository is found as for `review-diff`: none is `not_repo`, and so is a
-pane whose process runs on another machine.
+The repository is found as for `review-diff`: none is `not_repo`.
 
 Params: `session`, `window`.
 
@@ -4544,7 +4129,7 @@ Params: `session`, `window`.
 state's message, at most 120 bytes. The answer is marked `untrusted`: the
 labels are the agent's text. `enabled` and `keep` are
 `[agents.checkpoints]`. A pane without `admin` needs `read` in its own
-session and fan group. Over a link it needs `list`.
+session and fan group.
 
 ### checkpoint-diff
 
@@ -4570,8 +4155,7 @@ the hint's `available`.
 
 `files`, `totals` and `truncated` are as `review-diff` returns them, with the
 same caps. A file the base does not have is `A`: the checkpoint does not say
-whether git tracked it. A pane without `admin` needs `read`. Over a link it
-needs `write`, since it returns file contents.
+whether git tracked it. A pane without `admin` needs `read`.
 
 ### restore-checkpoint
 
@@ -4609,7 +4193,7 @@ fails after the safety checkpoint, the hint says to restore that one).
 
 A restore writes the files the pane's agent works on, so a pane without
 `admin` needs `write`, and may restore only a pane that holds nothing it does
-not, as `review-note` adds notes. Over a link it needs `write`.
+not, as `review-note` adds notes.
 
 ### ship-commit
 
@@ -4666,7 +4250,7 @@ Params: `session`, `window`, `into`, `mode` and `message`. `mode` is
 
 `ship-commit` and `ship-merge` write files a pane's agent works on, so a pane
 without `admin` needs `write`, and may name only a pane that holds nothing it
-does not. Over a link they need `write`.
+does not.
 
 ### ship-push and ship-pr
 
@@ -4688,8 +4272,8 @@ title, body and draft flag. Call again with `confirm` set to it. A token for
 anything else is refused again with the new token.
 
 A caller the daemon cannot count as the person also needs the person's yes:
-a process inside a pane, any connection limited with `restrict-connection`, and
-a link, which is refused outright. The daemon puts the question in the Inbox
+a process inside a pane, and any connection limited with `restrict-connection`.
+The daemon puts the question in the Inbox
 as the caller's pane, with the answers `allow` and `deny`, and waits `wait`
 milliseconds (default 120000, at most an hour). When the wait ends first, the
 call fails with `not_ready` and the hint names the `request_id`. Call again
@@ -4713,8 +4297,7 @@ the push), `not_ready`, `forbidden`.
   "passed": 1, "pending": 1, "branch": "feat/retry", "checked_at": 1791105577561633000}}}
 ```
 
-The pull request is recorded on the session's `worktree` record as `pr`. Over
-a link both verbs need `write`, and are then refused by the handler.
+The pull request is recorded on the session's `worktree` record as `pr`.
 
 ### ship-status
 
@@ -4732,7 +4315,7 @@ gh, nothing runs.
 {"verb": "ship-status", "params": {"session": "api-feat-retry", "refresh": true}}
 ```
 
-A pane without `admin` needs `read`. Over a link it needs `list`.
+A pane without `admin` needs `read`.
 
 ### compare-fan
 
@@ -4793,8 +4376,7 @@ judge reported one: `pick`, `summary`, `reasons`, `by`, `judge` and `at`.
 
 A pane without `admin`, or a connection restricted to its own session, gets
 rows only for the sessions it could name itself: its own session, its fan
-group, and the sessions a fan run from it started. Over a link it needs `list`,
-because it returns counts and states, not file contents.
+group, and the sessions a fan run from it started.
 
 ```json
 {"verb": "compare-fan", "params": {"session": "api-fan-retry"}}
@@ -4841,7 +4423,7 @@ reaches clients with the ordinary state push and which `compare-fan` reports.
   tuios CLI sends its `PATH`.
 
 A pane needs the `fan` grant, and reaches its own fan group; the checks start
-only in the sessions it reaches. Over a link it needs `open` and `write`.
+only in the sessions it reaches.
 
 Params: `session`, `command` (required), `timeout_ms`, `env`.
 
@@ -4871,7 +4453,7 @@ deleted. A check running in a removed sibling is stopped. A session that is
 not part of a fan is `invalid_params`.
 
 Only the person or a caller with `admin` may call it: a pane without `admin`
-and any restricted connection are refused. Over a link it needs `write`.
+and any restricted connection are refused.
 
 Files git ignores (`.env`, build output) are deleted with a worktree and are
 not stashed. `compare-fan` with `detail` lists them. `group`, `repo_root` and
@@ -4918,8 +4500,7 @@ attempt included, is `forbidden`, whatever its grants. The daemon records
 which of the two it was as `by` (`judge` or `you`), and for the judge its
 pane's harness as `judge`. No parameter names the judge. The judge's pane
 needs no grant beyond `read`. Any other pane needs `fan`, and is then refused
-by the rule above. Over a link it is refused: a verdict is recorded on the fan's
-own machine.
+by the rule above.
 
 A pick or a note that names a session outside the fan is `invalid_params`,
 with the attempts in the hint.
@@ -4967,77 +4548,10 @@ what it does to files.
 `agent` is the judge's agent, as `start-agent` takes it; omitted, it is the
 agent the first attempt ran. `env` and `ready_timeout` are `start-agent`'s.
 The call answers as `start-agent` does, with `judge_session` and `group`.
-Over a link it needs `open` and `write`.
 
 ```json
 {"verb": "judge-fan", "params": {"session": "api-fan-retry"}}
 ```
-
-### bundle-worktree
-
-Read a worktree session's work out in chunks, so it can cross a link that caps
-a reply line at 16 MB. `tuios worktree pull` is the caller. The transfer is the
-branch's commits as a git bundle, then the uncommitted work, untracked files
-included, as a binary patch against HEAD. The patch is read through a
-temporary index, so the worktree's own index is not touched.
-
-The first call names `session` and makes the transfer. Without `full`, the
-bundle holds only the commits past the merge base of HEAD and the worktree's
-`base`, and the reader must have `base_commit`. With `full`, or when the base
-is not known, it holds the whole branch. A branch with nothing past the base
-has no bundle (`bundle_bytes: 0`). The reply carries `token`, `repo`,
-`origin_url`, `branch`, `base`, `base_commit`, `head`, `full`,
-`bundle_bytes`, `patch_bytes`, `changes` (paths the patch touches), `size`,
-`sha256` of the whole transfer, and the first chunk.
-
-`branch` and `head` are what the worktree's HEAD is on when the call runs, not
-the branch the session was made on. An agent that made its own branch in the
-worktree has that branch carried. A detached HEAD is refused with
-`not_worktree`, since there is no branch to carry. HEAD is read again once the
-bundle and the patch are written, and if it moved in between, from a commit or
-a branch switch, the call answers `git_failed` and nothing is kept. Try again.
-The bundled branch always ends at `head`, and the patch is made against it.
-
-Every reply carries a chunk: `content` (base64, at most 4 MB before encoding),
-`offset`, `next` and `done`. Later calls pass `token` and `offset` set to the
-previous `next`. `release` with `token` ends a transfer early.
-
-A transfer is readable only by the connection that made it. It ends after its
-last chunk, on `release`, when that connection closes, or after ten minutes
-unread, and its files are removed each time. At most four are open on one
-daemon, and past that the call is `rate_limited`. A transfer is capped at
-512 MB.
-
-Request:
-
-```json
-{"verb": "bundle-worktree", "params": {"session": "api-fan-add-retry-2"}}
-{"verb": "bundle-worktree", "params": {"token": "3f...", "offset": 4194304}}
-```
-
-Response to the first call:
-
-```json
-{"result": {"type": "worktree_bundle", "session": "api-fan-add-retry-2", "token": "3f...", "repo": "api",
- "origin_url": "git@github.com:acme/api.git", "branch": "fan/add-retry-2", "base": "main",
- "base_commit": "9c1e...", "head": "b07a...", "full": false, "bundle_bytes": 2310, "patch_bytes": 812,
- "changes": 2, "size": 3122, "sha256": "...", "content": "...", "offset": 0, "next": 3122, "done": true}}
-```
-
-### What a caller on another machine can do with these
-
-`start-agent`, `fan` and `new-worktree` with `repo_url` or `clone`, and
-`bundle-worktree`, grant a caller on a link or in a pane nothing it could not
-already do with `new-window` and a command: start a program in a directory of
-this machine, or read files there. Over a link they are held to the per-host
-link policy ([What a linked machine may do here](#what-a-linked-machine-may-do-here)):
-`start-agent`, `fan` and `new-worktree` need `open`, and a clone checks `open`
-again at the point it would run. `bundle-worktree` needs `write`, since it
-reads a worktree's files, and `write` already lets a machine type into a shell
-here and read any of them. What they add on their own is bounded: a clone
-fetches only network URLs, the search reads only `.git/config` files under the
-roots named above, and a transfer is only readable by the connection that made
-it.
 
 ### set-option
 
@@ -5165,9 +4679,9 @@ sessions. A harness under anything else that left the pane, such as a tmux
 server or a rootless container's conmon, is taken for the pane that shows
 it. A `harness_pid` that is not
 the caller or one of its ancestors is not believed, and the caller is checked
-in its place. A report without `harness_pid`, from a link, for a pane on
-another machine, or from a harness that cannot be read (it exited, or the
-platform has no process reader) is not checked. The last two refuse a report carrying `agent_session_id`
+in its place. A report without `harness_pid`, or from a harness that cannot
+be read (it exited, or the platform has no process reader), is not checked.
+The last case refuses a report carrying `agent_session_id`
 while the window's own harness is `working` or `needs_input` by its own report
 and the report names a different session, or comes from a different harness:
 a nested run, such as a `claude -p` a tool call started inside the pane. At rest
@@ -5348,8 +4862,7 @@ Rate: a pane may report a burst of 64 events, then 10 a second. A call past
 that is `rate_limited` and records nothing. Each recorded event may push
 state to every attached client, and the cap of 64 bounds memory, not pushes.
 
-Who may call it: as `set-agent-state`, a pane for itself only; over a link it
-needs `write`, and a hosted pane's process sends it to its owner.
+Who may call it: as `set-agent-state`, a pane for itself only.
 
 Wire compatibility: a new verb. An older daemon answers `unknown_verb`, which
 changes nothing: `tuios agent-hook` then reports the `SessionStart`'s state
@@ -5386,8 +4899,7 @@ Failures, each with nothing typed:
 
 - `not_resumable`: no `agent_session_id` on the window; a harness with no
   `[resume]` block; an id that is empty, over 256 bytes, starts with `-`, or
-  holds anything but letters, digits and `_ . / : -`; or a window whose
-  process runs on another machine.
+  holds anything but letters, digits and `_ . / : -`.
 - `not_ready`: the pane's shell does not hold its terminal's foreground, so a
   program is running there. Where the kernel does not report the foreground
   process group (Windows, the BSDs), the daemon falls back to the detector's
@@ -5399,7 +4911,7 @@ every token to characters every supported shell (sh, bash, zsh, fish,
 PowerShell, cmd) reads as one unquoted argument, so a pane that reported a
 hostile id cannot turn it into a second command. It types only into a pane at
 its shell prompt. That is strictly less than `send-text`, which every caller of
-the socket, a pane or a link included, already has, so it is not gated on the
+the socket, a pane included, already has, so it is not gated on the
 person. User manifests (under the user harness directory) can set any
 program as the first token; that directory is the user's own configuration.
 
@@ -5506,8 +5018,7 @@ answers the verb with `unknown_verb`.
 ### list-attention
 
 List the Inbox: everything waiting for the person, in every session on this
-daemon and on every linked host it follows (see [Following linked
-hosts](#following-linked-hosts)). Each item is one of these kinds, and the list
+daemon. Each item is one of these kinds, and the list
 is grouped in this order, oldest first inside each group:
 
 | Kind | Opens when | Closes when |
@@ -5520,7 +5031,6 @@ is grouped in this order, oldest first inside each group:
 | `errored` | A pane goes to `errored`. | The pane leaves `errored`. |
 | `resume` | A restore brings back a pane with a conversation its harness can resume, with `daemon.resume_agents` on `ask`. The summary is the command. | `resume-agent` types it, or the pane goes to `working` or `needs_input` (an agent is running there again). |
 | `finished` | A pane's `completion_seq` goes up as it comes to rest. | An attached client focuses the pane, the agent starts another turn (`working`), blocks, or errors. |
-| `outbox` | `send-agent-message` with `host` is kept here because that machine's link is down, or a kept message was refused there. One item per machine, with `for_host`; `count` is the messages waiting, and the summary says how many and the last refusal. | Everything waiting was delivered and nothing was refused, or `dismiss-attention`, which also discards what waits. |
 
 Every item also closes when its pane closes (mail excepted: the message is
 still unread), when its session ends, and on `dismiss-attention`. A pane has at
@@ -5538,17 +5048,15 @@ way. None of this is an `agent-state` event, since the state did not change,
 and no hook fires for it; only the `attention` event with action `updated` is
 sent.
 
-Params: `session` (optional; unlike most verbs, omitted means every session;
-without `host` it names a session on this machine), `kinds` (optional list,
-from `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`),
+Params: `session` (optional; unlike most verbs, omitted means every session),
+`kinds` (optional list,
+from `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`),
 `include_snoozed` (optional bool: also list the items the person snoozed,
 after the open ones and in the same order among themselves, each with
-`snoozed_until`; they are not in `counts`), `host`
-(optional: `local` for this machine or a linked host's name; omitted means
-every machine; an unknown name is `unknown_host`), `select` (optional, a
+`snoozed_until`; they are not in `counts`), `select` (optional, a
 [selector](#selectors): keeps the items it matches, reading an item's state
 from its kind, `needs_input` for an approval or a question, `errored`, `done`
-for finished; `group` and `cwd` are known for items of this machine only).
+for finished).
 
 Response:
 
@@ -5556,9 +5064,7 @@ Response:
 {"result": {"type": "attention_list", "items": [{"id": "17", "kind": "approval", "session": "fan-3", "window": "3f2a9c1e", "workspace": 1, "harness": "claude-code", "name": "claude", "summary": "approve Bash: go test ./...", "since": 1790142942055373000, "seq": 41}], "counts": {"approval": 1, "question": 0, "mail": 0, "errored": 0, "resume": 0, "finished": 0}, "total": 1, "seq": 1180, "boot_id": "9f2c41d07a3e8b65"}}
 ```
 
-Item fields: `id` (stable, never reused on this machine; an item of a linked
-host is `host:id`, the host's own id after the colon), `kind`, `host` (empty
-for this machine, the host's name for an item of a linked host), `session`,
+Item fields: `id` (stable, never reused), `kind`, `session`,
 `window`, `workspace`, `harness`, `name`, `summary`, `options` (the decisions
 `reply-approval` takes, set only while a hook holds the item), `request_id` and
 `expires` (the held request and when its hold ends, in unix nanoseconds; see
@@ -5571,12 +5077,7 @@ for this machine, the host's name for an item of a linked host), `session`,
 `completion_seq` (finished), `snoozed_until` (a snoozed item listed with
 `include_snoozed`: when it opens again, in unix nanoseconds, or -1 for when
 its fact changes), `marked_unread` (a finished item the person reopened with
-`mark-attention` `unread`), `stale` and `seen_at` (an item of a host whose
-link is down: what the host said last, and when this daemon last heard from
-it, in unix nanoseconds), `held_id` and `held_for` (mail from another machine
-held for the person by `hold_mail`: the message `release-agent-message` takes
-and the window it was for), `for_host` (outbox: the machine the mail waits
-for).
+`mark-attention` `unread`).
 
 `summary` is text an agent wrote. The daemon keeps it to one line, removes
 control characters, masks what looks like a credential (`TOKEN=...`,
@@ -5601,9 +5102,7 @@ under a fresh id, so no two items ever share one. A snoozed `finished` or
 `errored` item is saved with `snoozed_until` and comes back asleep; one whose
 time passed while the daemon was down wakes on start. It drops `resume` items
 too: the restore that runs on start opens them again from each window's
-`agent_session_id`, after the saved items are loaded. `outbox` items are
-opened again from the outbox, which is saved on its own and survives a
-restart whole.
+`agent_session_id`, after the saved items are loaded.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.
@@ -5615,7 +5114,7 @@ string of terms separated by spaces, all of which must match; a term is
 `key:value`, and commas in the value are alternatives. The keys are `harness`
 (the harness id, or a program name a manifest detects), `state`, `needs`
 (only `needs:you`: `needs_input` or `errored`), `session` (glob), `group` (the
-fan-out group, glob), `host` (`local` or a host name, glob), `name` (window
+fan-out group, glob), `name` (window
 name, glob), `cwd` (the directory or under it; a leading `~` is the
 daemon's home), `task` (a task card the pane holds, by id, glob; see
 [Task verbs](#task-verbs)) and `stage` (the stage of a card the pane holds;
@@ -5623,9 +5122,9 @@ a done card has no holder, so `stage:done` matches no pane). Globs are `path.Mat
 pane cannot answer does not match. A selector that does not parse is
 `invalid_params` naming `select`, with the keys in `accepted`.
 
-Reads: `list-agents`, `list-host-agents`, `list-attention` and `wait-for`
+Reads: `list-agents`, `list-attention` and `wait-for`
 (`agent-state`) keep what the selector matches. Writes: `send-agent-message`
-and `ask-agent` send to every agent pane on this machine the selector matches,
+and `ask-agent` send to every agent pane the selector matches,
 in every session, and take no `session`, no `window` or `to`, and for a message
 no `reply_to`. A write reaches at most 32 panes, an ask at most 16; more is
 `invalid_params`, and none is `window_not_found`.
@@ -5664,24 +5163,20 @@ Each pane of a write goes through the checks of a single call: the rate cap
 per pane, the `human` rules, `agent_blocked` for a pane on `needs_input`
 unless `allow_blocked`, the wait for a working pane unless `force`, and the
 loop guard. `from` may name the sender's pane in another session by its exact
-window id. A call that names `select` from a pane on another machine running
-its calls through its owner is refused with `forbidden`, since such a call
-acts only as the window it is drawn in.
+window id.
 
 ### dismiss-attention
 
 Close one Inbox item for the person.
 
 Params: `id` (required), `human_nonce` (required: the nonce from the attach
-reply of a TUI client attached right now, over the same kind of connection as
-this call).
+reply of a TUI client attached right now).
 
 Only the person may clear what is waiting for the person. An agent in a pane
 has no attach and so no nonce, and gets `not_human`. The nonce is checked the
 way a reply from `human` is (see "A process inside a pane cannot act as the
 person" under [Changes to existing verbs](#changes-to-existing-verbs)): a
-caller inside a pane of this daemon, or on a link stream the hub did not vouch
-for, gets `not_human` even with a live nonce, and where the kernel gives both
+caller inside a pane of this daemon gets `not_human` even with a live nonce, and where the kernel gives both
 pids the caller must be the process that holds the attach. A client attached to any
 session may dismiss items in any session, since the Inbox spans them. A second
 dismiss of the same item, or an id that is not open, is `invalid_params`.
@@ -5692,12 +5187,8 @@ leave the list; the pane's agent state is not touched, and a later transition
 opens a new item. A snoozed item can be dismissed by its id too.
 
 For 10 seconds after, the dismiss can be undone with
-[mark-attention](#mark-attention) `restore`, except on an `outbox` item, whose
-dismiss discarded the mail, and an `ask`, whose asker was told.
-
-An item of a linked host is hidden on this daemon and nothing else: nothing on
-the host is marked, and the item comes back when the host changes it. The
-result then carries `host`.
+[mark-attention](#mark-attention) `restore`, except on an `ask`, whose asker
+was told.
 
 Response:
 
@@ -5727,12 +5218,12 @@ and `until_change` (true).
   snooze of an item already asleep changes when it wakes. Only these kinds
   can be snoozed: `finished`, `errored`, `mail`, `resume`, `question`, and an
   `approval` no hook is holding. A held approval, a `plan` and an `ask` wait
-  on an answer, and `outbox` is about a link, so each is `invalid_params`.
+  on an answer, so each is `invalid_params`.
 - `wake` opens a snoozed item now.
 - `unread` reopens a pane's finished turn: the daemon forgets that it was
   seen, so the next client to focus the pane marks it seen again, and a
   `finished` item opens (or an open one is marked) with `marked_unread`. The
-  pane must be on this machine, have finished a turn, and be at rest.
+  pane must have finished a turn and be at rest.
 - `restore` reopens an item this daemon closed for a dismiss or a snooze less
   than 10 seconds ago, with its id and `since`. A restored `finished` item
   forgets the look again, like `unread`; restored `mail` comes back as a row,
@@ -5753,16 +5244,12 @@ and `until_change` (true).
   closed, it also restores that item as `restore` does, and the answer names
   it as `id` when it came back.
 
-An item of a linked host is snoozed on this daemon only, like a dismiss:
-nothing on the host changes, and the item wakes when the host changes it or
-its time comes. `unread` does not reach another machine's panes.
-
 A client finds out whether a daemon has this verb by asking `list-verbs` for
 it once per attach; tuios's own client hides its snooze, undo and unread keys
 from a daemon that does not.
 
 Only the person can: the call is refused to a pane without `admin`
-(`forbidden`), needs `respond` over a link, and carries the nonce, checked as
+(`forbidden`), and carries the nonce, checked as
 for `dismiss-attention` (`not_human`). An agent cannot hide, reorder or
 restore what the person reads.
 
@@ -5823,7 +5310,7 @@ Who may call it: a caller that passes a live attach nonce and may act as the
 person, checked the way `dismiss-attention` checks it; or, when the daemon runs
 with `[daemon] respond_from_shell = true`, a caller the kernel names that runs
 outside every pane of this daemon. A caller inside a pane gets `not_human`
-either way. On a link stream the hub did not vouch for, both routes are closed.
+either way.
 
 Before it writes, under a lock per window, `respond` reads the prompt again and
 refuses with `prompt_changed`, pressing nothing, when the pane is not on
@@ -5914,8 +5401,7 @@ tuios, and `reason` says why:
 | `shutdown` | The daemon is stopping. |
 | `resolved`, `dismissed`, `window_closed`, `session_closed`, `evicted` | The Inbox item closed for that reason: the pane moved on, the person dismissed it, and so on. |
 
-Who may call it: it is refused with `forbidden` over a link, and a caller inside
-a pane of this daemon may only hold its own pane's prompt (the daemon places the
+Who may call it: a caller inside a pane of this daemon may only hold its own pane's prompt (the daemon places the
 caller by its process ancestry, then its controlling terminal, then its
 `TUIOS_PANE_ID`; a caller it cannot place is refused). What the caller gets back
 is the answer to the prompt it asked about, nothing more.
@@ -5947,8 +5433,7 @@ the key arriving. `ask` is never refused this way.
 
 Only a client attached right now can answer, with the nonce its attach reply
 carried, checked exactly as `dismiss-attention` checks it: a caller inside a
-pane, or on a link the hub did not vouch for, gets `not_human` even with a live
-nonce. No mail, `ask-agent`, `send-keys` or `send-text` reaches a hold, so an
+pane gets `not_human` even with a live nonce. No mail, `ask-agent`, `send-keys` or `send-text` reaches a hold, so an
 agent cannot approve its own call or another agent's.
 
 A decision the item's `options` do not offer is `invalid_params`, and so is a
@@ -6067,7 +5552,7 @@ Response:
 `risk` is `[{"rule": "...", "why": "..."}]` for each rule the call matched. The
 text is the agent's, so the result is marked `untrusted`. A request that is not
 held, or held in another session than `session`, is `invalid_params`. Scope:
-`read`; over a link, `list`.
+`read`.
 
 ### ask-human
 
@@ -6115,8 +5600,7 @@ cannot write the reply. If that reply was the person's answer to a question
 from a pane, the answer is mailed to the pane the same way, so an agent whose
 tool killed the call still gets it.
 
-Refused over a link (`forbidden`): a question is put to the person at this
-machine's clients by something on this machine. At most 16 questions from no
+At most 16 questions from no
 pane are open per session (`rate_limited`); a pane has one, and a new one
 supersedes it. Questions do not survive a daemon restart.
 
@@ -6147,533 +5631,26 @@ approval already uses. An older client lists an `ask` item under its own
 heading, or not at all, and cannot answer it; an older daemon answers
 `unknown_verb`.
 
-### Following linked hosts
+### Files
 
-A daemon with a `[hosts]` table follows the agents and the Inbox of every
-linked host. For each host whose link is up it opens one connection over the
-link, calls `list-attention` with `host: "local"` there, and subscribes to
-`attention`, `agent-state`, `agent-message`, `session-created`,
-`session-closed`, `window-created` and `window-closed` from the listing's `seq`
-and `boot_id`. From then on:
-
-- The host's own items are mirrored into this Inbox (see
-  [list-attention](#list-attention)). Items the host mirrors from its own
-  hosts are not passed on: they are that machine's to report.
-- A burst of the host's agent and session events refreshes a cache of the
-  host's `list-sessions` and `list-agents` answers, then publishes
-  `host-changed` and pushes `MsgHostsChanged` to the attached clients.
-- With `subscribe` `hosts: true`, a subscriber also receives the host's
-  `agent-state`, `session-created` and `session-closed` events, with `host`
-  set, `session` and `window` cut to 128 bytes, and nothing else from the
-  host's event.
-
-When the link drops, the host's items are marked `stale` with `seen_at`, and
-`list-host-sessions` and `list-host-agents` answer from the cache with `stale`
-and `fetched_at`. On a redial the stream resumes from the last `seq` it
-delivered; a `gap` from the host, or a host that restarted, lists again.
-
-A host whose tuios has no `list-attention` or no resumable stream is followed
-by polling, as every host was before: `list-hosts` reports `events: "polling"`
-with an `events_note` that names the update, and the tuios client keeps its
-poll for it.
-
-Everything a host sends is data from another machine. Lines are bounded to 1
-MiB, an item's kind must be one this build knows and its id a short token,
-its text is cleaned and cut as a local summary is, a host holds at most 256
-items here, apart from this machine's so it cannot evict one of them, and the
-cache keeps at most 512 sessions and 2048 agent rows per host. Nothing a host
-sends runs a command, types into a pane, fires a hook or marks anything on
-this machine.
-
-### Reports from a pane on another machine
-
-A window's process can run on another machine (`new-window` with `host`). Its
-reports travel back over a connection the owner opened, since the link is
-dialled one way:
-
-1. The owner sends `window`, its window id, with `open-pane`. The far daemon
-   exports it to the process as `TUIOS_PANE_ID` and returns `calls_token`.
-2. The owner calls `pane-calls` with `pane` and `token` on a new connection.
-   After the reply the connection carries requests from the far daemon,
-   `{"id":1,"verb":"set-agent-state","params":{...}}`, one per line, and the
-   owner answers each with `{"id":1,"result":{...}}` or
-   `{"id":1,"error":{...}}`, in any order.
-3. On the far machine, a call of `set-agent-state`, `set-agent-meta`,
-   `set-agent-session` or `report-agent-activity` with `window`,
-   `read-agent-messages` with `to`,
-   `send-agent-message` with `from`, or `wait-for` with condition
-   `agent-message` and `window`, set to the pane's id or window id, is sent to
-   the owner, and the owner's answer is the answer.
-
-How the grant is held to that:
-
-- The far daemon forwards only for a caller that runs in the pane: the pane's
-  process, a descendant of it, or a process on the pane's terminal, by the pid
-  the kernel gave for the connection. Anyone else naming the pane gets
-  `forbidden`. A platform that does not give the pid forwards nothing.
-- Only the verbs above cross; `wait-for` for anything but `agent-message` is
-  `forbidden`.
-- The owner runs each request as the window itself: `session` and the
-  addressing param are overwritten with the window's own, `transcript_path`,
-  `harness_pid`, `human_nonce`, `from_host` and `any_session` are dropped,
-  `send-agent-message` from anyone but the window is `forbidden`, and the call
-  runs as a caller inside a pane, so it cannot act as the person. A far daemon
-  that writes its own requests gets no more than the pane's process would.
-- `send-agent-message` may attach only paths in the session's stash, as on
-  the link: its process and the far daemon are on the other machine, so a
-  path names a file on the owner they cannot see. Any other path is
-  `invalid_params` before it is looked at, so the answer does not say whether
-  the file exists on the owner.
-- `wait-for` runs on the owner with `timeout` capped at one hour, whatever the
-  request said, and ends when the channel it came on ends. The owner does not
-  wait for calls in flight before it opens the next channel.
-- `pane-calls` needs the token, which only the owner saw. At most 16 calls per
-  pane are in flight, and lines are bounded to 1 MiB.
-
-An owner from before this sends no `window`, and the far daemon exports no
-`TUIOS_PANE_ID` and answers a call naming the pane id with
-`protocol_mismatch`. A far daemon from before this refuses `open-pane` with
-`invalid_params`, because it checks every request against its schema and its
-`open-pane` has no `window`. Nothing is spawned by that refusal and the
-connection still takes requests, so the owner sends `open-pane` again on it
-without `window`. The pane opens as before, with no `calls_token`, and the
-owner opens no channel.
-
-### A pane that outlives its link
-
-`open-pane` with `"resumable": true` asks the far daemon to keep the pane
-through a dropped connection. The far daemon decides for how long, from its
-own `hosted_grace` for the asking machine (ten minutes by default, `"0"` for
-none, at most a day), and says so in the reply:
-
-```json
-{"id": 1, "result": {"type": "pane", "pane": "f2c1...", "calls_token": "...", "resume_token": "9e0a...", "grace": 600}}
-```
-
-With no grace given there is no `resume_token`, and the pane ends with its
-connection as it always did. With one, the far daemon reads the process's
-output whether or not a connection is attached, keeps the last 64 KB, and
-counts every byte. When the connection drops it waits `grace` seconds. The
-asking daemon reattaches on a new connection:
-
-```json
-{"id": 1, "verb": "open-pane", "params": {"resume": {"pane": "f2c1...", "token": "9e0a...", "offset": 18234}}}
-```
-
-`offset` is how many bytes of output it has received. The reply is
-`{"type":"pane","pane":...,"resumed":true,"gap":false,"grace":600}`, and after
-it the connection carries what was missed from `offset` on, then the live
-stream, exactly as after an open. `gap` is true when more was missed than the
-ring holds; the whole ring is sent then. A wrong token is `forbidden`, and a
-pane whose process exited or whose grace ran out is `unknown_pane`: both are
-final. A reattach closes a connection still attached to the pane.
-
-### close-pane
-
-```json
-{"id": 1, "verb": "close-pane", "params": {"pane": "f2c1..."}}
-```
-
-Ends a hosted pane at once: its process is killed and its connection closed.
-The asking daemon sends it when a window is closed on purpose. Result: `pane`,
-`closed`. An unknown pane is `unknown_pane`. Over a link it needs `open`.
-
-### paste-pane-image
-
-```json
-{"id": 1, "verb": "paste-pane-image", "params": {"pane": "f2c1...", "token": "...", "content": "iVBORw0KGgo..."}}
-```
-
-Writes an image for a hosted pane, with the rules of `paste-image`, and
-returns `pane`, `path` and `bytes`. `token` is the `calls_token` of the
-`open-pane` reply. Only the daemon that owns the window has it, and that daemon
-sends this call only for a `paste-image` of the person. A wrong or missing
-token is `forbidden`. An unknown pane is `unknown_pane`. Over a link it needs
-`open` and `files`.
-
-### Files and transfers
-
-The file verbs act on the files of the machine whose daemon answers them. A
-client reaches another machine's files by sending the same verbs there, on a
-connection from `open-host-connection`, so that machine's link policy decides
-what may be done (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
+The file verbs act on the files of the machine whose daemon answers them.
 Every path is absolute or starts with `~`, which means the home folder of the
 machine that answers. `list-verbs` carries every parameter and return field;
 this section is the contract around them.
 
 | Verb | What it does |
 | --- | --- |
-| `file-stat` | Describes one path: `exists`, `size`, and `info` (name, path, kind `file`, `dir`, `symlink` or `other`, `link_kind` and `link` for a link, size, `mtime` in Unix ms, `mode` as `ls` prints it, `perm` as a number, `hidden`). With `part`, it describes the part file of a copy to the path instead. |
-| `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). Part files are not listed. |
+| `file-stat` | Describes one path: `exists`, `size`, and `info` (name, path, kind `file`, `dir`, `symlink` or `other`, `link_kind` and `link` for a link, size, `mtime` in Unix ms, `mode` as `ls` prints it, `perm` as a number, `hidden`). |
+| `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). |
 | `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
 | `file-preview` | What Quick Look in the GUI shows of one file, made on the machine the file is on. An image comes back scaled to `max_px` (default 1600, at most 4096) on its long side, a PDF page (`page`) and a film frame as an image when that machine has `pdftoppm` and `ffmpeg`, text as its first 256 KiB, and anything else as its type and size (`kind` `binary`). Without `pdftoppm` a PDF up to 8 MiB is sent as it is. A WebP or a BMP, and a picture whose decode would take more than 256 MB here (a large progressive JPEG), is sent as it is, up to 16 MiB, with its own `mime`, for the client to decode. The file is opened once, with the read rules of `file-read`, and the tools read that open file, not the path. ffmpeg and ffprobe open only the file and only the MP4, QuickTime, Matroska, WebM and AVI containers. A pipe or a device is described, not read. |
-| `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
-| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count, denied}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. Over a link, an entry in the read deny list is left out and not named. `denied` counts those entries, and a denied folder counts once. |
-| `file-mkdir` | Makes a folder and its parents. With `receive`, it ignores `path` and makes the receive folder: where a copy from the caller lands when it names no folder. For a linked machine that is the first folder of its `files_roots`, else `~/Downloads/tuios`. The reply's `path` names it. |
+| `file-hash` | The sha256 of a file, or of a range of it (`offset`, `length`). |
+| `file-mkdir` | Makes a folder and its parents. The reply's `path` names it. |
 | `file-rename` | Moves a path on one disk. It does not replace what is at `to` unless `replace` is set. Another disk answers `cross_device`. |
 | `file-remove` | Deletes a path. A folder that holds files needs `recursive`. The home folder and `/` are refused. |
-| `open-file-stream` | Turns the connection into the bytes of one file; see below. |
-| `file-commit` | Checks a written part against the sender's `sha256` and renames it into place, with `conflict` (`replace`, `keep-both`, `skip`, `fail`), `perm` and `mtime`. `label` names a keep-both copy `name (LABEL).ext`, and without it the copy is `name 2.ext`. `skip` finds the file there, removes the part and answers `skipped`. A part that does not match is removed (`hash_mismatch`). |
-| `file-abort` | Removes the part a copy left. |
-| `file-check` | Describes many files under a `root` at once, for a copy that leaves out what is there already: for each of `rels`, `exists`, `kind`, `size`, `mtime`, and with `hash` its `sha256`. At most 2000 files, and 512 MiB hashed, in one call. |
-| `open-tree-stream` | Turns the connection into a tree stream: many small files of a folder in one stream. See below. |
-| `speed-test` | The far end of a link speed test. `ping` answers at once. `sink` takes `bytes` after the reply and drops them, then answers one line `{bytes, ms}`. `source` sends `bytes` of random data after the reply, then closes. At most 1 GiB. |
-| `host-speed-test` | Measures the link to `host` the way a copy uses it: the middle of five round trips of `speed-test` `ping` (`rtt_ms`), then `bytes` (64 MiB unless set) up and down on bulk streams (`up` and `down` in bytes a second, `up_ms`, `down_ms`). The bytes are random, so compression does not help them. `tuios hosts test --speed` calls it. |
-| `file-drop-dir` | Makes a private folder (0700) for files dropped on a pane, under the daemon's runtime folder. Drops are kept 24 hours and 256 MiB together. |
-| `drop-files` | Gives a pane on a machine the paths of files on this one: this machine's paths as they are, or, for a host, the paths in a new drop folder there and the transfers that copy them. |
 
 Only regular files are read: a named pipe or a device answers at once with
 `invalid_params` instead of holding the call.
-
-**Byte streams.** `open-file-stream` with `mode` `read` answers `size`,
-`offset` and `mtime`, then the connection carries the file's bytes from
-`offset` to `size` and closes. With `mode` `write` it cuts the part file to
-`offset` (which may not be past the part's end), answers `part_size`, then
-takes `length` bytes into the part. When they are written and synced it
-writes one line, `{"part_size":N,"written":N}` or with `error`, and closes.
-Either side ending early leaves the part as it is, which is where the next
-attempt resumes. Over a link these streams ride bulk lanes that wait behind
-every pane and keep to a credit window (see
-[ARCHITECTURE.md](ARCHITECTURE.md)).
-
-**Part files.** A write lands in a hidden part file beside the destination,
-owner only: `.NAME.tuios-part-ID`, where `ID` is the `part_id` the caller
-gives (up to 32 hex digits). A caller with no `part_id` writes
-`.NAME.tuios-part`. A part is opened without following a link, and the file
-opened must be the regular file at the part's name, so a link put there turns
-the copy into a failure, not a write to the link's target. `file-commit` sets
-the original's permission bits and modification time on the part, renames it
-into place, and syncs the folder. Over a link, the bits are masked by the
-daemon's umask and lose group and world write. The execute bits stay.
-
-**Tree streams.** A folder copy sends each file of 8 MiB or less in one tree
-stream each way, with no round trip between files. A file sent by itself
-costs several round trips, so a folder of 20,000 small files on a link of
-50 ms would spend over an hour waiting. A larger file goes by itself, which
-resumes from the middle after a dropped link. A file in a tree stream is sent
-again whole.
-
-`open-tree-stream` takes `root` and `mode`. With `mode` `read` (and
-`compress`), the caller writes one request line per file, `{"rel","size","mtime"}`,
-and `{"end":true}` after the last. The daemon answers one record per file in
-the same order, then `{"end":true}`. A `size` and `mtime` that no longer match
-the file answer a header with `code` `source_changed`. With `mode` `write`
-(and `part_id`), the caller writes records and `{"end":true}`. The daemon
-puts each file in place and answers one ack line per file, then
-`{"end":true}`. An ack is `{"rel","path","sha256","skipped"}` for a file in
-place, or `{"rel","code","error"}`.
-
-A record is a header line, the bytes, and a trailer line:
-
-```
-{"rel":"src/a.go","kind":"file","size":1234,"perm":420,"mtime":1786611217427,"z":true}
-<size bytes, or one flate stream of them when z>
-{"sha256":"9f2c..."}
-```
-
-- A folder is a header with `kind` `dir` and nothing after it.
-- A file the reading side could not read is a header with `code` and `error`,
-  and nothing after it.
-- A file that got shorter while it was read keeps its length, padded with
-  zeros, and the trailer has `code` `source_changed`. The writing side drops
-  it.
-- On the write side, the header can carry `conflict` (as `file-commit` takes
-  it) and `label`.
-
-The trailer carries the hash that the reading side took while it read. The
-writing side hashes what it writes, and puts the file in place only when the
-two match. Each `rel` is checked on the writing side: it must be a path under
-`root`. A write that came over a link is held to the link's roots, deny list
-and write limits for each file, as an `open-file-stream` write is. The whole
-stream counts as one of the link's 8 write streams. A header, trailer,
-request or ack line is at most 64 KiB.
-
-**Transfers.** `transfer-start` makes a job in the daemon that answers it, so
-the client may quit. `src` and `dst` are `{host, path}`, with `host` empty for
-this machine, so one call copies this machine to a host, a host to this
-machine, or one host to another (through this machine). A `dst` with no
-`path` is the receive folder of its machine (see `file-mkdir` `receive`), and
-the copy goes inside it. A folder copies its whole tree. A folder into a
-folder that is there needs `conflict` `merge`.
-
-`place` says how to read `dst`. Omitted, `dst` is the full path of the copy.
-`auto` reads it as `cp` does: a folder that is there gets the copy inside it,
-and anything else is the new name. A `dst` that ends in `/` with `auto` is
-`into`. `into` needs a folder that is there. `contents` copies what a folder
-holds into `dst`, and a file as `auto` does.
-
-`conflict` says what to do when `dst` is there: `replace`, `keep-both`,
-`merge`, `skip`, `ask` or `fail`, the default, which answers `file_exists`.
-`each` says what to do with each file that is there and differs inside a
-folder copy: `replace`, `keep-both`, `skip` or `ask`. Omitted, it follows
-`conflict`, which for `merge` and `replace` is `replace`. A file that is there
-with the same sha256 is never copied again, whatever the policy: the row
-counts it in `same`. `keep-both` names a copy between two machines
-`name (from HOST).ext`, with the source machine's name. `keep_from` false, or a
-copy on one machine, names it `name 2.ext`.
-
-`perms` and `times` (both true unless set) give each file the original's
-permission bits and modification time. `compress` (true unless set) lets a
-link carry the bytes as flate when they compress well. `rate_limit` is the
-most bytes a second, 0 for no limit.
-
-**The conflict state.** Before it copies, a copy compares each file with what
-is there. With `ask`, the files that are there and differ make the copy wait
-in state `conflict`. At most 200 are listed at a time. Its row lists the files in `conflicts`, each with `rel`,
-`path`, `src_size`, `src_mtime`, `dst_size` and `dst_mtime`, and counts them in
-`conflict_count`. `transfer-answer` takes `id` and `choice` (`replace`,
-`keep-both` or `skip`) for one `rel`, several `rels`, or `all`. `all` holds
-for the files of the copy that come later too. The copy goes on when every file
-it waits on has an answer. A folder or a link where a file goes, and a file
-made at the destination during the copy, are never replaced: the row counts
-them in `conflicts_left`. Each file goes through its part, a sha256 of
-the original and of the part, and the rename, and keeps the original's
-permission bits and modification time, never its owner. A link that drops
-leaves the part: the job waits (`waiting`, with `retry_in_ms`), and when the
-machine is back it compares the last MiB of the part with the original and
-goes on from the part's end when they match. A file whose check fails is
-copied once more; a second failure fails the job. At most three jobs move
-bytes at once; the rest are `queued`.
-
-`transfer-list`, `transfer-pause`, `transfer-resume` and `transfer-cancel` take
-an `id`. A row has `id`, `name`, `src`, `dst`, `target`, `final`, `kind`,
-`move`, `state` (`queued`, `running`, `verifying`, `waiting`, `paused`,
-`conflict`, `done`, `failed`, `cancelled`), `size`, `done`, `wire` (the bytes
-that crossed a link, fewer than `done` when compressed), `rate`, `eta_ms`,
-`files`, `files_done`, `current`, `current_done`, `current_size`, `error`,
-`code`, `resumed_from`, `resumes`, `sha256`, `verified`, `created`,
-`started`, `ended`, `retry_in_ms`, `skipped`, `skipped_items`, `denied` (the
-entries of a folder copy left out because a linked machine may not read them),
-`same`, `conflicts_skipped`, `conflicts_left`, `conflicts`, `conflict_count`,
-`failed_files`, and `pane` and `pane_session` for a copy started from a
-pane. `transfer-clear` removes the jobs that ended, or only `ids`, and
-answers `cleared`. Each job it removes is a `transfer` event with action
-`removed`. `transfer-resume` goes on with a paused job, tries a waiting
-one now, or tries a failed one again from its parts. `transfer-cancel` removes
-the part of the file in flight. A finished job stays listed for 30 minutes; a
-failed one takes its parts with it when it leaves the list.
-
-A `transfer-start` to the destination of a job that has not ended answers
-`busy`. Two jobs that reach one file by two paths write two parts, and the
-one that commits last is the file in place.
-
-**The journal.** Every job that has not ended is a file in
-`$XDG_STATE_HOME/tuios/sessions/transfers/`, written on each change of state.
-A daemon that starts after a crash, `tuios kill-server` or `tuios update`
-takes back the jobs of its own socket: a paused job stays paused, a failed
-one is listed as failed, and every other goes on from its parts. At start the
-daemon also removes, in each folder it wrote a part in, the parts older than
-seven days that no job of its own holds.
-
-**Writes over a link.** A file write that arrives over a link
-(`open-file-stream` write, `file-commit`, `file-mkdir`, `file-rename`,
-`file-remove`, `file-abort`) lands only under the write roots: the folders
-`files_roots` names for that machine, or one receive folder
-(`~/Downloads/tuios`, or `$XDG_DOWNLOAD_DIR/tuios` on Linux) when it names
-none, plus the drop folder. The check is on the real path, with links
-resolved, and the write itself goes through an `os.Root` at the root, so a
-link inside it cannot carry the write out. A write outside the roots is
-`forbidden`, and the refusal says where writes may land and which setting to
-change.
-
-Inside every root, a write into these places is refused whatever
-`files_roots` says, with case and Unicode width folded on every system (a
-Linux disk can ignore case too), with the dots and spaces that Windows drops
-at the end of a name dropped, and a write to a folder that *holds* one of them (a rename of
-`~/.config`, say) is refused too, so a link cannot carry a denied folder out
-and back: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`,
-`~/.netrc`, `~/.git-credentials`, `~/.config/git`, `~/.config/gh`,
-`~/.config/gcloud`, `~/.password-store`, `~/.claude`, `~/.claude.json`,
-`~/.codex`, the config folders of the agent harnesses tuios installs hooks,
-plugins or extensions into, which name commands the tool runs (Gemini CLI and
-Antigravity's `~/.gemini`, `~/.config/opencode`, `~/.config/amp`,
-`~/.copilot`, `~/.config/crush`, `~/.cursor`, Devin's `~/.config/devin` and
-on Windows `AppData/Roaming/devin`, `~/.factory`, `~/.grok`, Hermes's
-`~/.hermes` and on Windows `AppData/Local/hermes`, `~/.config/kilo`,
-`~/.kimi-code`, `~/.pi/agent`, `~/.omp/agent`, `~/.qoder`, `~/.qwen`), the
-sops age keys (`~/.config/sops/age` and its macOS and Windows forms), atuin's
-key, session, history and config (`~/.local/share/atuin`, `~/.config/atuin`),
-Ollama's key (`~/.ollama/id_ed25519`), the API keys in Gemini CLI's
-`~/.gemini/.env`, Qwen Code's `~/.qwen/.env` and Hermes's `~/.hermes/.env` (on
-Windows `AppData/Local/hermes/.env`), the shell
-start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
-`.bash_login`, `.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`,
-`.zlogout`, `.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `.xprofile`, `.xsession`,
-`.xinitrc`, `~/.config/fish`, `~/.config/zsh`, `.gitconfig`, `.inputrc`), the
-login items (`~/.config/systemd`, `~/.config/autostart`,
-`~/.config/environment.d`, `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`,
-`.pam_environment`, and on Windows the Startup folder and the PowerShell
-profiles), the crontab spools, `/proc`, tuios's own config, state
-and data folders, and the daemon's socket folder (the mail stash) apart from
-its drop folder.
-
-**Reads over a link.** A read (`file-read`, `file-preview`, `file-hash`, `file-walk`,
-`open-file-stream` read), and a look at a path's name and size (`file-stat`,
-`file-list`), from one of these is `forbidden` too, so a linked
-machine cannot read keys or credentials out: every place in the write deny
-list above that can hold a secret (`~/.ssh` except a `*.pub` key, `~/.gnupg`,
-`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.netrc`,
-`~/.git-credentials`, `~/.gitconfig`, `~/.config/git`, `~/.password-store`,
-the shell start files, `~/.config/systemd`, `~/.config/environment.d`,
-`.pam_environment`, the PowerShell profiles, `~/.claude.json`, the sops age
-keys, atuin's folders, Ollama's key, the Gemini CLI, Qwen Code and Hermes
-`.env` files, and tuios's own config,
-state and data), and also `~/.docker/config.json`,
-`~/.config/gh/hosts.yml`, `~/Library/Keychains`, the
-Claude and Codex credential files, the logins of other agent tools (Gemini
-CLI's `oauth_creds.json` and `mcp-oauth-tokens.json`, opencode's `auth.json`
-and `mcp-auth.json`, Qwen Code's `oauth_creds.json`, Kilo's `auth.json` and
-`mcp-auth.json`, Pi's `auth.json`, oh-my-pi's `~/.omp/agent/agent.db` and its
-`agent.db-wal`, Amp's `secrets.json`, the Copilot CLI's `~/.copilot/config.json`),
-Cursor's MCP servers (`~/.cursor/mcp.json`, whose env often holds API keys),
-the cloud and tunnel CLI credentials (`~/.oci`, doctl's and ngrok's config
-folders on Linux, macOS and Windows, and `~/.ngrok2`), the package and database
-credentials (`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
-`.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
-`~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
-shell and program histories, browser profiles (also the snap Firefox and
-Chromium profiles and every flatpak's `~/.var/app`), mail and chat state
-(Thunderbird, Signal, Discord, Slack, Telegram), the VS Code and Cursor state
-folders, crypto wallets (Bitcoin, Electrum, Ethereum, Monero, Litecoin, Solana,
-Exodus), password managers,
-the Windows credential stores and DPAPI keys,
-`/proc` (every process's environment and memory), and the daemon's socket
-folder apart from its drop folder. On
-Windows a linked machine must name a path with a drive letter and no other
-colon: a `\\?\` path, a UNC share and a stream name are refused. A read
-elsewhere is allowed, so a copy out works, unless the machine's
-`files_read_roots` is set: then a read must be under one of those folders or
-under a write root, and the refusal names the setting. The read deny list
-also holds the shell and program histories (`.bash_history`, `.zsh_history`,
-zsh's history under `~/.local/share` and `~/.local/state`, fish's history and
-others) and the browser and password manager profiles.
-
-A read over a link opens the file, then checks the path the system has for
-the open file against the same rules. A rename between the check and the open
-cannot swap a denied file in. On macOS a path through
-`/System/Volumes/Data` is judged by its short name, such as `/Users/...`, for
-reads and writes. A regular file with more than one name (a hard
-link) is `forbidden` to read, hash, stream or copy over a link, because no
-check of its path shows what else it is. To share such a file, copy it to a
-new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` and
-`MsgWatchDir` keep to the read rules too, so a machine with only `list` cannot
-list or watch `~/.ssh` or `/proc`. `file-walk` over a link leaves out every
-entry in the read deny list, so a walk of the home folder, and the file list of
-a folder copy, does not name the files in `~/.ssh`. The copy still ends `done`,
-and its `denied` field counts what was left out. `tuios cp` prints the count and
-exits as a partial copy.
-
-**Copies a link starts.** `transfer-start` and `drop-files` called over a link
-read and write this machine's disk for that machine, so they keep to the same
-rules. A source here must pass the read rules, a destination here must pass
-the write rules, and a move must also be allowed to remove its source. The
-call is `forbidden` before a job exists when an end fails, and the job checks
-each file again as it goes, through an `os.Root` at the write root. The job
-keeps the name of the machine in the journal (`link`), so after a restart it
-is held to that machine's policy as it is then. Before each try and each file,
-the job checks that the machine may still start a copy here: `files` and the
-five capabilities a relay needs. A reload that takes one away ends the job as
-`forbidden`, also when the job is paused or waits. A restart does the same.
-
-**How much a link may write.** An `open-file-stream` write over a link is
-checked before a byte moves:
-
-- In the drop folder, only inside a drop that `file-drop-dir` made. A file or
-  folder at the top of the drop folder is `forbidden`. The drops together
-  hold at most 256 MiB, counting what other open writes into the folder have
-  claimed, and a write past that is `disk_full`.
-- Anywhere else, the write must leave the machine's `files_min_free` (1 GiB
-  unless set) free on its disk, counting what other open writes to that disk
-  have claimed, or it is `disk_full`.
-- A part file with more than one name (a hard link) is not written, and the
-  write is `forbidden`. A linked machine cannot rename a file onto a part name
-  or off one.
-- One machine may have at most 8 write streams and 64 unfinished part files
-  open. Past that the write is `busy`, which a copy retries.
-- One machine may make at most `files_max_entries` (20,000 unless set) new
-  files and folders in ten minutes. A write that starts a new part counts as
-  one. `file-mkdir`, `file-drop-dir` and a tree stream's `dir` record count
-  each folder they make. Past that the call is `busy`, which a copy retries.
-  The count goes down evenly over the ten minutes.
-
-A job is logged in the daemon log when it starts and ends, with both ends
-and the byte count.
-
-### What a linked machine may do here
-
-A connection that arrives over a link is accepted on a link socket
-(`<socket>.link` or `<socket>.link-human`), which only `tuios stdio-proxy` on
-this machine dials. The daemon marks it before a byte is read, and holds every
-verb and every binary message on it to the policy for the machine it came from.
-The policy is read from the `[hosts]` table on this machine: the built-in
-default, then `[hosts."*"]`, then `[hosts.NAME]`, each field inheriting from
-the one before. The configuration is in
-[CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here).
-
-| Capability | Verbs |
-| --- | --- |
-| none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
-| `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
-| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
-| `open` and `write` | `verify-fan` |
-| `open` and `files` | `paste-pane-image` |
-| `write` and `files` | `paste-image` |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
-| `files` | `file-read`, `file-preview`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`, `file-check`, `open-tree-stream`, `speed-test`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
-| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `transfer-answer`, `transfer-clear`, `host-speed-test`, `drop-files` (they make this daemon use its own links) |
-
-Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
-`MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and
-`write`; `MsgInput`, `MsgResize`, `MsgClosePTY`, `MsgUpdateState`,
-`MsgExecuteCommand`, `MsgCommandResult` and `MsgKill` need `write`;
-`MsgCreatePTY` and `MsgResurrect` need `open`; `MsgNew` needs `open`, `list`
-and `write`. A refused message is answered with `MsgError` code 10.
-
-The default grants `list`, `mail`, `open`, `write` and `files`. A `[hosts]` table written before `files` existed that sets `allow` does not have it: add `"files"` to let that machine use the file verbs.
-
-A verb or message with no entry in the table is refused over a link. A test
-holds the table to the verb registry, so a new verb cannot ship without one.
-
-**Naming the machine.** `tuios stdio-proxy` sends `link-peer` as the first
-line of every connection it opens:
-
-```json
-{"id": 0, "verb": "link-peer", "params": {"peer": "laptop", "pinned": false}}
-```
-
-The name is the one the hub gave for itself in the stream's open frame (its
-host name up to the first dot, lowered), or the one the proxy was started with
-by `--as`, which wins and sets `pinned`. The daemon takes `link-peer` only on a
-link socket, once, and before anything else on the connection; after its reply
-the connection is read from scratch, so an attach can follow it. A link from a
-proxy too old to send it has no name and gets `[hosts."*"]`. A daemon too old
-to know `link-peer` answers `unknown_verb`, and the proxy dials again without
-it. If the link sockets cannot be reached, the proxy asks `hello` on the main
-socket and refuses the stream when the daemon reports `link_policy`, so a
-daemon that failed to open its link sockets is not reached on a socket with no
-policy.
-
-When the link's ssh forwards an agent, the proxy also sends the
-`SSH_AUTH_SOCK` it runs with as `ssh_auth_sock`. With `[daemon] ssh_agent =
-"follow"`, a client attached through the link moves the session's agent link
-to that socket, under the same checks as a local client's socket. A daemon
-too old to know the parameter refuses it with `invalid_params`, and the proxy
-sends `link-peer` again without it.
-
-Only a pinned name is a boundary. A hub whose ssh key may run any command can
-run a shell, and can claim any name. Pin it in `authorized_keys` on this
-machine:
-
-```
-command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...
-```
-
-**Holding mail.** With `hold_mail`, `send-agent-message` over the link to
-anyone but `human` is stored for `human` instead, with `held`, `held_for` and
-`held_for_label`, and opens a mail item in the Inbox with `held_id` and
-`held_for`. The person passes it on:
 
 ### release-agent-message
 
@@ -6682,11 +5659,10 @@ anyone but `human` is stored for `human` instead, with `held`, `held_for` and
 ```
 
 Delivers the held message as a new message to the window it was for, with its
-original sender, `origin` and `origin_host`, and `released_from` set to the
+original sender, `origin`, and `released_from` set to the
 held id. The held copy is marked `released` and read, and its Inbox item closes
 when nothing else in the thread is unread. Only a client attached right now can
-call it, with its nonce (`not_human` otherwise), and over a link it needs
-`respond`. A message is released once; a second call, or an id that is not a
+call it, with its nonce (`not_human` otherwise). A message is released once; a second call, or an id that is not a
 held message the ring still holds, is `invalid_params`. A window that closed
 while the message was held is `window_not_found`.
 
@@ -6800,7 +5776,7 @@ Response:
 ```
 
 Who may read it: from a pane, `read` reaches its own session and fan group, as
-for the other reads; over a link it needs `list`. Only the pane's own reports
+for the other reads. Only the pane's own reports
 write the ring: activity rides `set-agent-state`, which a pane may call only
 for itself, and it is recorded only past the identity guard. Nothing reads the
 ring to decide a state, a wait or an alert.
@@ -7026,12 +6002,9 @@ the lines of each diff hunk:
 
 Who may read it: only the person. The call needs a `human_nonce` that
 verifies by the rules of [reply-approval](#reply-approval), so a process
-inside a pane and a link stream that the hub did not vouch for get
-`not_human`. [Nonce scope](#nonce-scope) applies: a presence made with a session
+inside a pane gets `not_human`. [Nonce scope](#nonce-scope) applies: a presence made with a session
 reads only the panes of that session, and gets `not_human` for a pane of
-another session. A restricted connection is refused with `forbidden`. Over a link
-it needs `respond`, because the conversation holds the prompts, file contents
-and command output.
+another session. A restricted connection is refused with `forbidden`.
 
 The [`transcript` event](#event-stream) says when to read again. Subscribe
 with `types` that name `transcript`, and call `agent-transcript` with your
@@ -7056,28 +6029,28 @@ Every one of these verbs is built: `agent-activity` (see
 describes each one's parameters and result. What is fixed now is who may call
 them:
 
-| Verb | What it does | A pane without `admin` | Over a link | The person only |
-| --- | --- | --- | --- | --- |
-| `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
-| `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | `write` | a note is the person's only with a live `human_nonce` |
-| `review-stage` | Stage or unstage a file, a hunk or lines of a pane's worktree, and undo it; only the index changes | refused | `write` | no; a `human_nonce` that is given must be live |
-| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
-| `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
-| `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
-| `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | `write` | admin or the person |
-| `mark-attention` | Snooze, wake, mark unread or restore an Inbox item, or settle an agent | refused | `respond` | yes: `human_nonce` from a live attach, never from inside a pane |
-| `agent-activity` | The pane's ring of hook events, and a recap of it, marked `untrusted` | `read`, own session and fan group | `list` | no |
-| `queue-prompt` | Queue a message, typed when the agent comes to rest and never over a prompt | `write`, and a typing verb as for `send-review`; checked again against the caller's grants when typed | `write` | "by the person" only with a live `human_nonce` |
-| `list-queued` | The messages waiting in a pane's queue | `read` | `list` | no |
-| `cancel-queued` | Drop queued messages; a pane drops only what it queued | `write` | `write` | the person's entries need a live `human_nonce` |
-| `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted`. Built: see [get-approval](#get-approval) | `read`; its `session` is the pane's own unless named | `list` | no |
-| `list-checkpoints` | The checkpoints of a pane's work tree, one per turn that changed a file, marked `untrusted`. See [list-checkpoints](#list-checkpoints) | `read`, own session and fan group | `list` | no |
-| `checkpoint-diff` | What one turn changed, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
-| `restore-checkpoint` | Put a pane's work tree back to a checkpoint, after a safety checkpoint | `write`, only on a pane the caller could type into | `write` | no |
-| `ship-commit` | Commit every change in a pane's work tree on its branch, as the person | `write`, only on a pane the caller could type into | `write` | no |
-| `ship-merge` | Merge a worktree's branch into its base in the main checkout, undoing a conflict | `write`, only on a pane the caller could type into | `write` | no |
-| `ship-push`, `ship-pr` | Push the branch, and open a pull request with gh, after a `confirm` token | `write`, and the person's `allow` in the Inbox | refused | the person outside every pane on an unrestricted connection goes ahead with the token alone. Every other caller waits for the person in the Inbox |
-| `ship-status` | The branch's pull request and its checks | `read` | `list` | no |
+| Verb | What it does | A pane without `admin` | The person only |
+| --- | --- | --- | --- |
+| `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | no |
+| `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | a note is the person's only with a live `human_nonce` |
+| `review-stage` | Stage or unstage a file, a hunk or lines of a pane's worktree, and undo it; only the index changes | refused | no; a `human_nonce` that is given must be live |
+| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
+| `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | no |
+| `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | no |
+| `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | admin or the person |
+| `mark-attention` | Snooze, wake, mark unread or restore an Inbox item, or settle an agent | refused | yes: `human_nonce` from a live attach, never from inside a pane |
+| `agent-activity` | The pane's ring of hook events, and a recap of it, marked `untrusted` | `read`, own session and fan group | no |
+| `queue-prompt` | Queue a message, typed when the agent comes to rest and never over a prompt | `write`, and a typing verb as for `send-review`; checked again against the caller's grants when typed | "by the person" only with a live `human_nonce` |
+| `list-queued` | The messages waiting in a pane's queue | `read` | no |
+| `cancel-queued` | Drop queued messages; a pane drops only what it queued | `write` | the person's entries need a live `human_nonce` |
+| `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted`. Built: see [get-approval](#get-approval) | `read`; its `session` is the pane's own unless named | no |
+| `list-checkpoints` | The checkpoints of a pane's work tree, one per turn that changed a file, marked `untrusted`. See [list-checkpoints](#list-checkpoints) | `read`, own session and fan group | no |
+| `checkpoint-diff` | What one turn changed, marked `untrusted` | `read`, own session and fan group | no |
+| `restore-checkpoint` | Put a pane's work tree back to a checkpoint, after a safety checkpoint | `write`, only on a pane the caller could type into | no |
+| `ship-commit` | Commit every change in a pane's work tree on its branch, as the person | `write`, only on a pane the caller could type into | no |
+| `ship-merge` | Merge a worktree's branch into its base in the main checkout, undoing a conflict | `write`, only on a pane the caller could type into | no |
+| `ship-push`, `ship-pr` | Push the branch, and open a pull request with gh, after a `confirm` token | `write`, and the person's `allow` in the Inbox | the person outside every pane on an unrestricted connection goes ahead with the token alone. Every other caller waits for the person in the Inbox |
+| `ship-status` | The branch's pull request and its checks | `read` | no |
 
 A connection restricted with `restrict-connection` is held the same way: with
 `read_only`, `review-note`, `send-review`, `queue-prompt`, `cancel-queued`
@@ -7109,20 +6082,11 @@ required without `parts`), `parts`, `human_nonce`, `from`.
 phone that lost the answer sends the message again with the same `client_id`,
 and the daemon queues nothing and answers as the first time, with
 `duplicate: true`. Use a random id. An id counts for one sender and one pane:
-the sender is the kind of caller and, for a link, the machine, or for a pane,
-the pane. Two machines whose links give no name count as one sender. The daemon
+the sender is the kind of caller or, for a pane, the pane. The daemon
 keeps the last 256 ids across all panes for 7 days, in memory. A daemon restart
-forgets them, so a message sent again after a restart is queued again. It does
-not go with `host`. A daemon older than `client_id` refuses the param
+forgets them, so a message sent again after a restart is queued again. A daemon
+older than `client_id` refuses the param
 with `invalid_params`, so ask `list-verbs` before sending it.
-
-`host` names a machine from `[hosts]`: the message is for a pane there. This
-daemon passes it, with its parts, to that machine's daemon over the link, on
-a connection of its own, and answers with the far daemon's result and `host`.
-The far daemon queues it as `link:THIS-MACHINE`, held to its policy for this
-machine: `write`, and `files` for a block or an image. Only a caller outside
-every pane may send one, since the far daemon sees only the link. The
-person's nonce is checked here and not sent on.
 
 `parts` is the message as ordered parts, the form the reply composer sends:
 `{"kind":"text","text":…}` for typed text, `{"kind":"paste","text":…,"n":1}`
@@ -7138,7 +6102,7 @@ daemon answers without the `parts` count in the result.
 {"id":1,"result":{"type":"prompt_queued","id":"q4","position":1,"queued":1,"delivering":true,"parts":2}}
 ```
 
-The daemon on the pane's machine chooses how each block travels when it types
+The daemon chooses how each block travels when it types
 the message, not when it queues it:
 
 - When the whole message is 12 KiB or less and the pane takes a bracketed
@@ -7157,8 +6121,7 @@ the message, not when it queues it:
 
 The text parts with each block's label must fit 16 KiB. A pane's queue holds
 at most 32 MiB and every queue together 128 MiB; past either, `queue_full`.
-Over a link, a message with a block needs `files` in that machine's
-`[hosts]` policy, at `queue-prompt` and again when it is typed. A message
+A message
 whose file cannot be written is dropped, and an Inbox question says so on the
 pane's blocking key.
 
@@ -7179,21 +6142,17 @@ pane holds now). Dropping a stalled entry leaves the next to the pane's next
 rest.
 
 Who queued an entry, `by`, is the daemon's own reading of the connection:
-`human` only with a live `human_nonce`, `link:HOST` over a link (the peer the
-link-peer handshake named, `*` for none), the pane's window id for a process
+`human` only with a live `human_nonce`, the pane's window id for a process
 in a pane, and `shell` for anything else. What each is held to:
 
 | Origin | At `queue-prompt` | When it is typed | May drop with `cancel-queued` |
 | --- | --- | --- | --- |
 | `human` | the nonce | nothing more | every entry |
 | a pane | `write`, and the typing rules of `send-text` | its grants as they are then, against the target; a refusal drops the entry | only its own |
-| `link:HOST` | `write` in its `[hosts]` policy | the policy as it is then; a refusal drops the entry | only its own; for a machine that gave no name, only what it queued on the same connection |
 | `shell` | nothing new | nothing new | every entry but `human`'s |
 
 For every entry the pane is checked for `needs_input` right before it is
-typed. An entry being typed cannot be dropped. A pane on another machine,
-whose calls arrive through its report channel, may neither queue nor drop:
-both verbs answer `forbidden`.
+typed. An entry being typed cannot be dropped.
 
 ### The reply history
 
@@ -7204,7 +6163,7 @@ Both verbs take a live `human_nonce`, so no pane and no caller without it
 reads or adds to it. The history holds what was sent to the agents of every
 session, so the nonce must prove the person for every session: an attach
 nonce, or a presence made with no session. A presence made for one session is
-refused. Over a link they need `respond`.
+refused.
 
 `add-reply-history` params: `target` (the key the client keeps the history
 under, at most 512 bytes), `parts` (as `queue-prompt` takes them),
@@ -7279,17 +6238,17 @@ the pane it opens, as `claim-task` would, as soon as the pane exists. Both
 check the card, and that the caller may do what `claim-task` needs, before
 they make anything: a refusal names `task` in its hint.
 
-| Verb | What it does | A pane without `admin` | Over a link | Result `type` |
-| --- | --- | --- | --- | --- |
-| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `write` | `task_added` |
-| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder` | `read` | `list` | `task_list` |
-| `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
-| `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
-| `finish-task` | Mark the card done | `task`; only the card it holds | `write` | `task_finished` |
-| `set-task-stage` | Move the card to `stage` | `task`; only the card it holds | `write` | `task_changed` |
-| `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `write` | `task_changed` |
-| `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
-| `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
+| Verb | What it does | A pane without `admin` | Result `type` |
+| --- | --- | --- | --- |
+| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `task_added` |
+| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder` | `read` | `task_list` |
+| `get-task` | One card with its `prompt` and `history` | `read` | `task` |
+| `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `task_claimed` |
+| `finish-task` | Mark the card done | `task`; only the card it holds | `task_finished` |
+| `set-task-stage` | Move the card to `stage` | `task`; only the card it holds | `task_changed` |
+| `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `task_changed` |
+| `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `task_changed` |
+| `remove-task` | Remove the card and its history | refused | `task_removed` with `id` |
 
 Every verb but `list-tasks` and `remove-task` answers with the card's row at
 the top level of the result: `id`, `session`, `title`, `preview` (the first
@@ -7304,13 +6263,13 @@ gives them.
 
 Who made a change (`by`, and each history entry's `by`) is decided from the
 connection, as for the queue: `human` only with a live `human_nonce`,
-`link:HOST` over a link, the pane's window id for a process in a pane,
+the pane's window id for a process in a pane,
 `plugin:ID` for a native plugin, and `shell` otherwise. A change tuios made on
 its own has `by` `tuios`.
 
 A pane claims only for itself: it leaves `window` out or names its own. It
 finishes, stages, blocks or releases only the card it holds. A pane holding
-`admin`, the person, a shell, a link and a plugin name the window on a claim
+`admin`, the person, a shell and a plugin name the window on a claim
 and change any card; outside a pane `window` is required. The pick and the
 take of a claim happen in one state change, so two panes that claim `next` at
 once take two cards.
@@ -7369,15 +6328,11 @@ Event types:
 | `client-session-changed` | A daemon connection attached, detached or switched sessions. `session` is the session entered or left. `attached` is `true` when entering and `false` when leaving, including a disconnect while attached. A rename sends `attached: true` with the new name to each client in the session. | `client_id`, `pid`, `session`, `attached` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed`, `agents_disabled` (the person turned the agent features off) or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
-| `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
 | `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 | `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
 | `transcript` | The transcript that a pane is joined to grew, or the entry a Pi session has selected changed. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. An event for a document or for a Pi session carries no `cursor`: read with the cursor of your last reply. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
-| `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state`, `ended` or `removed`, and `transfer` is its row as `transfer-list` returns it. `removed` says a copy that ended left the list, by `transfer-clear` or 30 minutes after it ended, and carries its last row. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
-| `transfer-progress` | A copy's row while its bytes move, at most four a second per copy. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action` (`progress`), `transfer` |
-| `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
@@ -7443,12 +6398,6 @@ Params:
 - `after_seq` (optional): resume. Replay the retained events with a higher
   `seq` before streaming live. `0` replays everything the daemon still holds.
 - `boot_id` (optional, needs `after_seq`): the boot id `after_seq` came with.
-- `hosts` (optional): also deliver the `agent-state`, `session-created` and
-  `session-closed` events this daemon relays from its linked hosts, each with
-  `host` set, and let `session` and `window` match events of other machines.
-  Without it, an event about another machine reaches only a subscriber that
-  names no session, window or pane, and only an `attention` or `host-changed`
-  event. See [Following linked hosts](#following-linked-hosts).
 
 Request:
 
@@ -7565,7 +6514,7 @@ Conditions:
 - `window-exit` resolves when the target window's shell process exits. The
   result carries `exit_code` (-1 when a signal stopped the process) and
   `signal` when a signal stopped it. Both are omitted when the status is not
-  known, such as for a window on another machine. An older client ignores
+  known. An older client ignores
   them.
 - `window-idle` resolves after the target window produces no output for `idle`
   milliseconds.

@@ -50,7 +50,7 @@ func runPeekPrompt(sessionName, windowTarget string, jsonOutput bool) error {
 	if jsonOutput {
 		return printVerbResultOn(t, raw, true)
 	}
-	return printPromptPeek(os.Stdout, t.result(raw))
+	return printPromptPeek(os.Stdout, raw)
 }
 
 // printPromptPeek prints a peek: who waits and for how long, the prompt fenced

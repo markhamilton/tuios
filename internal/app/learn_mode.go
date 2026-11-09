@@ -51,8 +51,6 @@ var learnUnavailable = map[string]string{
 	"new_session":             learnNoteSessions,
 	"next_session":            learnNoteSessions,
 	"prev_session":            learnNoteSessions,
-	"next_host":               learnNoteSessions,
-	"prev_host":               learnNoteSessions,
 	"kill_session":            learnNoteSessions,
 	"kill_session_next":       learnNoteSessions,
 	"rename_session":          learnNoteSessions,
@@ -78,7 +76,6 @@ var learnUnavailable = map[string]string{
 	"file_cut":                learnNoteFiles,
 	"file_paste":              learnNoteFiles,
 	"file_copy_path":          learnNoteFiles,
-	"file_send":               learnNoteFiles,
 	"paste_clipboard":         learnNotePaste,
 	"terminal_paste_host":     learnNotePaste,
 }

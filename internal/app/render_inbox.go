@@ -120,17 +120,17 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		what = "is " + sidebarStateWords(pk.State) + " now, not waiting on a prompt"
 	}
 	add(pal.Fg, inboxWho(it)+" in "+m.inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
-	if it.Host == "" {
-		if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
-			add(pal.FgDim, facts)
-		}
-		for _, l := range programStatusLines(m.paneProgramStatus(it.Session, it.Window)) {
-			add(pal.FgDim, l)
-		}
-		for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
-			add(pal.FgDim, l)
-		}
+
+	if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
+		add(pal.FgDim, facts)
 	}
+	for _, l := range programStatusLines(m.paneProgramStatus(it.Session, it.Window)) {
+		add(pal.FgDim, l)
+	}
+	for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
+		add(pal.FgDim, l)
+	}
+
 	if p.Note != "" {
 		add(pal.Warning, p.Note)
 	}

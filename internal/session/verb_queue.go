@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -61,9 +60,6 @@ type queuePromptParams struct {
 	// ignored: a client sends both so a daemon older than parts types the
 	// text. See queue_parts.go.
 	Parts []queuePart `json:"parts"`
-	// Host is the machine the pane is on, for a pane of a linked machine.
-	// See queue_host.go.
-	Host string `json:"host"`
 	// ClientID names the message on the client's side. See queue_client_id.go.
 	ClientID string `json:"client_id"`
 }
@@ -76,12 +72,6 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 	}
 	if len(p.ClientID) > queueClientIDMax {
 		return nil, invalidParam("client_id", "client_id is longer than "+strconv.Itoa(queueClientIDMax)+" bytes")
-	}
-	if p.Host != "" {
-		if p.ClientID != "" {
-			return nil, invalidParam("client_id", "client_id does not go with host: the far daemon may not know it")
-		}
-		return d.queuePromptToHost(cs, p)
 	}
 	text, size := p.Text, len(p.Text)
 	if p.Parts != nil {
@@ -96,12 +86,6 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 		if len(p.Text) > queueMaxText {
 			return nil, invalidParam("text", "text is longer than "+strconv.Itoa(queueMaxText)+" bytes")
 		}
-	}
-	if cs != nil && cs.viaLink && hasFileParts(p.Parts) && !d.linkPolicy(cs).Allows(config.LinkAllowFiles) {
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		return nil, linkFilesRefusal(peer)
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -205,27 +189,12 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 		})
 	}
 	switch {
-	case cs != nil && cs.viaLink:
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		e.origin = queueOrigin{kind: "link", peer: peer, conn: cs.clientID}
-		e.by = queueByLinkPrefix + firstNonEmpty(peer, "*")
-		if human {
-			e.by = queueByHuman
-		}
-		e.from = printableClaim(from, agentMsgMaxSubject)
-		return e, nil
 	case human:
 		e.origin = queueOrigin{kind: queueByHuman}
 		e.by = queueByHuman
 	default:
 		if pa := d.paneAuthority(cs); pa != nil {
-			if pa.hosted {
-				e.origin = queueOrigin{kind: "pane", window: pa.window, hosted: true}
-			} else {
-				e.origin = queueOrigin{kind: "pane", window: pa.window, session: pa.session}
-			}
+			e.origin = queueOrigin{kind: "pane", window: pa.window, session: pa.session}
 			e.by = pa.window
 			if from != "" && from != pa.window {
 				if fid, _, err := d.resolveSender(state, from, true); err != nil || fid != pa.window {
@@ -366,19 +335,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	switch {
 	case human:
 		mayDrop = func(*queueEntry) bool { return true }
-	case cs != nil && cs.viaLink:
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		conn := cs.clientID
-		mayDrop = func(e *queueEntry) bool {
-			if e.origin.kind != "link" || e.by == queueByHuman || e.origin.peer != peer {
-				return false
-			}
-			// Every machine that gave no name shares the empty peer, so
-			// for those only the connection that queued it may drop it.
-			return peer != "" || e.origin.conn == conn
-		}
 	default:
 		if pa := d.paneAuthority(cs); pa != nil {
 			mayDrop = func(e *queueEntry) bool { return e.origin.kind == "pane" && e.origin.window == pa.window }

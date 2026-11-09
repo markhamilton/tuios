@@ -161,13 +161,9 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 		}
 	}
 	// A type no event has made the stream silent with no error: a typo, or a
-	// hook name such as after-new-window, subscribed to nothing. A link from
-	// another machine is let through, since a newer daemon there may name a
-	// type this one does not have yet, and its other types still apply.
-	if !cs.viaLink {
-		if verr := checkEventTypes(p.Types); verr != nil {
-			return nil, verr
-		}
+	// hook name such as after-new-window, subscribed to nothing.
+	if verr := checkEventTypes(p.Types); verr != nil {
+		return nil, verr
 	}
 	if len(p.Types) > 0 {
 		filter.types = make(map[string]bool, len(p.Types))

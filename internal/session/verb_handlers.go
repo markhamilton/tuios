@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
@@ -306,7 +305,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Cwd       string   `json:"cwd"`
 		Focus     *bool    `json:"focus"`
 		Command   []string `json:"command"`
-		Host      string   `json:"host"`
 		Grants    []string `json:"grants"`
 		// Env is set in the new pane's process, checked as start-agent
 		// checks its env.
@@ -342,9 +340,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	if p.Timeout < 0 {
 		return nil, invalidParam("timeout", "timeout is milliseconds, 0 for no limit")
 	}
-	if p.Wait && p.Host != "" && p.Host != "local" {
-		return nil, invalidParam("wait", "wait reads the exit status, and a window on another machine does not report one")
-	}
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
 		return nil, verr
@@ -360,26 +355,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
-	// A window on another machine. The name is checked against the [hosts]
-	// table here rather than at the spawn, so a typo is a parameter error that
-	// names the machines available instead of a link failure twenty seconds
-	// later. "local" is accepted and means this machine, which is the default.
-	if verr := checkWindowHost(d, &p.Host); verr != nil {
-		return nil, verr
-	}
-	// After checkWindowHost, so "local" and this machine's own name are
-	// this machine.
-	if len(env) > 0 && p.Host != "" {
-		return nil, invalidParam("env", "env names variables of this machine, so it cannot go to a window on another machine")
-	}
 	// A directory that cannot be entered is refused rather than quietly ignored.
-	// A window on another machine is the exception: the path is that machine's
-	// to judge, and checking it against this filesystem would refuse a
-	// directory that exists there and accept one that does not.
-	if p.Host == "" {
-		if verr := checkWindowCwd(p.Cwd); verr != nil {
-			return nil, verr
-		}
+	if verr := checkWindowCwd(p.Cwd); verr != nil {
+		return nil, verr
 	}
 	// An empty argv head would only fail later inside exec with a message that
 	// names nothing; refuse it as the parameter mistake it is.
@@ -423,7 +401,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Focus:       focus,
 		Command:     p.Command,
 		Name:        p.Name,
-		Host:        p.Host,
 		Grants:      grants,
 		Env:         env,
 		Kind:        p.Kind,
@@ -508,7 +485,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 			"pty_id":    win.PTYID,
 			"focused":   focus,
 			"unplaced":  win.Unplaced,
-			"host":      win.Host,
 			"keep_open": true,
 		}, nil
 	}
@@ -522,7 +498,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		"unplaced":  win.Unplaced,
 		// Omitted for a window on this machine, so the ordinary result keeps
 		// the shape it has always had.
-		"host": win.Host,
 	}, nil
 }
 
@@ -801,24 +776,6 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 // newWindowErr classifies a creation failure. An out-of-range workspace is a bad
 // parameter the caller can correct; anything else came from spawning the shell.
 func newWindowErr(err error, sess *Session, ws int) *verbError {
-	// A window that could not be opened on another machine has nothing to do
-	// with window targets. mapResolveErr below is for the failures of naming a
-	// window, and its fallback hint says the target matched nothing and lists
-	// the windows that exist, which on a link failure is advice about the
-	// wrong problem printed under a message about the right one.
-	//
-	// A link that is down has a code of its own, so a caller can say the
-	// machine is unavailable instead of printing the link's state word.
-	if down, ok := errors.AsType[*federation.UnreachableError](err); ok {
-		msg := down.Host + " is unavailable."
-		if down.Reason != "" {
-			msg += " " + down.Reason
-		}
-		return newVerbError(ErrVerbHostUnreachable, msg)
-	}
-	if msg := err.Error(); strings.Contains(msg, "tuios on ") || strings.Contains(msg, "host ") {
-		return newVerbError(ErrVerbInternal, msg)
-	}
 	if strings.Contains(err.Error(), "out of range") {
 		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
 			Param:  "workspace",
@@ -1045,9 +1002,6 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		if errors.As(err, &unknown) || strings.Contains(err.Error(), "prefix key") || strings.Contains(err.Error(), "unsupported") {
 			return nil, sendKeysParseError(err, sess, p.Window)
 		}
-		if errors.Is(err, errPaneReconnecting) {
-			return nil, ptyWriteError(err)
-		}
 		return nil, mapResolveErr(err, sess)
 	}
 	count := len(parsed)
@@ -1191,12 +1145,6 @@ func ptyWriteError(err error) *verbError {
 	}
 	if errors.Is(err, errPaneInputBusy) {
 		return paneBusyError(err)
-	}
-	if errors.Is(err, errPaneReconnecting) {
-		return hintedVerbError(ErrVerbHostUnreachable, err.Error(), &VerbHint{
-			Command: "tuios list-windows",
-			Detail:  "Nothing was typed. The window's process is still running on the other machine; host_link and host_link_until in list-windows say until when it waits for the link.",
-		})
 	}
 	return newVerbError(ErrVerbInternal, err.Error())
 }
@@ -1768,7 +1716,7 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 func (d *Daemon) reportTarget(cs *connState, sessionName, window string) (*Session, string, *verbError) {
 	var own *paneAuth
 	if window == "" {
-		if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && pa.window != "" && pa.window != unplacedWindow && pa.session != "" {
+		if pa := d.paneAuthority(cs); pa != nil && pa.window != "" && pa.window != unplacedWindow && pa.session != "" {
 			own = pa
 			if sessionName == "" {
 				sessionName = pa.session
@@ -1808,7 +1756,7 @@ func (d *Daemon) reportFromOwnPane(cs *connState, sess *Session, target string) 
 		return cs.hostedWindow == w.ID
 	}
 	pa := d.paneAuthority(cs)
-	return pa != nil && pa.plugin == "" && !pa.hosted && pa.window == w.ID
+	return pa != nil && pa.plugin == "" && pa.window == w.ID
 }
 
 // findWindowStateByTarget resolves target (an id, a short id or a name) in
@@ -2052,12 +2000,12 @@ func (d *Daemon) joinReportedTranscript(cs *connState, sess *Session, target, ha
 	if harnessID == "" || reg == nil || reg.TranscriptFor(harnessID) == nil {
 		return ""
 	}
-	if pa := d.paneAuthority(cs); pa != nil && (pa.hosted || pa.window != w.ID || !paneInSession(pa, sess)) {
+	if pa := d.paneAuthority(cs); pa != nil && (pa.window != w.ID || !paneInSession(pa, sess)) {
 		why := "a pane may name a transcript only for its own pane"
 		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
 		return why
 	}
-	if cs != nil && (cs.viaLink || cs.paneOnly) {
+	if cs != nil && cs.paneOnly {
 		why := "a transcript is named only from this machine"
 		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
 		return why

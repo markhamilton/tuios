@@ -106,5 +106,4 @@ tell the person.
 - Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `checkpoints`, `ship`
 - Rules: `grants`, `errors`, `agents-off`
 - Results, dashboards and forms for the person: `tml`
-- Other machines: `hosts`, `files`
-- Other tools: `mcp`, `tmux`, `herdr`, `notify`, `pair`, `config`
+- Other tools: `files`, `mcp`, `tmux`, `herdr`, `notify`, `config`

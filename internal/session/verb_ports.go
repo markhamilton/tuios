@@ -104,10 +104,6 @@ func (d *Daemon) readPorts() []portRow {
 			wt = info.Path
 		}
 		for _, w := range sess.GetState().Windows {
-			if w.Host != "" {
-				// The process runs on another machine.
-				continue
-			}
 			if pty := sess.GetPTY(w.PTYID); pty != nil {
 				if pid := pty.ShellPID(); pid > 0 {
 					roots[pid] = paneProc{session: sess.Name(), window: w.ID, worktree: wt}

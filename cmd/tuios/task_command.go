@@ -138,7 +138,7 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	if err := json.Unmarshal(raw, &row); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Println(describe(row, t.on()))
+	fmt.Println(describe(row, ""))
 	return nil
 }
 
@@ -239,9 +239,9 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool)
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.AllSessions {
-		return printTaskRows(w, "any session"+t.on(), res.Tasks, true)
+		return printTaskRows(w, "any session"+"", res.Tasks, true)
 	}
-	return printTaskRows(w, "session "+res.Session+t.on(), res.Tasks, false)
+	return printTaskRows(w, "session "+res.Session+"", res.Tasks, false)
 }
 
 // printTaskRows writes list-tasks' cards as a table. Every field but the id,
@@ -418,7 +418,7 @@ func newTaskRemoveCommand() *cobra.Command {
 			if f.json {
 				return printVerbResultOn(t, raw, true)
 			}
-			fmt.Printf("Removed %s%s.\n", plainLine(args[0]), t.on())
+			fmt.Printf("Removed %s.\n", plainLine(args[0]))
 			return nil
 		},
 	}

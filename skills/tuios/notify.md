@@ -31,7 +31,6 @@ What an agent must know:
   last `quiet_active_seconds` (120). One item sends one notification at most.
 - A redirect to another host is refused, because the message and its token
   would go there. Tell the person to set the address the server redirects to.
-- With `web_url` set, a notification links to the item in tuios-web.
 
 For a message of your own on the person's phone, the person can add a hook
 on `after-agent-state` (`tuios --skill recipes`).
@@ -58,12 +57,9 @@ What an agent must know:
   presence with no session.
 - `register` reads the subscription from a file, or from stdin with `-`.
   It holds secrets, so never put them on a command line.
-- Each registration opens an Inbox item named `phone NAME`. Over a link, a
-  registration can not replace a phone of the same name.
+- Each registration opens an Inbox item named `phone NAME`.
 - `enabled = false` in `[notify]` stops new pushes. A phone still gets the
   close of an item, so it can remove a notification.
-- An item from another machine is not pushed. That machine pushes to its
-  own phones.
 - When the push service says a phone is gone, the daemon removes it and
   opens the Inbox item `phone NAME` to say so.
 

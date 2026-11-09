@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/google/uuid"
 )
 
@@ -23,14 +22,11 @@ import (
 //
 // A target on this daemon is checked, and with create made, before the
 // client hears of it, so a mistyped name is refused here with the names that
-// exist. A target on another machine is opened by the client, which holds
-// the link, and the client answers once the attach there has landed or
-// failed.
+// exist.
 
 // switchSessionParams are the verb's parameters.
 type switchSessionParams struct {
 	Name    string `json:"name"`
-	Host    string `json:"host"`
 	Create  bool   `json:"create"`
 	Cwd     string `json:"cwd"`
 	Session string `json:"session"`
@@ -43,15 +39,11 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 		return nil, verr
 	}
 	p.Name = strings.TrimSpace(p.Name)
-	p.Host = strings.TrimSpace(p.Host)
 	if p.Name == "" {
 		return nil, invalidParam("name", "name is the session to switch to and cannot be empty")
 	}
 	if p.Cwd != "" && !p.Create {
 		return nil, invalidParam("cwd", "cwd is the directory of a session create makes, so it needs create")
-	}
-	if p.Host == federation.LocalHostName {
-		p.Host = ""
 	}
 
 	tui, verr := d.switchTarget(cs, p)
@@ -59,10 +51,6 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 		return nil, verr
 	}
 	clientID := tui.clientID
-
-	if p.Host != "" {
-		return d.switchToHost(tui, p)
-	}
 
 	created := false
 	sess, _ := d.manager.ResolveSession(p.Name)
@@ -124,31 +112,6 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 		return nil, newVerbError(ErrVerbCommandFailed, "the client did not switch to "+sess.Name()+". Its screen says why")
 	}
 	return out, nil
-}
-
-// switchToHost has the client open a session on another machine. The client
-// holds the link and makes the attach, and answers once it has landed.
-func (d *Daemon) switchToHost(tui *connState, p switchSessionParams) (any, *verbError) {
-	args := []string{p.Name, p.Host, "", p.Cwd}
-	if p.Create {
-		args[2] = "create"
-	}
-	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-		CommandType: "switch_session",
-		TapeArgs:    args,
-	}, routedVerbTimeout)
-	if err != nil {
-		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
-	}
-	if !res.Success {
-		return nil, newVerbError(ErrVerbCommandFailed, nonEmpty(res.Message, "the client refused the switch"))
-	}
-	return map[string]any{
-		"type":      "session_switched",
-		"session":   p.Name,
-		"host":      p.Host,
-		"client_id": tui.clientID,
-	}, nil
 }
 
 // switchTarget picks the client a switch moves. See verbSwitchSession.

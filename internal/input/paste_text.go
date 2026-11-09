@@ -61,9 +61,7 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		return typed(o.WorktreePromptType)
 	case o.PluginApprovalOpen(), o.IntegrationAskOpen():
 		return nil
-	case o.CopyDialogOpen():
-		return typed(o.CopyDialogPaste)
-	case o.TransfersOwnsKeys(), o.ShowTapeReview:
+	case o.ShowTapeReview:
 		return nil
 	case o.SidebarFocused && !o.PanelOwnsKeyboard():
 		return nil
@@ -192,11 +190,6 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 			o.LayoutPickerQuery += s
 			o.LayoutPickerSelected = 0
 			o.LayoutPickerScroll = 0
-		}), true
-	case o.ShowHostPicker:
-		return typed(func(s string) {
-			o.HostPickerQuery += s
-			o.HostPickerSelected = app.FirstPickableHostRow(app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery))
 		}), true
 	}
 	return nil, false

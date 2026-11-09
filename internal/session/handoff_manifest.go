@@ -172,6 +172,18 @@ func (mw *manifestWriter) finish() (int64, error) {
 	return mw.n, mw.w.Flush()
 }
 
+// countingReader adds to n the bytes read through it.
+type countingReader struct {
+	r io.Reader
+	n *atomic.Int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n.Add(int64(n))
+	return n, err
+}
+
 // readHandoffManifest reads a whole manifest from r.
 func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
 	var read atomic.Int64

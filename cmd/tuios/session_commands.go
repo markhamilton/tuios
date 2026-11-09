@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -265,17 +266,10 @@ func runNewSession(sessionName string) error {
 // without launching the TUI. The session holds an initial window, is usable by
 // control verbs immediately, and can be attached later with 'tuios attach'.
 func runNewSessionDetached(sessionName string) error {
-	return newSessionDetached(sessionName, false)
+	return newSessionDetached(sessionName)
 }
 
-// runNewGlobalSessionDetached creates a global session: one meant to hold
-// panes from more than one machine. It is created with no windows, since every
-// window in it names the machine it runs on.
-func runNewGlobalSessionDetached(sessionName string) error {
-	return newSessionDetached(sessionName, true)
-}
-
-func newSessionDetached(sessionName string, global bool) error {
+func newSessionDetached(sessionName string) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
@@ -298,14 +292,7 @@ func newSessionDetached(sessionName string, global bool) error {
 		sessionName = generateUniqueSessionName(existing)
 	}
 
-	var err error
-	if global {
-		// A global session has no window of its own to start anywhere.
-		err = client.CreateGlobalSession(sessionName, 80, 24)
-	} else {
-		err = client.CreateDetachedSessionIn(sessionName, 80, 24, newSessionDir)
-	}
-	if err != nil {
+	if err := client.CreateDetachedSessionIn(sessionName, 80, 24, newSessionDir); err != nil {
 		return err
 	}
 
@@ -388,14 +375,6 @@ func runNewSessionInSpace(sessionName, space string, detach bool) error {
 }
 
 func runDaemonSession(sessionName string, createNew bool) error {
-	return runDaemonSessionOn("", sessionName, createNew)
-}
-
-// runDaemonSessionOn is runDaemonSession with the daemon chosen: this
-// machine's for an empty host, or the daemon on a host from the [hosts] table,
-// reached through this machine's daemon over its link. The client is the same
-// either way, and so is everything it draws.
-func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// Every path into the TUI funnels through here, so this is the one place
 	// that guarantees the terminal can host it before the screen is taken over.
 	if err := checkTerminal(); err != nil {
@@ -405,7 +384,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// Written first, so it has reached any pane it is going to reach by the
 	// time the attach arrives. See session/nest_probe.go.
 	var probe session.NestProbe
-	if host == "" && session.NestProbeSafe(os.Getenv("TERM")) {
+	if session.NestProbeSafe(os.Getenv("TERM")) {
 		probe = session.WriteNestProbe(os.Stdout)
 	}
 
@@ -441,8 +420,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	client.SetNestProbe(probe)
 	// This process runs where the person is, so its agent socket is theirs.
 	// The daemon decides whether to follow it: see
-	// internal/session/ssh_agent_follow.go. Through a host it goes to this
-	// machine's daemon, whose link forwards it, not to the host.
+	// internal/session/ssh_agent_follow.go.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
 	// The display this process runs in, for a daemon started without one.
 	// See internal/session/display_follow.go.
@@ -450,12 +428,12 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The person's terminal, for the panes of a session this attach makes.
 	// The detached and verb paths send it too.
 	client.UseCallerTerm()
-	if host == "" && createNew {
+	if createNew {
 		// tuios new may supply --cwd. The daemon ignores the directory if
 		// this attach finds a session that already exists.
 		client.StartDir = newSessionDir
 	}
-	if host == "" && sessionName == "" && client.StartDir == "" {
+	if sessionName == "" && client.StartDir == "" {
 		// A bare local attach may create the default session. Its first
 		// window starts where this client was invoked, not where the daemon
 		// happened to start.
@@ -473,23 +451,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// later; this only stops the interval in between from being a lie.
 	width, height := hostTerminalSize()
 
-	if host == "" {
-		if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
-			return explainDialError(err)
-		}
-	} else {
-		if _, err := client.ConnectThroughHost(host, version, width, height, clientCaps); err != nil {
-			return explainHostConnectError(host, err)
-		}
+	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
+		return explainDialError(err)
 	}
 	clientLogf("[CLIENT] Connected to daemon")
-
-	if host != "" && sessionName == "" && createNew {
-		// The far side's daemon picks nothing on its own for an empty name,
-		// so the first free name there is chosen here, from what it listed
-		// at the handshake.
-		sessionName = generateUniqueSessionName(client.AvailableSessionNames())
-	}
 
 	// An older daemon reads no -d and attaches beside the other clients.
 	// Said before the TUI takes the screen, so the person knows why.
@@ -504,9 +469,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		_ = client.Close()
 		if nested, ok := session.AsNestedAttach(err); ok {
 			return explainNestedAttach(nested, names)
-		}
-		if host != "" {
-			return explainMissingHostSession(host, sessionName, names, err)
 		}
 		if current, ok := session.RenamedSessionTarget(err); ok {
 			return &diagnosticError{
@@ -550,10 +512,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     client.SessionName(),
-		// Only a local attach asks for it, and only with --terminal-mode.
-		StartInTerminalMode: host == "" && attachTerminalMode,
-		AfterRestart:        host == "" && attachAfterRestart,
-		AttachedHost:        host,
+		// Only with --terminal-mode.
+		StartInTerminalMode: attachTerminalMode,
+		AfterRestart:        attachAfterRestart,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
 		// and nothing can order their writes against a frame.
@@ -595,9 +556,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// it running (leader d). Both exit normally, so QuitRequested is what tells
 	// the two apart and picks the message the user sees.
 	killed := false
-	exitHost := host
-	// The client the app ended on, which is not this one after a switch to a
-	// session on a host: that switch opens a new client.
+	// The client the app ended on.
 	exitClient := client
 	var restartExec *app.RestartExec
 	var restartFail *app.RestartFailure
@@ -610,7 +569,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		if name := finalOS.SessionName; name != "" {
 			exitSession = name
 		}
-		exitHost = finalOS.AttachedHost
 		killed = finalOS.QuitRequested
 		// Syncing state back is meaningful only for a detach, while the session
 		// still exists. A quit already killed it, a kill from elsewhere left no
@@ -654,15 +612,11 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// failed here, so the reason is printed and the exit status is 0.
 	if reason == app.ExitDetached {
 		fmt.Println(exitClient.DetachedReason())
-		where := ""
-		if exitHost != "" {
-			where = " on " + exitHost
-		}
-		fmt.Printf("Detached from session '%s'%s.\n", exitSession, where)
+		fmt.Printf("Detached from session '%s'.\n", exitSession)
 		return nil
 	}
 
-	return reportSessionExit(exitSession, exitHost, reason, killed)
+	return reportSessionExit(exitSession, reason, killed)
 }
 
 // reportSessionExit prints why the client stopped and returns an error for the
@@ -673,14 +627,8 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 // session (leader q) from a detach that left it running (leader d). They read
 // differently on the way out so the user is not told a session was detached when
 // it was in fact destroyed.
-func reportSessionExit(sessionName, host string, reason app.ExitReason, killed bool) error {
+func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) error {
 	switch reason {
-	case app.ExitHostLost:
-		return &diagnosticError{
-			What:  fmt.Sprintf("The link to %s closed and did not come back.", host),
-			Cause: "ssh to the host dropped, or its daemon stopped. tuios dialed again and stopped. The session keeps running on " + host + ".",
-			Fix:   "run 'tuios hosts' to see the link, then 'tuios attach --host " + host + " " + sessionName + "' to attach again.",
-		}
 
 	case app.ExitSessionKilled:
 		return &diagnosticError{
@@ -697,14 +645,10 @@ func reportSessionExit(sessionName, host string, reason app.ExitReason, killed b
 		}
 
 	default:
-		where := ""
-		if host != "" {
-			where = " on " + host
-		}
 		if killed {
-			fmt.Printf("Killed session '%s'%s.\n", sessionName, where)
+			fmt.Printf("Killed session '%s'.\n", sessionName)
 		} else {
-			fmt.Printf("Detached from session '%s'%s.\n", sessionName, where)
+			fmt.Printf("Detached from session '%s'.\n", sessionName)
 		}
 		return nil
 	}
@@ -1021,7 +965,7 @@ func runKillSession(sessionName string) error {
 		return t.explain("kill-session", err)
 	}
 
-	fmt.Printf("Killed session '%s'%s.\n", t.session, t.on())
+	fmt.Printf("Killed session '%s'.\n", t.session)
 	return nil
 }
 
@@ -1362,3 +1306,24 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 // stopDaemon and forceKillCommand are defined in platform-specific files:
 // - session_commands_unix.go for Unix/Linux/macOS
 // - session_commands_windows.go for Windows
+
+// holdAfter keeps the terminal open after a failure until enter is pressed,
+// when asked to. A pane the rail opened for this command closes the moment it
+// exits, and a message nobody had time to read is the same as no message.
+func holdAfter(err error, hold bool) error {
+	if !hold || err == nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, err.Error())
+	fmt.Fprint(os.Stderr, "Press enter to close.")
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	return heldError{}
+}
+
+// heldError is what holdAfter returns after it has already printed and held.
+// Its text is empty so main prints nothing more, and its status is the plain
+// failure code.
+type heldError struct{}
+
+func (heldError) Error() string   { return "" }
+func (heldError) ExitStatus() int { return 1 }

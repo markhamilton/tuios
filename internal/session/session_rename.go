@@ -134,7 +134,7 @@ func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.
 // count, since a process can set that itself. The verbs in renameNotFollowed
 // are left as sent, as followRenamedSession leaves them.
 func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessage) json.RawMessage {
-	if renameNotFollowed[verb] || cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
+	if renameNotFollowed[verb] || cs == nil || cs.paneOnly || len(params) == 0 {
 		return params
 	}
 	var named struct {

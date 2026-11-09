@@ -303,8 +303,7 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 		o.SidebarFileCut()
 	case sidebarActFilePaste:
 		return o.SidebarFilePaste()
-	case sidebarActFileSend:
-		return o.SidebarFileSend()
+
 	case sidebarActFileInsertPath:
 		o.SidebarFileInsert()
 	case sidebarActFileQuickLook:

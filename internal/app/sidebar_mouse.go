@@ -2,7 +2,6 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -13,19 +12,12 @@ import (
 // the plain click (switch or toggle).
 type sidebarDragState struct {
 	PressActive bool
-	// SessionID is the pressed row's session, or its host name when Host is
-	// set: the gesture then reorders the machine groups rather than the
-	// sessions, and a plain click folds the group.
+	// SessionID is the pressed row's session.
 	SessionID string
-	Host      bool
 	PressX    int
 	PressY    int
 	Dragging  bool
 	Order     []string
-	// PinnedTold says this gesture has already answered a drag on the machine
-	// that cannot be dragged. Motion arrives on every cell the pointer crosses,
-	// and a toast per cell is not an answer.
-	PinnedTold bool
 }
 
 // sidebarEdgeState is the width-resize gesture on the rail's edge rule. A left
@@ -449,14 +441,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
 		m.SidebarNewWindow(hit.SessionID)
-	case sidebarRowHostSession:
-		m.openRemoteSession(hit.SessionID, hit.WindowID)
-	case sidebarRowHostNew:
-		m.createRemoteSession(hit.SessionID)
-	case sidebarRowHostSignIn:
-		m.queueSidebarCmd(m.openHostSignIn(hit.SessionID))
-	case sidebarRowGlobalNew:
-		m.SidebarNewGlobalSession()
 	case sidebarRowRailPaneStart:
 		m.RestartRailPane()
 	case sidebarRowCollapse:
@@ -485,16 +469,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
 			SessionID:   hit.SessionID,
-			PressX:      x,
-			PressY:      y,
-		}
-	case sidebarRowHost:
-		// The same gesture as a session row: a release on the row folds the
-		// group, a drag reorders the machines.
-		m.SidebarDrag = sidebarDragState{
-			PressActive: true,
-			SessionID:   hit.SessionID,
-			Host:        true,
 			PressX:      x,
 			PressY:      y,
 		}
@@ -645,20 +619,12 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
 		m.SidebarNewWindow(hit.SessionID)
-	case sidebarRowHostSession:
-		m.openRemoteSession(hit.SessionID, hit.WindowID)
-	case sidebarRowHostNew:
-		m.createRemoteSession(hit.SessionID)
-	case sidebarRowHostSignIn:
-		m.queueSidebarCmd(m.openHostSignIn(hit.SessionID))
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
 		if !m.sidebarRepoGotoMain(hit.SessionID) {
 			m.SidebarToggleRepoCollapsed(hit.SessionID)
 		}
-	case sidebarRowHost:
-		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -694,31 +660,11 @@ func (m *OS) sidebarDragMotion(x, y int) bool {
 		if y == d.PressY {
 			return true // horizontal jitter is still a click
 		}
-		if d.Host && d.SessionID == federation.LocalHostName {
-			// This machine is pinned first. Its header folds and is not dragged,
-			// and it says so once per gesture rather than sitting still: a
-			// header that does not move under the pointer is how a person
-			// decides the rail cannot be reordered at all.
-			if !d.PinnedTold {
-				d.PinnedTold = true
-				m.sidebarSayMachinePinned()
-			}
-			return true
-		}
 		d.Dragging = true
-		if d.Host {
-			d.Order = append([]string(nil), m.SidebarHostIDs...)
-		} else {
-			d.Order = append([]string(nil), m.SidebarSessionIDs...)
-		}
+		d.Order = append([]string(nil), m.SidebarSessionIDs...)
 	}
 
-	var targetID string
-	if d.Host {
-		targetID = m.sidebarHostRowIDAt(y)
-	} else {
-		targetID = m.sidebarSessionRowIDAt(y)
-	}
+	targetID := m.sidebarSessionRowIDAt(y)
 	if targetID == "" || targetID == d.SessionID {
 		return true
 	}
@@ -768,32 +714,9 @@ func (m *OS) sidebarSessionRowIDAt(y int) string {
 	return id
 }
 
-// sidebarHostRowIDAt is sidebarSessionRowIDAt for the machine groups: the
-// machine whose group holds screen row y, which is the last machine header at
-// or above it. This machine's group is never an answer, since it is pinned
-// first and nothing can be dropped over it.
-func (m *OS) sidebarHostRowIDAt(y int) string {
-	id, first := "", ""
-	for _, h := range m.SidebarHits {
-		if h.Kind != sidebarRowHost || h.SessionID == federation.LocalHostName {
-			continue
-		}
-		if first == "" {
-			first = h.SessionID
-		}
-		if y >= h.Y0 {
-			id = h.SessionID
-		}
-	}
-	if id == "" {
-		return first
-	}
-	return id
-}
-
 // SidebarRelease finishes the click-or-drag gesture: a drag commits its draft
 // order and persists it; a plain release on the pressed row attaches to that
-// session, or folds that machine's group. One gesture, one meaning: a release
+// session. One gesture, one meaning: a release
 // on the session already attached is simply nothing to do.
 func (m *OS) SidebarRelease(x, y int) bool {
 	if m.secondaryRailView.drag.PressActive || m.secondaryRailView.drag.Dragging {
@@ -810,12 +733,7 @@ func (m *OS) sidebarRelease(x, y int) bool {
 	m.SidebarDrag = sidebarDragState{}
 
 	if d.Dragging {
-		if d.Host {
-			m.SidebarHostOrder = d.Order
-			m.saveSidebarState()
-		} else {
-			m.commitSessionOrder(d.Order)
-		}
+		m.commitSessionOrder(d.Order)
 		return true
 	}
 
@@ -823,10 +741,7 @@ func (m *OS) sidebarRelease(x, y int) bool {
 	if !ok || hit.SessionID != d.SessionID {
 		return true // the pointer left the row; the click is void
 	}
-	switch {
-	case d.Host && hit.Kind == sidebarRowHost:
-		m.SidebarToggleHostCollapsed(hit.SessionID)
-	case !d.Host && hit.Kind == sidebarRowSession:
+	if hit.Kind == sidebarRowSession {
 		m.sidebarSwitchSession(hit.SessionID)
 	}
 	return true
@@ -912,7 +827,7 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
 	// A session row is always on the attached machine: rows under another
 	// machine are sidebarRowHostSession hits and go through openRemoteSession.
-	m.openSession("", sessionID)
+	m.openSession(sessionID)
 }
 
 // sidebarFocusWindow focuses the window a window row points at, switching session
@@ -953,7 +868,7 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	}
 	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
-		if !m.openSession("", hit.SessionID) {
+		if !m.openSession(hit.SessionID) {
 			return -1, false
 		}
 	}
@@ -977,19 +892,6 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
-	case sidebarRowHost:
-		// A machine's header. Its menu says where the machine sits among the
-		// others, and the rows that move it act on the rail's cursor, so the
-		// cursor goes to the header the pointer named first. Right-clicking a
-		// pane focuses that pane for the same reason.
-		if hit.SessionID == "" {
-			m.openRailSettingsMenu(x, y)
-			return
-		}
-		m.sidebarSetCursorToHit(hit)
-		cm.Target = CtxTargetMachine
-		cm.SessionID = hit.SessionID
-		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
 	case sidebarRowRepo:
 		// A repository's group header. Its row names a repository, which is the
 		// one thing a right-click on it can act on: a worktree of that
@@ -1006,13 +908,6 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		// a field of its own so no session action can be handed it.
 		cm.Repo = hit.SessionID
 		cm.Title, cm.Items = m.repoHeaderMenu(hit.SessionID)
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew:
-		// A session on another machine. It is not a local session and has no
-		// per-row menu in this release, so the right-click opens the rail's own
-		// settings the way a click on blank rail would, rather than building a
-		// session menu for a name that is not a local session.
-		m.openRailSettingsMenu(x, y)
-		return
 	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
 		// A listing row's menu is about the row the pointer is on, and the
 		// pointer does not have to take the keyboard cursor there first: the

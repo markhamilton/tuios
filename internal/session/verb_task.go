@@ -54,19 +54,13 @@ func (d *Daemon) taskCallerOf(cs *connState, verb string, sess *Session, nonce s
 		}
 		return taskCaller{by: queueByHuman, any: true}, nil
 	}
-	if cs != nil && cs.viaLink {
-		cs.mu.Lock()
-		peer := cs.linkPeer
-		cs.mu.Unlock()
-		return taskCaller{by: queueByLinkPrefix + firstNonEmpty(peer, "*"), any: true}, nil
-	}
 	pa := d.paneAuthority(cs)
 	switch {
 	case pa == nil:
 		return taskCaller{by: queueByShell, any: true}, nil
 	case pa.plugin != "":
 		return taskCaller{by: "plugin:" + pa.plugin, any: true}, nil
-	case pa.hosted || pa.window == unplacedWindow:
+	case pa.window == unplacedWindow:
 		return taskCaller{}, hintedVerbError(ErrVerbForbidden, verb+" is refused: the caller's pane could not be placed in a session of this daemon", &VerbHint{
 			Detail: "Nothing changed. A card is held by a pane of its session, and this caller is in none here.",
 		})

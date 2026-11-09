@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +22,7 @@ func newSwitchSessionCmd() *cobra.Command {
 		jsonOut     bool
 	)
 	cmd := &cobra.Command{
-		Use:   "switch-session [HOST:]NAME",
+		Use:   "switch-session NAME",
 		Short: "Switch an attached client to another session",
 		Long: `Switch an attached client to another session in place, the way the
 session switcher does. Nothing is nested.
@@ -34,9 +33,6 @@ The client to switch is:
   - else, from a pane, the client that shows the pane's session
   - else the only client attached
 
-HOST is a machine from the [hosts] table. Without HOST the session is on
-this machine.
-
 With --create a missing session is created first. --cwd sets the
 directory its windows start in.`,
 		Example: `  # From a pane: show the session api
@@ -44,9 +40,6 @@ directory its windows start in.`,
 
   # Show api, and create it in ~/dev/api if it is missing
   tuios switch-session --create --cwd ~/dev/api api
-
-  # Show the session api on the machine named build
-  tuios switch-session build:api
 
   # From outside tuios: switch the client that shows work
   tuios switch-session -s work api`,
@@ -56,22 +49,17 @@ directory its windows start in.`,
 			if cwd != "" && !create {
 				return fmt.Errorf("--cwd sets the directory of a session --create makes. Add --create")
 			}
-			target := federation.ParseSessionTarget(args[0])
-			if target.Session == "" {
+			if args[0] == "" {
 				return fmt.Errorf("name the session to switch to")
 			}
-			host := target.Host
-			if host == federation.LocalHostName {
-				host = ""
-			}
-			if cwd != "" && host == "" {
+			if cwd != "" {
 				abs, err := checkSessionDir(cwd)
 				if err != nil {
 					return err
 				}
 				cwd = abs
 			}
-			return runSwitchSession(target.Session, host, fromSession, clientID, create, cwd, jsonOut)
+			return runSwitchSession(args[0], fromSession, clientID, create, cwd, jsonOut)
 		},
 	}
 	cmd.Flags().StringVarP(&fromSession, "session", "s", "", "Switch the client that shows this session")
@@ -83,7 +71,7 @@ directory its windows start in.`,
 	return cmd
 }
 
-func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd string, jsonOut bool) error {
+func runSwitchSession(name, fromSession, clientID string, create bool, cwd string, jsonOut bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -91,9 +79,6 @@ func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd
 	defer func() { _ = client.Close() }()
 
 	params := map[string]any{"name": name}
-	if host != "" {
-		params["host"] = host
-	}
 	if create {
 		params["create"] = true
 	}
@@ -124,7 +109,6 @@ func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd
 	}
 	var res struct {
 		Session string `json:"session"`
-		Host    string `json:"host"`
 		Created bool   `json:"created"`
 		Already bool   `json:"already"`
 	}
@@ -132,9 +116,6 @@ func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	where := res.Session
-	if res.Host != "" {
-		where = res.Session + " on " + res.Host
-	}
 	switch {
 	case res.Already:
 		fmt.Printf("The client already shows session %s.\n", where)

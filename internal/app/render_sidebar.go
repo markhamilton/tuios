@@ -91,19 +91,6 @@ const (
 	// index in the WindowIndex field, which is the only integer a row hit has;
 	// nothing in this section points at a window, so the field is free.
 	sidebarRowFileEntry
-	// sidebarRowHostSession is one session on another machine. Activating it
-	// opens that session in this client over the link, and on a host that is
-	// not up it asks for the link first (host_open.go). It carries the host
-	// name in SessionID and the remote session name in WindowID.
-	sidebarRowHostSession
-	// sidebarRowHostNew is the "+" on an up host's header. Activating it
-	// creates a session on that machine and opens it. It carries the host name
-	// in SessionID.
-	sidebarRowHostNew
-	// sidebarRowHostSignIn is the "sign in" label on the header of a host
-	// that waits for a Tailscale sign-in. Activating it opens the sign-in
-	// page. It carries the host name in SessionID. See host_signin.go.
-	sidebarRowHostSignIn
 	// sidebarRowDivider is the rule above the pinned section. Dragging it moves
 	// the split between that section and the ones over it; a double-click, or
 	// enter with the cursor on it, resets the split. See sidebar_split.go.
@@ -116,16 +103,6 @@ const (
 	// has a header in each, and the cursor tells them apart by that. See
 	// sidebar_worktrees.go.
 	sidebarRowRepo
-	// sidebarRowHost is a machine's group header in the sessions section, over
-	// that machine's sessions. Activating it folds the group shut or opens it
-	// again, and dragging it reorders the machines. It carries the host name in
-	// SessionID. See sidebar_hosts.go.
-	sidebarRowHost
-	// sidebarRowGlobalNew is the "+" on the global group's header. Activating
-	// it creates another global session and switches to it. It is its own kind
-	// rather than the machine header's "+" because the global group is not a
-	// machine: there is no daemon called "global" to create a session on.
-	sidebarRowGlobalNew
 	// sidebarRowAgentFold is the "+3 at rest" line under the agents section:
 	// the rows at rest past appearance.sidebar.agent_rest_fold, folded into
 	// one. Activating it shows them until the rail loses the keyboard. See
@@ -626,13 +603,7 @@ type sidebarTerminalEntry struct {
 	// workspace this client cannot know. Resolved where the session's context is
 	// still in hand, so the row itself does not have to go looking for it.
 	Tag string
-	// Host is the machine the pane's process runs on, empty for this one. A
-	// session can hold panes from several machines, and which one a pane is on
-	// decides what a command typed into it does, so the row says it.
-	Host string
-	// HostLink is the state of the link to Host when it is not up, such as
-	// "reconnecting", and empty otherwise. See sidebarTerminalHostLabel.
-	HostLink string
+
 	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
 	// this client is not attached to.
 	WindowIndex int
@@ -1434,11 +1405,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.motion.rail = m.motion.rail[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
-	// Colours are arbitrated over this machine's sessions only. A remote row
-	// draws in its host group's muted ink, and letting one into the arbitration
-	// would move a local session's colour because a machine somewhere else
-	// gained a session.
-	m.refreshSessionColorsFor(localSessionNodes(tree.Sessions))
+	m.refreshSessionColorsFor(tree.Sessions)
 
 	// Re-armed each frame: a marquee row sets it, so a key left standing after
 	// the row stops drawing st.lit() means the scroll is over and the tick idles.
@@ -1510,20 +1477,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sessions = orderByKey(sessions, func(n sessiontree.Node) string { return n.ID }, m.SidebarDrag.Order)
 	}
 	for _, s := range sessions {
-		if isRemoteNode(s) {
-			// A remote row is not addressable, so it is not in the id list the
-			// mouse resolves a click against.
-			continue
-		}
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs, s.ID)
 	}
 
 	if variant == sidebarVariantGlyph {
 		// The strip lays its own ground, so it composes its lines itself rather
-		// than borrowing the expanded rail's bare-canvas edge. Host groups stay
-		// out of it: three columns cannot say which machine a row is on, and a
-		// row that cannot say that must not sit beside the local ones.
-		return m.sidebarStripLines(localSessionNodes(sessions), w, cw, height, topMargin, sidebarX, pal, edgeLeft)
+		// than borrowing the expanded rail's bare-canvas edge.
+		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, pal, edgeLeft)
 	}
 
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a
@@ -2106,10 +2066,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	drawSessions := func() {
 		add := ""
 		const label = "sessions"
-		// With the section laid out by machine, each machine's header carries
-		// its own control and the section header none: two "+" for one
-		// machine would be one more than the rail can explain.
-		if canCreate && len(m.SidebarHostIDs) == 0 {
+		if canCreate {
 			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label, &m.Settings),
 				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings, nil); ok {
 				add = tok
@@ -2130,7 +2087,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				break
 			}
 		}
-		sessionIdx := localSessionIndexes(sessions)
+		sessionIdx := railSessionIndexes(sessions)
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
@@ -2152,18 +2109,14 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
-			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false), canCreate, showCounts,
-					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
-				continue
-			}
+
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
 			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
-			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
+			lines = append(lines, overflowRow(h, 0))
 		}
 	}
 
@@ -2654,12 +2607,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			DoneSeen:    win.DoneSeen,
 			Subagents:   win.Subagents,
 			Focused:     win.IsCurrent,
-			Host:        win.Host,
 			WindowIndex: -1,
-		}
-		// A pane whose link is lost says so beside its machine, in words.
-		if win.Host != "" {
-			e.HostLink = win.HostLink
 		}
 		if node.IsCurrent {
 			e.WindowIndex = m.windowIndexByID(win.ID)
@@ -2777,7 +2725,6 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				PR:           pr,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
-				Host:         s.Host,
 				Focused:      s.IsCurrent && win.IsCurrent,
 			})
 		}
@@ -2803,19 +2750,6 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	case sidebarRowRepo:
 		for i, s := range sessions {
 			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID && s.Space == target.WindowID {
-				return sidebarSectionSessions, i, true
-			}
-		}
-	case sidebarRowHost, sidebarRowHostNew, sidebarRowHostSignIn:
-		for i, s := range sessions {
-			if s.Kind == sessiontree.KindHost && s.Host == target.SessionID {
-				return sidebarSectionSessions, i, true
-			}
-		}
-	case sidebarRowHostSession:
-		for i, s := range sessions {
-			if s.Kind == sessiontree.KindSession && s.Host == target.SessionID &&
-				remoteSessionName(s) == target.WindowID {
 				return sidebarSectionSessions, i, true
 			}
 		}
@@ -3214,22 +3148,8 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	// workspace it is on, so the row answers "where did it go" without a switch
 	// to find out. A pane on this workspace says nothing, because "here" is not
 	// information.
-	// The machine outranks the workspace in this slot. Both are orientation,
-	// but a workspace is where a pane is filed and a machine decides what a
-	// command typed into it does, so when only one of them fits it is this one.
-	// They are shown together when there is room for both.
 	right, rightW := "", 0
-	host := sidebarTerminalHostLabel(e, cw)
-	switch {
-	case host != "" && e.Tag != "" && sidebarNameAvail(cw, lipgloss.Width(host+" "+e.Tag)) >= sidebarHostTagFloor:
-		label := host + " " + e.Tag
-		right = sidebarStyle(rowBg, pal.AccentBright).Render(host) +
-			sidebarStyle(rowBg, pal.FgMute).Render(" "+e.Tag)
-		rightW = lipgloss.Width(label)
-	case host != "":
-		right = sidebarStyle(rowBg, pal.AccentBright).Render(host)
-		rightW = lipgloss.Width(host)
-	case e.Tag != "":
+	if e.Tag != "" {
 		right = sidebarStyle(rowBg, pal.FgMute).Render(e.Tag)
 		rightW = lipgloss.Width(e.Tag)
 	}
@@ -3260,29 +3180,6 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	}
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
-
-// sidebarTerminalHostLabel is what a pane row says about its machine: the
-// machine, and beside it the link's state while the link is not up. When both
-// do not fit with sidebarHostTagFloor cells of the pane's own name, as on the
-// shipped 24 column rail, the link's state goes on alone: it says the screen
-// has stopped, which matters more than which machine it stopped on, and the
-// pane's frame still names the machine.
-func sidebarTerminalHostLabel(e sidebarTerminalEntry, cw int) string {
-	if e.Host == "" || e.HostLink == "" {
-		return e.Host
-	}
-	full := e.Host + " " + e.HostLink
-	if sidebarNameAvail(cw, lipgloss.Width(full)) >= sidebarHostTagFloor {
-		return full
-	}
-	return e.HostLink
-}
-
-// sidebarHostTagFloor is how much of a pane's own name has to survive before
-// the row spends its width saying both the machine and the workspace. Below it
-// the machine goes on alone, because a row that names two places and none of
-// its own pane has stopped being a list of panes.
-const sidebarHostTagFloor = 8
 
 // workspaceTag is the quiet right-hand mark saying which workspace a pane sits
 // on. A named workspace says its name, because that is the thing the user gave

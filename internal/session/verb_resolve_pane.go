@@ -68,7 +68,7 @@ func (d *Daemon) localPaneShells() []paneShell {
 		state := sess.GetState()
 		for i := range state.Windows {
 			w := &state.Windows[i]
-			if w.Host != "" || w.PTYID == "" {
+			if w.PTYID == "" {
 				continue
 			}
 			pty := sess.GetPTY(w.PTYID)

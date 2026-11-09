@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -129,7 +128,7 @@ func runListAgents(sessionName string, all, allSessions bool, selector string, j
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAgentList(os.Stdout, raw, all, t.on())
+	return printAgentList(os.Stdout, raw, all, "")
 }
 
 func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error {
@@ -245,12 +244,6 @@ func senderPane(from string) string {
 func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, to)
 	if err != nil {
-		// A machine whose link is down cannot be reached now, and mail is the
-		// one thing that can wait for it: this machine's daemon keeps it and
-		// delivers it when the link is back.
-		if host, sess, window, rerr := resolveTarget(sessionName, to); rerr == nil && host != "" && hostUnreachable(err) {
-			return queueAgentMessage(host, sess, window, from, subject, text, replyTo, attachments, jsonOutput)
-		}
 		return err
 	}
 	defer t.Close()
@@ -262,12 +255,7 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	if from != "" {
 		params["from"] = from
 	}
-	if t.host != "" {
-		// The far daemon keeps this as the sender's claim about where it is,
-		// and shows it beside the message. It is the one thing a reader
-		// there has to tell this machine's agents from its own.
-		params["from_host"] = thisMachine()
-	}
+
 	if subject != "" {
 		params["subject"] = subject
 	}
@@ -275,13 +263,6 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		params["reply_to"] = replyTo
 	}
 	if len(attachments) > 0 {
-		if t.host != "" {
-			// A path here means nothing there, so each file here goes into
-			// the far session's stash first and its stored path is attached.
-			if attachments, err = stashAttachments(t, attachments, os.Stderr); err != nil {
-				return reportVerbError(err, jsonOutput)
-			}
-		}
 		params["attachments"] = attachments
 	}
 
@@ -310,77 +291,13 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		thread = fmt.Sprintf(" in thread %d", res.ThreadID)
 	}
 	if res.To == "" {
-		fmt.Printf("notice %d posted to the session%s%s\n", res.MessageID, t.on(), thread)
+		fmt.Printf("notice %d posted to the session%s\n", res.MessageID, thread)
 	} else {
-		fmt.Printf("message %d queued for %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
+		fmt.Printf("message %d queued for %s (%s)%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), thread)
 	}
 	if res.ReplyToMissing {
 		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
 	}
-	return nil
-}
-
-// hostUnreachable reports whether a failed connection to a host failed because
-// its link is down, rather than because the name is wrong or the far machine
-// refused.
-func hostUnreachable(err error) bool {
-	if connect, ok := errors.AsType[*session.HostConnectError](err); ok {
-		return connect.Code == session.ErrVerbHostUnreachable
-	}
-	var call *session.VerbCallError
-	return errors.As(err, &call) && call.Code == session.ErrVerbHostUnreachable
-}
-
-// queueAgentMessage hands a message for a machine whose link is down to this
-// machine's daemon, which keeps it and delivers it when the link comes back.
-// The session there has to be named: which session is most recent on a
-// machine that cannot be asked is not known here.
-func queueAgentMessage(host, sess, window, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
-	if sess == "" {
-		return fmt.Errorf("the link to %s is down, so a message can only wait for it with the session named: -s %s:SESSION", host, host)
-	}
-	client, err := dialVerb()
-	if err != nil {
-		return reportVerbError(err, jsonOutput)
-	}
-	defer func() { _ = client.Close() }()
-	params := map[string]any{"host": host, "session": sess, "text": text}
-	if window != "" {
-		params["to"] = window
-	}
-	if from != "" {
-		params["from"] = from
-	}
-	if subject != "" {
-		params["subject"] = subject
-	}
-	if replyTo > 0 {
-		params["reply_to"] = replyTo
-	}
-	if len(attachments) > 0 {
-		params["attachments"] = attachments
-	}
-	raw, err := client.Call("send-agent-message", params)
-	if err != nil {
-		return reportVerbError(err, jsonOutput)
-	}
-	if jsonOutput {
-		return printVerbResult(raw, true)
-	}
-	var res struct {
-		Queued    bool   `json:"queued"`
-		MessageID uint64 `json:"message_id"`
-		Waiting   int    `json:"waiting"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-	if !res.Queued {
-		// The link came back between the two calls and the message went.
-		fmt.Printf("message %d sent to %s:%s\n", res.MessageID, host, sess)
-		return nil
-	}
-	fmt.Printf("the link to %s is down: the message waits here and goes when it is back (%d waiting). The Inbox shows it; dismissing it there discards what waits.\n", host, res.Waiting)
 	return nil
 }
 
@@ -448,7 +365,7 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAgentMessages(os.Stdout, raw, t.host)
+	return printAgentMessages(os.Stdout, raw, "")
 }
 
 // printAgentMessages prints a ring. on is the host the ring was read from,
@@ -627,9 +544,7 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 	if from != "" {
 		params["from"] = from
 	}
-	if t.host != "" {
-		params["from_host"] = thisMachine()
-	}
+
 	for name, v := range map[string]int{
 		"ready_timeout": readyTimeout, "settle": settle, "timeout": timeout, "lines": lines,
 	} {
@@ -645,7 +560,7 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAskReply(os.Stdout, raw, t.host)
+	return printAskReply(os.Stdout, raw, "")
 }
 
 // askGrace is how long the client waits for an ask-agent answer: the wait

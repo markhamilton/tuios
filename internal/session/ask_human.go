@@ -357,11 +357,6 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if cs != nil && cs.viaLink {
-		return nil, hintedVerbError(ErrVerbForbidden, "ask-human is refused over a link: a question is put to the person at this machine's clients by something on this machine", &VerbHint{
-			Detail: "Nothing was asked. Ask on the machine the person is attached to.",
-		})
-	}
 	if p.Timeout < 0 {
 		return nil, invalidParam("timeout", "timeout is milliseconds and cannot be negative")
 	}

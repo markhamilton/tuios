@@ -76,7 +76,7 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 // groupSpace is the space a node is grouped under, or "" for a node that is
 // not grouped by space at all.
 func groupSpace(n Node) string {
-	if n.Kind != KindSession || n.Host != "" || n.Global {
+	if n.Kind != KindSession {
 		return ""
 	}
 	return n.Space

@@ -74,10 +74,6 @@ func TestScratchPlan(t *testing.T) {
 		{"other panes create", func(m *OS) {
 			m.Windows = append(m.Windows, &terminal.Window{ID: "plain", CustomName: scratchName, Workspace: 1})
 		}, scratchCreate},
-		{"session on another machine creates", func(m *OS) {
-			m.IsDaemonSession, m.DaemonClient = true, &session.TUIClient{}
-			m.AttachedHost = "build"
-		}, scratchCreate},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

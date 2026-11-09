@@ -118,8 +118,6 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Program:      w.ProgramStatus,
 			Focused:      i == m.FocusedWindow,
 			Workspace:    w.Workspace,
-			Host:         w.Host,
-			HostLink:     w.HostLink,
 		})
 	}
 	name := m.SessionName
@@ -138,7 +136,6 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		Attached:         true,
 		IsCurrent:        true,
 		Restored:         m.SessionRestored,
-		Global:           m.SessionGlobal,
 		CurrentWorkspace: m.dockWorkspace(),
 		Worktree:         m.worktreeRef(m.SessionWorktree),
 		Space:            m.SessionSpace,
@@ -194,7 +191,6 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		Dir:              dir,
 		Branch:           branch,
 		Restored:         client.SessionRestored(name),
-		Global:           client.SessionGlobal(name),
 		CurrentWorkspace: client.SessionCurrentWorkspace(name),
 		Worktree:         m.worktreeRef(client.SessionWorktree(name)),
 		Space:            client.SessionSpace(name),
@@ -224,7 +220,7 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 	current := m.currentSessionInput()
 
 	if m.DaemonClient == nil {
-		return m.withHostGroups(sessiontree.Build([]sessiontree.SessionInput{current}))
+		return sessiontree.Build([]sessiontree.SessionInput{current})
 	}
 
 	names := m.DaemonClient.AvailableSessionNames()
@@ -243,27 +239,11 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		// last, which is where the creation order will put it anyway.
 		sessions = append(sessions, current)
 	}
-	// The drag order of the machine these sessions are on. Keyed by machine,
-	// because session names repeat across machines: build's session-0 must not
-	// take this machine's slot for the same name.
 	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name },
-		m.sidebarSessionOrderFor(m.attachedMachine()))
-	return m.withHostGroups(sessiontree.Build(sessions))
-}
-
-// withHostGroups appends the other machines' rows to a tree.
-//
-// They go after the attached machine's sessions, always, and after the user's
-// drag order has been applied to them. The tree's order is not the rail's: the
-// sessions section lays the machines out in its own fixed order (see
-// sidebarMachineRows), and appending here is what keeps a remote row out of
-// the surfaces that read the tree by position, which take the attached
-// machine's sessions as the prefix.
-func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
-	tree.Sessions = append(tree.Sessions, m.hostGroupNodes()...)
-	// With the agent features off no row wears an agent mark, a machine's
-	// or a session's on another machine included, whose daemon may still
-	// have them on. See agents_off.go.
+		m.sidebarSessionOrder())
+	tree := sessiontree.Build(sessions)
+	// With the agent features off no row wears an agent mark, whatever the
+	// daemon says. See agents_off.go.
 	if !m.agentsOn() {
 		clearAgentMarks(tree.Sessions)
 	}
@@ -282,14 +262,24 @@ func clearAgentMarks(nodes []sessiontree.Node) {
 // the rail's own order, wrapping at both ends, or "" when there is nowhere to go.
 // Reading the order from BuildSessionTree rather than the raw daemon listing is
 // what makes "next" mean the row below the current one even after the user has
-// dragged the rail into a different order. Only the attached machine's
-// sessions are cycled: a row on another machine is a different connection,
-// which a cycle key must not open by surprise.
+// dragged the rail into a different order.
 func (m *OS) railNeighbourSession(delta int) string {
 	return railNeighbourIn(railSessionOrder(m.BuildSessionTree().Sessions), delta)
 }
 
-// railSessionOrder is the attached machine's sessions in the order the rail's
+// railSessionIndexes maps a session's id to its 1-based position in the rail,
+// the number switch_session_N opens. It numbers railSessionOrder, the order
+// SwitchToSessionByIndex reads, so a row's label and its key agree; a folded
+// repository's sessions keep their numbers though their rows are hidden.
+func railSessionIndexes(nodes []sessiontree.Node) map[string]int {
+	indexes := make(map[string]int, len(nodes))
+	for i, s := range railSessionOrder(nodes) {
+		indexes[s.ID] = i + 1
+	}
+	return indexes
+}
+
+// railSessionOrder is the sessions in the order the rail's
 // sessions section draws them: under their space and, inside that, with a
 // repository's worktree sessions pulled up under the repository, as
 // sidebarGroupedRows lays them out. Only the session rows are kept, not the
@@ -298,7 +288,7 @@ func (m *OS) railNeighbourSession(delta int) string {
 // current session is never missing from the list. With no space and no
 // worktree record the grouping changes nothing and this is the tree's order.
 func railSessionOrder(nodes []sessiontree.Node) []sessiontree.Node {
-	rows := sessiontree.GroupBySpace(localSessionNodes(nodes), sessiontree.GroupByRepo)
+	rows := sessiontree.GroupBySpace(nodes, sessiontree.GroupByRepo)
 	sessions := make([]sessiontree.Node, 0, len(rows))
 	for _, n := range rows {
 		if n.Kind == sessiontree.KindSession {
@@ -328,13 +318,12 @@ func (m *OS) CycleSession(delta int) {
 		m.ShowNotification("No other sessions", "info", m.Settings.NotificationDuration)
 		return
 	}
-	// railNeighbourSession cycles the attached machine's sessions only.
-	m.openSession("", target)
+	m.openSession(target)
 }
 
 // SwitchToSessionByIndex attaches to the session at the rail position n
 // (0-based), the same order the rail draws the rows in and the same
-// local-only scope CycleSession cycles. Pressing a number past the sessions
+// scope CycleSession cycles. Pressing a number past the sessions
 // there are says so instead of failing inside the switch.
 func (m *OS) SwitchToSessionByIndex(n int) {
 	target, ok := m.railSessionAt(n)
@@ -345,7 +334,7 @@ func (m *OS) SwitchToSessionByIndex(n int) {
 	if target.IsCurrent {
 		return
 	}
-	m.openSession("", target.ID)
+	m.openSession(target.ID)
 }
 
 // railSessionAt is the session at the rail position n (0-based) in
@@ -405,36 +394,6 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		})
 	}
 	for _, s := range tree.Sessions {
-		// The tree carries the other machines' rows as well as this one's, and
-		// neither kind is a local session.
-		//
-		// A machine's own heading is not somewhere you can go at all. A session
-		// on another machine is, but it is reached by attaching through its
-		// host rather than by name, and its node id is a rail identity rather
-		// than a session name. Handing that id to SwitchToSession is what
-		// produced "switch to \x00host/local failed": the palette asked the
-		// daemon for a session literally called that.
-		if s.Kind == sessiontree.KindHost {
-			continue
-		}
-		if isRemoteNode(s) {
-			host, name := s.Host, remoteSessionName(s)
-			items = append(items, CommandPaletteItem{
-				Name:           sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState, s.DoneSeen, s.Subagents),
-				Shortcut:       "another machine",
-				Category:       "Sessions",
-				AgentState:     s.AgentState,
-				AgentSeen:      s.DoneSeen,
-				AgentSubagents: s.Subagents,
-				Action: func(m *OS) (*OS, tea.Cmd) {
-					m.sidebarLeaveForJump()
-					m.openRemoteSession(host, name)
-					return m, m.TakeSidebarCmd()
-				},
-			})
-			continue
-		}
-
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
@@ -451,7 +410,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 					return m, nil
 				}
 				m.sidebarLeaveForJump()
-				m.openSession("", sessionName)
+				m.openSession(sessionName)
 				return m, nil
 			},
 		})
@@ -473,7 +432,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					if !isCurrent {
-						if !m.openSession("", sessionName) {
+						if !m.openSession(sessionName) {
 							return m, nil
 						}
 					}

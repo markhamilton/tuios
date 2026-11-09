@@ -245,16 +245,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// machine its shell runs on, and a mark that names the wrong machine is
 		// read and believed. The directory goes with it, because it was a path
 		// over there and means nothing here.
-		if w.Host != "" {
-			debugLog("[DEBUG] restored window %s ran on %s; it comes back on this machine", shortID(w.ID), w.Host)
-			w.Host = ""
-			w.Cwd = ""
-			// The conversation was on that machine too, and a resume here
-			// would name one this machine does not have.
-			w.AgentSessionID = ""
-			w.AgentSessionHarness = ""
-			w.AgentFlags = nil
-		}
 
 		// The window as it was saved, for the resume offer, which asks whether
 		// an agent was running in it then.

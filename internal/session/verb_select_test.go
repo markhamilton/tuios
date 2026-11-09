@@ -126,7 +126,6 @@ func TestSendBySelectorRefusesMixedAddressing(t *testing.T) {
 		{"reply_to": 1},
 		// host sends to one session on another machine; a selector names
 		// its own hosts with a host: term.
-		{"host": "build"},
 	} {
 		params := map[string]any{"select": "harness:codex", "text": "x"}
 		maps.Copy(params, extra)
@@ -232,28 +231,5 @@ func TestWaitForSelectEveryWaitsForTheWholeSet(t *testing.T) {
 	}
 	if code := errCode(t, f.c.call(t, `{"id":4,"verb":"wait-for","params":{"condition":"agent-state","every":true,"until":"idle"}}`)); code != ErrVerbInvalidParams {
 		t.Errorf("every without select: code %q, want %q", code, ErrVerbInvalidParams)
-	}
-}
-
-// TestHostAgentsSelectReadsTheEntryHost: the host term matches the machine an
-// entry came from, and the rows of every host are narrowed alike.
-func TestHostAgentsSelectReadsTheEntryHost(t *testing.T) {
-	entries := []hostAgentsEntry{
-		{Host: "local", Agents: []remoteAgentRow{{Session: "a", WindowID: "1", State: "idle", HarnessID: "codex"}}},
-		{Host: "build", Agents: []remoteAgentRow{
-			{Session: "b", WindowID: "2", State: "idle", HarnessID: "codex"},
-			{Session: "c", WindowID: "3", State: "needs_input", HarnessID: "claude-code"},
-		}},
-	}
-	sel, err := ParseSelector("host:build harness:codex", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	filterHostAgents(entries, sel)
-	if len(entries[0].Agents) != 0 {
-		t.Errorf("host:build kept a local row: %v", entries[0].Agents)
-	}
-	if len(entries[1].Agents) != 1 || entries[1].Agents[0].WindowID != "2" || entries[1].Session != "b" {
-		t.Errorf("host:build harness:codex kept %v (session %q), want build's codex row in b", entries[1].Agents, entries[1].Session)
 	}
 }
