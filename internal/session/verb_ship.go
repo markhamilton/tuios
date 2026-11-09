@@ -37,7 +37,7 @@ import (
 // Who may do what:
 //
 //   - ship-commit and ship-merge write files a pane's agent works on, as
-//     restore-checkpoint does. They are scopeWrite, and a pane without admin
+//     send-keys does. They are scopeWrite, and a pane without admin
 //     may name only a pane it could type into (typingRefusal).
 //   - ship-push and ship-pr send work off this machine. Each first answers
 //     confirm_required with what it would send and a token, and goes ahead
@@ -264,7 +264,7 @@ func shipGitFailed(ctx context.Context, err error) *verbError {
 }
 
 // shipPaneRefusal holds a pane caller without admin to the panes it could
-// type into, as restore-checkpoint does.
+// type into, as send-keys does.
 func (d *Daemon) shipPaneRefusal(cs *connState, verb string, target WindowState) *verbError {
 	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		if why := d.typingRefusal(pa, target, true); why != "" {
@@ -289,13 +289,33 @@ func shipBusy(sess *Session, target WindowState, command string) *verbError {
 // shipCommitMessage is the default commit message: the pane's last prompt,
 // else the line its last turn ended with. Only the first line is kept.
 func (d *Daemon) shipCommitMessage(sess *Session, window string) string {
-	label := d.checkpointLabel(sess, window, "")
+	label := d.turnLabel(sess, window)
 	label, _, _ = strings.Cut(strings.TrimSpace(label), "\n")
 	label = strings.TrimSpace(label)
 	if r := []rune(label); len(r) > 100 {
 		label = strings.TrimSpace(string(r[:100]))
 	}
 	return label
+}
+
+// turnLabel is a short line for what the pane's last turn was: the newest
+// prompt its activity holds, else the line the turn ended with, else empty.
+func (d *Daemon) turnLabel(s *Session, window string) string {
+	entries, _, _ := d.activity.read(s.ID, window)
+	var ended string
+	for _, e := range slices.Backward(entries) {
+		switch e.Kind {
+		case ActivityPrompt:
+			if e.Text != "" {
+				return e.Text
+			}
+		case ActivityTurnEnd:
+			if ended == "" {
+				ended = e.Text
+			}
+		}
+	}
+	return ended
 }
 
 // verbShipCommit answers ship-commit.

@@ -130,7 +130,7 @@ func assertPlainOnTTY(t *testing.T, base string, args ...string) {
 func TestHelpExplorer(t *testing.T) {
 	base := t.TempDir()
 	term := startExplorer(t, base, "help", "-i")
-	if err := term.WaitFor(explorerShows("tuios commands", "checkpoint", "Press / to search"), uiTimeout); err != nil {
+	if err := term.WaitFor(explorerShows("tuios commands", "attach", "Press / to search"), uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: help -i did not open the explorer: %v\n%s", err, term.Snapshot())
 	}
 	explorerShot(t, term, "help-open")
@@ -160,24 +160,24 @@ func TestHelpExplorer(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.Type("checkpoint"); err != nil {
+	if err := term.Type("stash"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitFor(explorerShows("Usage: tuios checkpoint"), uiTimeout); err != nil {
-		t.Fatalf("the search for checkpoint: %v\n%s", err, term.Snapshot())
+	if err := term.WaitFor(explorerShows("Usage: tuios stash"), uiTimeout); err != nil {
+		t.Fatalf("the search for stash: %v\n%s", err, term.Snapshot())
 	}
-	col, row, ok := tuitest.Find(term.Screen(), " checkpoint list ")
+	col, row, ok := tuitest.Find(term.Screen(), " stash list ")
 	if !ok {
-		t.Fatalf("no list row under checkpoint:\n%s", term.Snapshot())
+		t.Fatalf("no list row under stash:\n%s", term.Snapshot())
 	}
 	if err := term.SendMouse(tuitest.MouseEvent{Col: col + 2, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MousePress}); err != nil {
 		t.Fatal(err)
 	}
 	_ = term.SendMouse(tuitest.MouseEvent{Col: col + 2, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseRelease})
-	if err := term.WaitFor(explorerShows("Usage: tuios checkpoint list"), uiTimeout); err != nil {
+	if err := term.WaitFor(explorerShows("Usage: tuios stash list"), uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a click on the list row did not select it: %v\n%s", err, term.Snapshot())
 	}
 	explorerShot(t, term, "help-click")
@@ -212,7 +212,7 @@ func TestHelpExplorer(t *testing.T) {
 	}
 
 	assertPlainOnTTY(t, base, "help")
-	assertPlainOnTTY(t, base, "help", "checkpoint")
+	assertPlainOnTTY(t, base, "help", "stash")
 }
 
 // TestExplorerEscLeaves: esc leaves an explorer when no search is open, and
@@ -233,7 +233,7 @@ func TestExplorerEscLeaves(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitFor(explorerShows("Press / to search", "checkpoint"), uiTimeout); err != nil {
+	if err := term.WaitFor(explorerShows("Press / to search", "attach"), uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc in the search did not clear it: %v\n%s", err, term.Snapshot())
 	}
 	if _, done := term.ExitCode(); done {

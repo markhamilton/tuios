@@ -28,7 +28,7 @@ import (
 //   - reply-approval answers the approval of an agent whose hook tuios
 //     holds: claude's edits are held, as with the tuios hooks installed;
 //   - queue-prompt types a reply into the agent's pane once it is at rest;
-//   - dismiss-attention, list-checkpoints and artifact-list do what the
+//   - dismiss-attention and artifact-list do what the
 //     daemon's do, for these agents;
 //   - start-agent and fan start agents in new panes, for the New agent
 //     sheet.
@@ -179,7 +179,7 @@ func (f *fleet) reconcile() {
 				it.DenyMessage = true
 			}
 		case v.State == "done":
-			it.ID = a.Window + "-done-" + strconv.Itoa(len(v.Checkpoints)) + "-" + strconv.Itoa(v.Rests)
+			it.ID = a.Window + "-done-" + strconv.Itoa(v.Changed) + "-" + strconv.Itoa(v.Rests)
 			if f.dismissed[it.ID] {
 				continue
 			}
@@ -242,12 +242,6 @@ func (f *fleet) call(verb string, params map[string]any, _ time.Duration) (json.
 		return f.queue(str("window"), str("text"))
 	case "dismiss-attention":
 		return f.dismiss(str("id"))
-	case "list-checkpoints":
-		a, err := agent()
-		if err != nil {
-			return reply(map[string]any{"enabled": true, "checkpoints": []any{}})
-		}
-		return reply(map[string]any{"enabled": true, "checkpoints": a.View().Checkpoints})
 	case "agent-activity":
 		a, err := agent()
 		if err != nil {

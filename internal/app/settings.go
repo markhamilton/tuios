@@ -620,6 +620,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.preferred_shell"),
 			opt("agents.fold_working"),
 			opt("review.focus"),
+			opt("review.max_untracked_mb"),
 			opt("pip.width"),
 			opt("pip.height"),
 			opt("pip.corner"),

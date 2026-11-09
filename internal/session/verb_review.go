@@ -11,11 +11,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
+
+// SetReviewMaxUntracked applies [review] max_untracked_mb: the size past
+// which review, review-stage and fan compare leave an untracked file unread.
+func (d *Daemon) SetReviewMaxUntracked(r config.ReviewConfig) {
+	d.reviewMaxUntracked.Store(r.MaxUntrackedBytes())
+}
 
 // Review: the diff of what an agent changed, the notes the person leaves on
 // it, and sending those notes to the agent.
@@ -131,7 +138,7 @@ func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Se
 // The pane's directory is its shell's, as the kernel holds it. Where that
 // cannot be read, as on native Windows, it is the folder the window started
 // in. It is never the pane's OSC 7 report: any program in the pane can print
-// one, and the daemon runs git here on every checkpoint.
+// one, and the daemon runs git here for every review.
 func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbError) {
 	cwd := sess.windowStartDir(target.ID)
 	if pty := sess.GetPTY(target.PTYID); pty != nil {
@@ -226,7 +233,7 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 
 	ctx, cancel := context.WithTimeout(d.ctx, reviewTimeout)
 	defer cancel()
-	maxUntracked := d.checkpoints.maxUntracked.Load()
+	maxUntracked := d.reviewMaxUntracked.Load()
 	opt := review.Options{Dir: repo.root, Paths: p.Paths, Context: lines, MaxUntracked: maxUntracked}
 	againstName := ""
 	if p.Index != "" {

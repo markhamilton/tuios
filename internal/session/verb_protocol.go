@@ -2402,8 +2402,6 @@ func buildVerbRegistry() map[string]verbEntry {
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
 	maps.Copy(table, taskVerbs())
-	// The checkpoint verbs. See verb_checkpoint.go.
-	maps.Copy(table, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.
 	maps.Copy(table, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.

@@ -168,7 +168,7 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 			named = p.Undo.Entries[0].Path
 		}
 	} else {
-		undo, verr = reviewStageChange(ctx, repo.root, p, ctxLines, d.checkpoints.maxUntracked.Load())
+		undo, verr = reviewStageChange(ctx, repo.root, p, ctxLines, d.reviewMaxUntracked.Load())
 	}
 	if verr != nil {
 		return nil, verr

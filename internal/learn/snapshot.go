@@ -125,7 +125,7 @@ func (k keysSnap) toMap() map[string]any {
 // the focus tab, both "" while the view is closed.
 type agentsSnap struct {
 	Selected string
-	Tab      string // "thread", "changes", "checkpoints", "artifacts" or "pane"
+	Tab      string // "thread", "changes", "artifacts" or "pane"
 }
 
 func (a agentsSnap) toMap() map[string]any {

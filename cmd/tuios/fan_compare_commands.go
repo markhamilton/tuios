@@ -278,7 +278,7 @@ func runFanDiff(a, b string, stat bool) error {
 	if err != nil {
 		cfg = config.DefaultConfig()
 	}
-	diff, err := worktree.DiffWorking(ctx, ra.Path, rb.Path, stat, cfg.Agents.Checkpoints.MaxUntrackedBytes())
+	diff, err := worktree.DiffWorking(ctx, ra.Path, rb.Path, stat, cfg.Review.MaxUntrackedBytes())
 	if err != nil {
 		return err
 	}

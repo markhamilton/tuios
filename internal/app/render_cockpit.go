@@ -1761,11 +1761,6 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			m.drawArtifacts(c, l, e, x, bodyTop, w, cardTop-1, top, now)
 		}
 		return
-	case "Checkpoints":
-		if room := cardTop - 1 - bodyTop; room >= 2 {
-			m.drawCheckpoints(c, l, e, x, bodyTop, w, max((room-1)/2, 1))
-		}
-		return
 	case "Pane":
 		if room := cardTop - 1 - bodyTop; room >= 3 {
 			m.drawLiveBox(c, l, e, x, bodyTop, w, room)
@@ -1854,11 +1849,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	if r.agent < 0 {
 		return nil
 	}
-	checkpoints := "Checkpoints"
-	if cp := m.Inbox.ck.cps[agentKey(e)]; cp != nil && len(cp.list) > 0 {
-		checkpoints += " " + strconv.Itoa(len(cp.list))
-	}
-	side := []string{checkpoints, "Pane"}
+	side := []string{"Pane"}
 	// Changes waits for a transcript page: a pane the daemon turns out to have
 	// no file for would lose the tab again, and a ] pressed meanwhile would
 	// land on it and then fall back to Thread.

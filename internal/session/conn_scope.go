@@ -316,14 +316,6 @@ var verbScopes = map[string]scopeKind{
 	// tool, so a restricted caller has no use for it.
 	"review-stage": scopeDeny,
 
-	// From the checkpoint work (verb_checkpoint.go). Listing and reading a
-	// pane's checkpoints are reads of its session. A restore writes the
-	// files the pane's agent works on, which the handler holds to the panes
-	// the caller could type into.
-	"list-checkpoints":   scopeRead,
-	"checkpoint-diff":    scopeRead,
-	"restore-checkpoint": scopeWrite,
-
 	// From the ship work (verb_ship.go). A commit and a merge write the
 	// files a pane's agent works on, as a restore does. A push and a pull
 	// request send work off this machine: they are writes here, and the

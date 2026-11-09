@@ -63,10 +63,11 @@ func programsRan(marker string) []string {
 }
 
 // TestGitRunsNoProgramOfThePaneRepository is a security boundary through the
-// real binary. The pane's repository names programs git runs. A checkpoint
-// on the agent's state change, a review, a fan's worktree add, fan compare's
-// counts and tuios worktree diff run git there, in the daemon or in the CLI,
-// and none of those programs may run.
+// real binary. The pane's repository names programs git runs. A review, a
+// fan's worktree add, fan compare's counts and tuios worktree diff run git
+// there, in the daemon or in the CLI, and none of those programs may run. An
+// agent's finished turn runs no git at all: no checkpoint is taken, and
+// nothing is written under refs/tuios.
 //
 // Negative control (NEGATIVE_CONTROLS.md): on a build before the fix every
 // step runs the probes.
@@ -87,19 +88,19 @@ func TestGitRunsNoProgramOfThePaneRepository(t *testing.T) {
 		}
 	}
 
-	step("a checkpoint on the agent's state change", func() {
+	// The checkpoints are gone: a turn that ends writes no ref into the
+	// pane's repository. Negative control: on a build that still takes
+	// checkpoints, refs/tuios/checkpoints holds one within a second.
+	step("an agent's finished turn", func() {
 		for _, state := range []string{"working", "done"} {
 			if out, err := tuiosCLI(t, base, "set-agent-state", state, "-s", "agent", "-w", "0"); err != nil {
 				t.Fatalf("set-agent-state %s: %v\n%s", state, err, out)
 			}
 			time.Sleep(300 * time.Millisecond)
 		}
-		deadline := time.Now().Add(20 * time.Second)
-		for testutil.Git(t, repo, "for-each-ref", "refs/tuios/checkpoints") == "" {
-			if time.Now().After(deadline) {
-				t.Fatal("no checkpoint was taken on the state change")
-			}
-			time.Sleep(200 * time.Millisecond)
+		time.Sleep(2 * time.Second)
+		if refs := testutil.Git(t, repo, "for-each-ref", "refs/tuios"); refs != "" {
+			t.Errorf("ASSERTION: a finished turn wrote refs into the pane's repository:\n%s", refs)
 		}
 	})
 	step("tuios review", func() {
@@ -225,68 +226,4 @@ func TestSpawnSheetIgnoresAReportedFolder(t *testing.T) {
 		t.Errorf("ASSERTION: the reported repository got a worktree:\n%s", out)
 	}
 	alive(t, term, "after the sheet")
-}
-
-// TestCheckpointIgnoresAReportedFolderWithoutProcessCwd is a security
-// boundary for a daemon that cannot read a shell's folder, as on native
-// Windows (TUIOS_E2E_NO_PROCESS_CWD). The pane starts in one repository and
-// prints an OSC 7 report for a second one, which holds probes. The checkpoint
-// on its state change is taken in the folder the pane started in, and runs
-// none of the second repository's programs.
-//
-// Negative control (NEGATIVE_CONTROLS.md): on a build before the fix the
-// checkpoint is taken in the second repository and runs its probes.
-func TestCheckpointIgnoresAReportedFolderWithoutProcessCwd(t *testing.T) {
-	base := t.TempDir()
-	killDaemon(t, base)
-	repo := testutil.GitRepo(t)
-	marker := filepath.Join(base, "ran")
-	other := filepath.Join(base, "otherrepo")
-	if err := os.MkdirAll(other, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	testutil.Git(t, other, "init", "-q", "-b", "main")
-	if err := os.WriteFile(filepath.Join(other, "README"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	testutil.Git(t, other, "add", "README")
-	testutil.Git(t, other, "commit", "-q", "-m", "first")
-	programRepo(t, other, marker)
-	_ = programsRan(marker)
-	if err := os.WriteFile(filepath.Join(repo, "work.txt"), []byte("work\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	env := []string{"TUIOS_E2E=1", "TUIOS_E2E_NO_PROCESS_CWD=1"}
-	if out, err := tuiosCLIEnv(t, base, env, "new", "osc", "--detach", "--cwd", repo); err != nil {
-		t.Fatalf("create session: %v: %s", err, out)
-	}
-	win := firstWindow(t, base, "osc").ID
-	if err := paneSend(base, "osc", win, `printf '\033]7;file://localhost%s\033\\' '`+other+"'\n"); err != nil {
-		t.Fatalf("send the OSC 7 report: %v", err)
-	}
-	waitAnnounced(t, base, "osc", win, other)
-	for _, state := range []string{"working", "done"} {
-		if out, err := tuiosCLIEnv(t, base, env, "set-agent-state", state, "-s", "osc", "-w", win); err != nil {
-			t.Fatalf("set-agent-state %s: %v\n%s", state, err, out)
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	deadline := time.Now().Add(20 * time.Second)
-	for testutil.Git(t, repo, "for-each-ref", "refs/tuios/checkpoints") == "" &&
-		testutil.Git(t, other, "for-each-ref", "refs/tuios/checkpoints") == "" {
-		if time.Now().After(deadline) {
-			t.Fatal("no checkpoint was taken on the state change")
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	if testutil.Git(t, repo, "for-each-ref", "refs/tuios/checkpoints") == "" {
-		t.Errorf("ASSERTION: the checkpoint was not taken in the folder the pane started in")
-	}
-	if refs := testutil.Git(t, other, "for-each-ref", "refs/tuios/checkpoints"); refs != "" {
-		t.Errorf("ASSERTION: the checkpoint was taken in the reported folder:\n%s", refs)
-	}
-	if ran := programsRan(marker); len(ran) > 0 {
-		t.Errorf("ASSERTION: the checkpoint ran the reported repository's programs: %v", ran)
-	}
 }

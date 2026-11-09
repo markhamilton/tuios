@@ -58,7 +58,7 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 // says whether it has a transcript for the pane lands where it will stay.
 // The Changes tab used to be drawn until the daemon said there was no file,
 // so a ] in that window picked Changes, and the tab then went away and left
-// the focus on Thread instead of Checkpoints.
+// the focus on Thread instead of Pane.
 func TestCockpitTabStepBeforeTheTranscriptAnswer(t *testing.T) {
 	m, _ := replyOS(t)
 	m.Windows[1].AgentState, m.Windows[1].AgentHarness = "working", "codex"
@@ -72,7 +72,7 @@ func TestCockpitTabStepBeforeTheTranscriptAnswer(t *testing.T) {
 	m.CockpitTab(1)
 	m.Update(threadPageMsg{key: agentKey(e), err: &session.VerbCallError{Code: session.ErrVerbNoTranscript}})
 	r, _ := m.cockpitSelected()
-	if got, tabs := m.cockpitTab(), m.cockpitTabs(e, r); got != "Checkpoints" {
+	if got, tabs := m.cockpitTab(), m.cockpitTabs(e, r); got != "Pane" {
 		t.Fatalf("] before the answer left the focus on %q, tabs %v", got, tabs)
 	}
 }

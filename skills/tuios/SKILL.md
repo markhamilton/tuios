@@ -103,7 +103,7 @@ tell the person.
 `tuios --skill TOPIC` prints one topic, and `tuios --skill all` prints all.
 
 - Panes and state: `panes`, `state`, `events`, `stream`, `clients`
-- Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `checkpoints`, `ship`
+- Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `ship`
 - Rules: `grants`, `errors`, `agents-off`
 - Results, dashboards and forms for the person: `tml`
 - Other tools: `files`, `mcp`, `tmux`, `herdr`, `notify`, `config`

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,10 +221,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"review-stage#0": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
 	"review-stage#1": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
 	"review-stage#2": {errCode: ErrVerbInvalidParams, why: "the example's sha is a placeholder"},
-	// No agent finished a turn in the fixture, so no pane has a checkpoint.
-	// The checkpoints are proved in e2e/tui/checkpoint_test.go.
-	"checkpoint-diff#0":    {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 2"},
-	"restore-checkpoint#0": {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 1"},
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":    {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
@@ -261,6 +258,25 @@ const blockBudget = 750 * time.Millisecond
 // budget only bounds a hang. A budget sized to a verb's usual speed went red
 // on a loaded runner on timeouts that said nothing about the verb.
 const answerBudget = time.Minute
+
+// TestNoCheckpointVerbs: the turn checkpoints are removed, so no verb lists,
+// diffs or restores one, and a pane cannot reach them over the protocol.
+// Negative control: register checkpointVerbs again and this fails.
+func TestNoCheckpointVerbs(t *testing.T) {
+	for name := range verbRegistry() {
+		if strings.Contains(name, "checkpoint") {
+			t.Errorf("the verb %s is registered; the checkpoints are removed", name)
+		}
+	}
+	for _, name := range []string{"list-checkpoints", "checkpoint-diff", "restore-checkpoint"} {
+		if _, ok := verbScopes[name]; ok {
+			t.Errorf("%s still has a scope", name)
+		}
+		if judgeReadVerbs[name] {
+			t.Errorf("a fan judge may still call %s", name)
+		}
+	}
+}
 
 // TestEveryVerbExampleReachesItsHandler runs every example in the registry
 // against a real daemon.

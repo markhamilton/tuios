@@ -41,7 +41,7 @@ something for someone: there is a control they can adjust.
 Tables are not scalar options and are edited in config.toml:
 `[appearance.sidebar.agent_row]` (which tokens an agent row draws, their looks
 and value rules; `now`, `context`, `subagents` and `prompt` read what the hooks
-and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[notify]`, `[agents.approvals]`, `[agents.checkpoints]`,
+and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[notify]`, `[agents.approvals]`,
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios restart-server` to take effect.
 

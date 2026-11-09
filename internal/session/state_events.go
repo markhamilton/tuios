@@ -221,8 +221,8 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				Reason:        w.agentReason,
 				hookTitle:     w.displayTitle(),
 				hookWorkspace: w.workspace,
-				// The state the agent left, not the one shown: a checkpoint
-				// is taken for a turn that ends after a silence too.
+				// The state the agent left, not the one shown: a turn
+				// that ends after a silence left working too.
 				hookPrevState: prev.agentState.Name(),
 				hookHarness:   w.agentHarness,
 				hookMessage:   w.agentMessage,

@@ -184,15 +184,11 @@ type cockpitState struct {
 	primeID              string
 	primeTimer           *time.Timer
 	liveShown, liveOwned bool
-	// cpWant says a frame drew checkpoints read for an older state.
-	cpWant bool
-	// cps are the agents' checkpoints, by agent.
-	cps map[string]*ckCheckpoints
 	// img is the image view, nil when it is not up.
 	img *ckImageView
 	// tab is the focus tab by name, so it stays put when the tabs change
-	// with the screen's width or the agent: Thread, Changes, Checkpoints,
-	// Pane. A name the row has not is its first tab.
+	// with the screen's width or the agent: Thread, Changes, Pane. A name
+	// the row has not is its first tab.
 	tab string
 	// dv is the diff theme the thread's cards draw with, for dvKey.
 	dv    *diffview.Theme
@@ -1372,8 +1368,8 @@ func (m *OS) cockpitThread() *agentThread {
 	return m.Inbox.threads.byKey[agentKey(e)]
 }
 
-// cockpitTab is the name of the focus tab in force: Thread, Changes,
-// Checkpoints or Pane.
+// cockpitTab is the name of the focus tab in force: Thread, Changes or
+// Pane.
 func (m *OS) cockpitTab() string {
 	e, _ := m.cockpitAgent()
 	r, _ := m.cockpitSelected()

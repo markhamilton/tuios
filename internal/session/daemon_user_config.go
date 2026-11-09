@@ -96,8 +96,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
 	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
-	// The daemon takes every checkpoint, so it reads whether to.
-	cfg.Checkpoints = uc.Agents.Checkpoints
+	// The daemon runs review's git, so it reads how large an untracked file
+	// it reads.
+	cfg.Review = uc.Review
 	// The daemon runs the herdr plugins, so it reads which ones.
 	cfg.Plugins = uc.Plugins
 	// The daemon spawns every pane, so it decides which are told about the

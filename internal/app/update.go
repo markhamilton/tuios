@@ -1001,8 +1001,8 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A reply editor the rows moved the cursor away from closes, keeping
 	// its draft.
 	m.CockpitReplyCheck()
-	// Checkpoints a frame of the agents view drew for an older state: a
-	// turn that ended with no input is read now. A flag check when not.
+	// A card a frame of the agents view drew for an older state is read
+	// now. A flag check when not.
 	if side := m.CockpitSideWanted(); side != nil {
 		agents = tea.Batch(agents, side)
 	}
@@ -1184,9 +1184,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
-	case ckCheckpointsMsg:
-		m.applyCheckpoints(msg)
-		return m, nil
 	case ckTaskMsg:
 		m.applyCard(msg)
 		return m, nil

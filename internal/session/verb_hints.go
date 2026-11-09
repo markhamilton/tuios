@@ -118,7 +118,6 @@ var errorCodeCatalog = []struct {
 	{ErrVerbCheckoutDirty, "ship-merge refused: the main checkout has uncommitted changes, a merge or rebase in progress, or is not on the branch to merge into. Nothing was merged."},
 	{ErrVerbNoRemote, "ship-push or ship-pr found no remote to push to, or not the one named. Nothing was pushed. Add a remote, or name one with remote."},
 	{ErrVerbGhUnavailable, "ship-pr or ship-status needs the gh CLI, and it is not installed or not logged in. Nothing was pushed or opened. Install gh and run gh auth login."},
-	{ErrVerbNoCheckpoint, "The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the checkpoints it has. list-checkpoints lists them too."},
 	{ErrVerbHunkChanged, "review-stage did not find the file or the hunk in the diff now. Nothing was changed. Read the diff again with review-diff and the same index and context."},
 	{ErrVerbIndexChanged, "review-stage did not undo the call: the index changed after it. Nothing was changed. Read the diff again with review-diff."},
 	{ErrVerbWholeFileOnly, "review-stage stages a rename, a binary file or a very large file only whole. Nothing was changed. Leave hunk and lines out."},

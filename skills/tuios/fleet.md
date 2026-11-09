@@ -181,14 +181,14 @@ or `v` in the Inbox), and compares a fan's attempts there. Notes they leave or
 send there arrive as "from the person"; the notes you left show under their
 lines, labelled as your pane's.
 
-### Undo a turn, and ship the one you keep
+### Ship the attempt you keep
 
-Each finished turn of an agent in a git work tree leaves a checkpoint you can
-diff and restore (`tuios --skill checkpoints`). `tuios ship` commits, merges,
-pushes and opens a pull request for an attempt (`tuios --skill ship`):
+`tuios ship` commits, merges, pushes and opens a pull request for an attempt
+(`tuios --skill ship`). tuios takes no turn checkpoints, so read the diff with
+`tuios review` before you ship:
 
 ```sh
-tuios checkpoint list -s api-fan-add-retry-backoff-http-2
+tuios review -s api-fan-add-retry-backoff-http-2 --stat
 tuios ship commit -s api-fan-add-retry-backoff-http-2 -m 'Add a retry with backoff'
 tuios fan keep api-fan-add-retry-backoff-http-2 --merge --squash
 ```

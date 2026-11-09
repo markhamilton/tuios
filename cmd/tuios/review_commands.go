@@ -29,7 +29,7 @@ func newReviewCommand() *cobra.Command {
 base it was made from, or for a plain repository against the merge base with
 its upstream branch, else only what is not committed. Committed and
 uncommitted work show together, untracked files included and ignored files
-left out. An untracked file larger than [agents.checkpoints] max_untracked_mb
+left out. An untracked file larger than [review] max_untracked_mb
 (50 by default) is listed but not read. The diff is read by the daemon, on the machine the pane runs on,
 through a temporary git index: the repository, its index and its files are
 not changed.

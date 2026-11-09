@@ -2851,7 +2851,7 @@ others still answer.`,
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
-		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
+		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
 	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setSessionOrderCmd, setWorkspaceNameCmd, newNoteCommand())
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newPiPCommand(), newCallCommand(), newPaneViewCommand())

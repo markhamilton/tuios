@@ -632,9 +632,6 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 	}
 	// The notes on the worktree's changes go with it.
 	d.reviewNotes.dropRoot(notesRoot)
-	// So do the checkpoints taken in it. The refs are the repository's, so
-	// git runs in the main checkout, which is still there.
-	d.dropCheckpointsOf(info.RepoRoot, notesRoot)
 
 	out["session_killed"] = killed
 	if !killed && !p.KeepSession {

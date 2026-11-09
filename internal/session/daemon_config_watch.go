@@ -135,7 +135,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
 	}
 	d.SetMailWake(wake)
-	d.SetCheckpoints(cfg.Agents.Checkpoints)
+	d.SetReviewMaxUntracked(cfg.Review)
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.
 	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())

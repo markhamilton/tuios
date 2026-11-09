@@ -46,7 +46,7 @@ var optionWalkSkips = map[string]string{
 	"agents.permissions":    "what a pane may do through tuios is not for a pane to change over the control protocol",
 	"agents.recap":          "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.queue":          "file-plane config the daemon reads from the file, like [hosts]",
-	"agents.checkpoints":    "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.checkpoints":    "retired: read only so a config with the old table loads and validation can say to remove it",
 	"agents.mail":           "whether tuios types into an agent's pane is not for a pane to change over the control protocol",
 	"agents.herdr_protocol": "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.silent_after":   "file-plane config the daemon reads from the file, like [hosts]",

@@ -13,6 +13,27 @@ type ReviewConfig struct {
 	// (default: diff). A review with no changes opens on the diff. A reload
 	// of the same review keeps the side focused.
 	Focus string `toml:"focus"`
+	// MaxUntrackedMB is the size in megabytes past which review,
+	// review-stage, fan compare and fan diff leave an untracked file unread,
+	// so a large file is not copied into git's object store (or Git LFS's)
+	// on every review. Zero reads as the default, 50. A negative value means
+	// no limit.
+	MaxUntrackedMB int `toml:"max_untracked_mb"`
+}
+
+// DefaultReviewMaxUntrackedMB is the default of [review] max_untracked_mb.
+const DefaultReviewMaxUntrackedMB = 50
+
+// MaxUntrackedBytes is MaxUntrackedMB in bytes with its default applied, and
+// zero for no limit.
+func (r ReviewConfig) MaxUntrackedBytes() int64 {
+	switch {
+	case r.MaxUntrackedMB < 0:
+		return 0
+	case r.MaxUntrackedMB == 0:
+		return DefaultReviewMaxUntrackedMB << 20
+	}
+	return int64(r.MaxUntrackedMB) << 20
 }
 
 // The sides of the review overlay that can have the keys.
@@ -39,13 +60,21 @@ func (r ReviewConfig) FocusInUse() string {
 
 // defaultReviewConfig returns the section DefaultConfig carries.
 func defaultReviewConfig() ReviewConfig {
-	return ReviewConfig{Focus: ReviewOpenOnDiff}
+	return ReviewConfig{Focus: ReviewOpenOnDiff, MaxUntrackedMB: DefaultReviewMaxUntrackedMB}
 }
 
-// fillMissingReview fills an absent value with its default.
+// fillMissingReview fills an absent value with its default. An unset
+// max_untracked_mb takes the one the retired [agents.checkpoints] table set,
+// where that cap lived before the checkpoints were removed.
 func fillMissingReview(cfg, defaultCfg *UserConfig) {
 	if strings.TrimSpace(cfg.Review.Focus) == "" {
 		cfg.Review.Focus = defaultCfg.Review.Focus
+	}
+	if cfg.Review.MaxUntrackedMB == 0 {
+		cfg.Review.MaxUntrackedMB = defaultCfg.Review.MaxUntrackedMB
+		if cp := cfg.Agents.Checkpoints; cp != nil && cp.MaxUntrackedMB != 0 {
+			cfg.Review.MaxUntrackedMB = cp.MaxUntrackedMB
+		}
 	}
 }
 

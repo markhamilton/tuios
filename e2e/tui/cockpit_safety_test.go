@@ -126,12 +126,12 @@ func TestCockpitCutApprovalIsNotAnswered(t *testing.T) {
 }
 
 // TestCockpitApprovalCardOnEveryTab holds an approval on a screen narrower
-// than the side column, where checkpoints and the live pane are focus tabs.
-// On the Checkpoints tab and on the Live tab the approval's card is still
-// drawn with its buttons, and a answers it from there.
+// than the side column, where the live pane is a focus tab. On the Pane tab
+// the approval's card is still drawn with its buttons, and a answers it from
+// there.
 //
 // Negative control, recorded in NEGATIVE_CONTROLS.md: with the tabs drawn
-// in place of the card, the card is gone on the Checkpoints tab.
+// in place of the card, the card is gone on the Pane tab.
 func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -152,11 +152,10 @@ func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
-	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Checkpoints", "Pane")
-	// ] steps the tabs: Thread, Changes, Checkpoints, Live. Each tab's own
-	// body says it is drawn, and the card is under it.
+	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Pane")
+	// ] steps the tabs: Thread, Changes, Pane. Each tab's own body says it
+	// is drawn, and the card is under it.
 	for _, tab := range []struct{ name, body string }{
-		{"Checkpoints", "Checkpoints need the pane in a git work tree."},
 		{"Pane", "╭"},
 	} {
 		found := false

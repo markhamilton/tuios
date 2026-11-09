@@ -19,7 +19,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `protocol_mismatch`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `fan_exists`,
 `not_repo`, `repo_not_found`, `no_notes`, `hunk_changed`, `index_changed`,
-`whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
+`whole_file_only`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `task_held`, `no_task`,
 `no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
@@ -68,7 +68,6 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `hunk_changed` | From `review-stage`: the file or the hunk is not in the diff now. Nothing was changed. Read the diff again with `review-diff` and the same `index` and `context`. |
 | `index_changed` | From `review-stage` undo: the index changed after the call. Nothing was changed. Read the diff again. |
 | `whole_file_only` | From `review-stage`: a rename, a binary file or a very large file is staged only whole. Nothing was changed. Leave `hunk` and `lines` out. |
-| `no_checkpoint` | From `checkpoint-diff` and `restore-checkpoint`: the pane has no checkpoint by that number. The hint lists the ones it has. Nothing was changed. |
 | `nothing_to_commit` | From `ship-commit`: the work tree has no change. From `ship-push` and `ship-pr`: the branch has no commit. Nothing was changed. |
 | `merge_conflict` | From `ship-merge`: the merge conflicted and was undone. The hint lists the files. Rebase the branch in the worktree, resolve them there, and merge again. |
 | `checkout_dirty` | From `ship-merge`: the main checkout has changes, a merge in progress, or another branch checked out. Nothing was merged. Tell the person. Do not clean their checkout. |

@@ -1,8 +1,6 @@
 package app
 
 import (
-	"encoding/json"
-	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,15 +11,13 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The side column of the agents view (DESIGN.md 2.4): a live copy of the
-// selected agent's pane, the files its last turn changed, and its turn
-// checkpoints. At 170 columns and wider it sits beside the focus. Narrower,
-// the same pieces are focus tabs: Checkpoints, and Pane for the live copy at
-// the focus's size.
+// selected agent's pane and the files its last turn changed. At 170 columns
+// and wider it sits beside the focus. Narrower, the live copy is the Pane
+// focus tab, at the focus's size.
 //
 // The live copy is the picture-in-picture reader (pip.go pipCells): the cells
 // the client's emulator already holds, read again only when the pane had
@@ -29,46 +25,12 @@ import (
 // session on another workspace is primed from the daemon and kept streamed
 // while it is the live pane, as a pinned PiP pane is. A pane of another
 // session or machine has no cells here, and the box says so.
-//
-// The checkpoints are read with list-checkpoints when the selection moves to
-// an agent or its state changes, never on a timer.
 
 // ckSideWidth is the side column's width at ckWide columns and more.
 const ckSideWidth = 46
 
 // ckLiveRows is how many rows the live box holds in the side column.
 const ckLiveRows = 14
-
-// ckCheckpointsShown is how many checkpoints the side column lists.
-const ckCheckpointsShown = 5
-
-// ckCheckpoint is one checkpoint as list-checkpoints sends it.
-type ckCheckpoint struct {
-	N     int    `json:"n"`
-	Kind  string `json:"kind"`
-	Label string `json:"label"`
-	State string `json:"state"`
-	At    int64  `json:"at"`
-}
-
-// ckCheckpoints are an agent's checkpoints, read for key: the agent and the
-// time its state last changed.
-type ckCheckpoints struct {
-	key     string
-	list    []ckCheckpoint
-	err     string
-	loading bool
-	// off says the daemon takes no checkpoints: [agents.checkpoints] off.
-	off bool
-}
-
-// ckCheckpointsMsg is a list-checkpoints reply.
-type ckCheckpointsMsg struct {
-	agent, key string
-	list       []ckCheckpoint
-	off        bool
-	err        error
-}
 
 // cockpitLiveWindow is the selected agent's pane when this client holds its
 // cells: a pane of the attached session on this machine.
@@ -389,71 +351,6 @@ func drawFileStat(c *ckCanvas, l ckLook, x, y, w int, path string, add, del int)
 	c.text(x, y, r-1, ckSeg{t: name, fg: l.pal.FgDim})
 }
 
-// drawCheckpoints draws the agent's checkpoints, newest first, as a timeline
-// from row y, and returns the row under them.
-func (m *OS) drawCheckpoints(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, shown int) int {
-	pal := l.pal
-	m.cockpitNoteCheckpoints(e)
-	cp := m.Inbox.ck.cps[agentKey(e)]
-	count := ""
-	if cp != nil && len(cp.list) > 0 {
-		count = strconv.Itoa(len(cp.list))
-	}
-	drawSideSection(c, l, x, y, w, "Checkpoints", count)
-	y++
-	switch {
-	case e.Host != "":
-		for _, s := range wrapPlain("The checkpoints of an agent on "+printableTitle(e.Host)+" are kept there. Attach to it to see them.", w) {
-			c.text(x, y, x+w, ckSeg{t: s, fg: pal.FgMute})
-			y++
-		}
-		return y
-	case cp == nil || (cp.loading && cp.list == nil):
-		c.text(x, y, x+w, ckSeg{t: "Reading...", fg: pal.FgMute})
-		return y + 1
-	case cp.err != "":
-		for _, s := range wrapPlain(cp.err, w) {
-			c.text(x, y, x+w, ckSeg{t: s, fg: pal.FgMute})
-			y++
-		}
-		return y
-	case len(cp.list) == 0:
-		words := "No checkpoints yet. One is taken at the end of a turn that changes a file."
-		if cp.off {
-			words = "Checkpoints are off. [agents.checkpoints] enabled turns them on."
-		}
-		for _, s := range wrapPlain(words, w) {
-			c.text(x, y, x+w, ckSeg{t: s, fg: pal.FgMute})
-			y++
-		}
-		return y
-	}
-	n := 0
-	for i := len(cp.list) - 1; i >= 0 && n < shown; i-- {
-		k := cp.list[i]
-		g, gInk, ink := l.g(ckGlyphIdle), pal.FgMute, pal.FgDim
-		if n == 0 {
-			g, gInk, ink = l.g(ckGlyphNeeds), pal.AccentBright, pal.Fg
-		}
-		label := printableTitle(k.Label)
-		if label == "" {
-			label = "turn " + strconv.Itoa(k.N)
-		}
-		if k.Kind == "safety" {
-			label = "before a restore"
-		}
-		clock := time.Unix(0, k.At).Format("15:04")
-		c.text(x, y, x+w, ckSeg{t: g, fg: gInk}, ckSeg{t: "  " + clock, fg: pal.FgMute}, ckSeg{t: "   " + label, fg: ink})
-		y++
-		n++
-		if n < shown && i > 0 {
-			c.text(x, y, 0, ckSeg{t: vtGlyph(), fg: l.edgePanel})
-			y++
-		}
-	}
-	return y
-}
-
 // drawSide draws the side column at x, from row y0 to y1.
 func (m *OS) drawSide(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y0, w, y1 int) {
 	c.fill(x, y0, w, y1-y0, l.panel)
@@ -470,103 +367,24 @@ func (m *OS) drawSide(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y0, w, y1 i
 	liveH := min(ckLiveRows+2, max(y1-y-14, 6))
 	m.drawLiveBox(c, l, e, ix, y, iw, liveH)
 	y += liveH + 1
-	y = m.drawLastTurn(c, l, e, ix, y, iw, 4) + 1
-	if y < y1-3 {
-		m.drawCheckpoints(c, l, e, ix, y, iw, min(ckCheckpointsShown, (y1-y-1)/2))
-	}
+	m.drawLastTurn(c, l, e, ix, y, iw, 4)
 }
 
-// CockpitSideFetch follows the live pane, and reads the selected agent's
-// checkpoints when they are on screen and none are read for its current
-// state. The input path calls it after every input while the agents view is
-// up, and Update after a message that left a frame wanting them.
+// CockpitSideFetch follows the live pane and reads the selected card. The
+// input path calls it after every input while the agents view is up, and
+// Update after a message that left a frame wanting the card.
 func (m *OS) CockpitSideFetch() tea.Cmd {
 	if !m.ShowInbox {
 		return nil
 	}
-	ck := &m.Inbox.ck
-	ck.cpWant = false
-	follow := tea.Batch(m.cockpitLiveFollow(), m.cockpitCardFetch())
-	if m.GetRenderWidth() < ckWide && m.cockpitTab() != "Checkpoints" {
-		return follow
-	}
-	e, ok := m.cockpitAgent()
-	if !ok || e.Host != "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
-		return follow
-	}
-	akey := agentKey(e)
-	key := strconv.FormatInt(e.StateAt, 10) + e.State
-	if cp := ck.cps[akey]; cp != nil && (cp.key == key || cp.loading) {
-		return follow
-	}
-	if ck.cps == nil {
-		ck.cps = map[string]*ckCheckpoints{}
-	}
-	if len(ck.cps) > 16 {
-		clear(ck.cps)
-	}
-	prev := ck.cps[akey]
-	cp := &ckCheckpoints{key: key, loading: true}
-	if prev != nil {
-		cp.list, cp.off = prev.list, prev.off
-	}
-	ck.cps[akey] = cp
-	call, sess, win := m.inboxCaller(), e.SessionID, e.WindowID
-	return tea.Batch(follow, func() tea.Msg {
-		raw, err := call("list-checkpoints", map[string]any{"session": sess, "window": win}, threadReadTimeout)
-		msg := ckCheckpointsMsg{agent: akey, key: key, err: err}
-		if err == nil {
-			var res struct {
-				Enabled     *bool          `json:"enabled"`
-				Checkpoints []ckCheckpoint `json:"checkpoints"`
-			}
-			msg.err = json.Unmarshal(raw, &res)
-			msg.list = res.Checkpoints
-			msg.off = res.Enabled != nil && !*res.Enabled
-		}
-		return msg
-	})
+	return tea.Batch(m.cockpitLiveFollow(), m.cockpitCardFetch())
 }
 
-// cockpitNoteCheckpoints is called while a frame draws the checkpoints: a
-// state the agent reached with no input, such as a turn that ended, is read
-// after the frame (cpWant), never in it.
-func (m *OS) cockpitNoteCheckpoints(e sidebarAgentEntry) {
-	ck := &m.Inbox.ck
-	key := strconv.FormatInt(e.StateAt, 10) + e.State
-	if cp := ck.cps[agentKey(e)]; cp == nil || (cp.key != key && !cp.loading) {
-		ck.cpWant = true
-	}
-}
-
-// CockpitSideWanted is CockpitSideFetch when a frame found the checkpoints
-// on screen stale, nil otherwise. Update asks it after every message.
+// CockpitSideWanted is CockpitSideFetch when a frame found the card on
+// screen stale, nil otherwise. Update asks it after every message.
 func (m *OS) CockpitSideWanted() tea.Cmd {
-	if !m.Inbox.ck.cpWant && !m.Inbox.ck.cardWant {
+	if !m.Inbox.ck.cardWant {
 		return nil
 	}
 	return m.CockpitSideFetch()
-}
-
-// applyCheckpoints takes a list-checkpoints reply.
-func (m *OS) applyCheckpoints(msg ckCheckpointsMsg) {
-	cp := m.Inbox.ck.cps[msg.agent]
-	if cp == nil || cp.key != msg.key {
-		return
-	}
-	cp.loading = false
-	cp.list, cp.err, cp.off = msg.list, "", msg.off
-	if msg.err != nil {
-		cp.list = nil
-		verr, ok := errors.AsType[*session.VerbCallError](msg.err)
-		switch {
-		case ok && verr.Code == session.ErrVerbNotRepo:
-			cp.err = "Checkpoints need the pane in a git work tree."
-		case ok && verr.Code == session.ErrVerbUnknownVerb:
-			cp.err = "This daemon takes no checkpoints. " + m.restartHint()
-		default:
-			cp.err = "tuios cannot read the checkpoints now: " + printableTitle(msg.err.Error())
-		}
-	}
-	m.cockpitTouch()
 }

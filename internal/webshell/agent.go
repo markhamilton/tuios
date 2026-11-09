@@ -112,7 +112,7 @@ type agentRun struct {
 	// pending is input read and not used yet: the rest of a chunk after the
 	// key that answered a menu, which is the next prompt's.
 	pending []byte
-	// changed says the turn edited a file, so its end takes a checkpoint.
+	// changed says the turn edited a file, so its end is counted.
 	changed bool
 	// lastFile is the file the agent last read or edited.
 	lastFile string
@@ -547,13 +547,12 @@ func (r *agentRun) next() (b []byte, resized, ok bool) {
 	}
 }
 
-// finish ends a turn: the summary, a checkpoint when the turn changed a
-// file, and done.
+// finish ends a turn: the summary, a count when the turn changed a file,
+// and done.
 func (r *agentRun) finish(summary string) {
 	if r.changed {
 		r.a.change(r.t, func() {
-			n := len(r.a.checkpoints) + 1
-			r.a.checkpoints = append(r.a.checkpoints, AgentCheckpoint{N: n, Kind: "turn", Label: summary, State: "done", At: time.Now().UnixNano()})
+			r.a.changed++
 		})
 	}
 	r.report("done", summary, "")

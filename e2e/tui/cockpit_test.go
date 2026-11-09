@@ -1323,7 +1323,7 @@ func waitSpawnRead(t *testing.T, term *tuitest.Terminal) {
 }
 
 // TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
-// narrower than it: Checkpoints lists them, and Pane shows the live pane.
+// narrower than it: Pane shows the live pane, and no Checkpoints tab is left.
 func TestCockpitSideTabs(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -1346,11 +1346,10 @@ func TestCockpitSideTabs(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Pane")
-	if err := term.SendKeys("]"); err != nil {
-		t.Fatal(err)
+	waitText(t, term, "the tabs", "Thread", "Pane")
+	if strings.Contains(term.Screen().Text(), "Checkpoints") {
+		t.Errorf("ASSERTION: the agents view still has a Checkpoints tab\n%s", term.Snapshot())
 	}
-	waitText(t, term, "the checkpoints tab", "Checkpoints need the pane in a git work tree.")
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatal(err)
 	}

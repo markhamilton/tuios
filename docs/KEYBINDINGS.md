@@ -1664,7 +1664,7 @@ Inside it:
 | `x` `*` | Mark an agent or a Resume row, or every row shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
 | `y` with marks | Resume every marked Resume row. `*` then `y` resumes them all |
-| `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts, Checkpoints and Pane |
+| `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts and Pane |
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `e` | Show every line of every card in the thread |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |

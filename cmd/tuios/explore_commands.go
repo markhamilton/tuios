@@ -101,7 +101,7 @@ Type tuios help [path to command] for full details.
 
 --json prints the command and every command under it, with each flag.
 -i opens the same list in an explorer you can search. Press q or esc to leave it.`,
-		Example: `  tuios help checkpoint
+		Example: `  tuios help review
   tuios help --json
   tuios help -i`,
 		ValidArgsFunction: func(c *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {

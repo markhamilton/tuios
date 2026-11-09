@@ -2,10 +2,60 @@ package config_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
+
+// TestRetiredCheckpointsTableLoads: the checkpoints are gone, and a config
+// that still has [agents.checkpoints] loads, with one warning to remove it.
+// Its max_untracked_mb carries over to [review], where the cap that also
+// guards review lives now, unless [review] sets its own. Without the table
+// there is no warning and the cap is the default, 50 MB.
+//
+// Negative control: drop the carry-over in fillMissingReview and the second
+// row reads 50.
+func TestRetiredCheckpointsTableLoads(t *testing.T) {
+	cases := []struct {
+		name, src string
+		wantMB    int
+		warned    bool
+	}{
+		{"no table", "", config.DefaultReviewMaxUntrackedMB, false},
+		{"the old table, off", "[agents.checkpoints]\nenabled = false\nkeep = 10\n", config.DefaultReviewMaxUntrackedMB, true},
+		{"the old cap carries over", "[agents.checkpoints]\nmax_untracked_mb = 7\n", 7, true},
+		{"[review] wins", "[review]\nmax_untracked_mb = 3\n\n[agents.checkpoints]\nmax_untracked_mb = 7\n", 3, true},
+		{"no limit", "[review]\nmax_untracked_mb = -1\n", -1, false},
+	}
+	for _, c := range cases {
+		cfg, err := config.ParseUserConfig([]byte(c.src))
+		if err != nil {
+			t.Fatalf("%s: the config did not load: %v", c.name, err)
+		}
+		if got := cfg.Review.MaxUntrackedMB; got != c.wantMB {
+			t.Errorf("%s: review max_untracked_mb = %d, want %d", c.name, got, c.wantMB)
+		}
+		warned := 0
+		for _, w := range config.ConfigWarnings(cfg) {
+			if strings.Contains(w, "checkpoints") {
+				warned++
+			}
+		}
+		if c.warned && warned != 1 {
+			t.Errorf("%s: %d warnings name the checkpoints, want 1: %v", c.name, warned, config.ConfigWarnings(cfg))
+		}
+		if !c.warned && warned != 0 {
+			t.Errorf("%s: a warning names the checkpoints: %v", c.name, config.ConfigWarnings(cfg))
+		}
+	}
+	if got := (config.ReviewConfig{}).MaxUntrackedBytes(); got != config.DefaultReviewMaxUntrackedMB<<20 {
+		t.Errorf("the zero review cap is %d bytes, want the default", got)
+	}
+	if got := (config.ReviewConfig{MaxUntrackedMB: -1}).MaxUntrackedBytes(); got != 0 {
+		t.Errorf("a negative review cap is %d bytes, want 0 (no limit)", got)
+	}
+}
 
 // TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey pins the rule that a
 // binding written one way still matches when the terminal reports the other:

@@ -30,7 +30,7 @@ type shipFixture struct {
 	fakes    string
 	worktree string
 	session  string
-	tr       *checkpointTranscript
+	tr       *cliTranscript
 }
 
 // shipCanned is the pull request the fake gh opens: one check still running
@@ -101,7 +101,7 @@ func newShipFixture(t *testing.T) *shipFixture {
 	testutil.Git(t, repo, "remote", "add", "origin", f.remote)
 	testutil.Git(t, repo, "push", "-q", "-u", "origin", "main")
 
-	f.tr = newCheckpointTranscript(t, base, repo)
+	f.tr = newCLITranscript(t, base, repo)
 	f.tr.ok("new", "main", "--detach")
 	f.tr.ok("worktree", "new", "feat/ship", "--repo", repo, "--detach")
 	f.worktree = filepath.Join(base, "worktrees", "repo", "feat-ship")
@@ -564,7 +564,7 @@ func TestShipPushQuestionNamesWhereThePushGoes(t *testing.T) {
 // verbKeepFan, main stays where it was and the check on it fails.
 func TestFanKeepMergesTheKeptAttempt(t *testing.T) {
 	base, repo := fanFixture(t)
-	tr := newCheckpointTranscript(t, base, repo)
+	tr := newCLITranscript(t, base, repo)
 	tr.ok("new", "plain", "--detach")
 	tr.ok("fan", "2", "--agent", "claude", "--repo", repo, "--name", "try/ship", "Do the thing.")
 	rows := worktreeRows(t, base, "--group", "try/ship")

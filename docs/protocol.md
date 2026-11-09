@@ -344,13 +344,13 @@ commands use these verbs when the daemon has them, so a buffer the shim set
 before is no longer read from its file. The error code `no_buffer` is in the
 catalog.
 
-**remove-worktree removes the worktree's checkpoints.** The daemon saves a
-pane's work tree under `refs/tuios/checkpoints/` when its agent finishes a turn
-(see [list-checkpoints](#list-checkpoints)). Those refs belong to the whole
-repository, so `remove-worktree`, and `keep-fan` through it, now delete the
-ones taken in the removed worktree. The checkpoints of panes in other
-checkouts stay. The result is unchanged. The error code `no_checkpoint` is in
-the catalog.
+**The checkpoint verbs are removed.** This fork takes no turn checkpoints.
+The daemon writes nothing under `refs/tuios/checkpoints/`. The verbs
+`list-checkpoints`, `checkpoint-diff` and `restore-checkpoint` are gone, and a
+call to one of them is `unknown_verb`. The error code `no_checkpoint` is gone
+too. `remove-worktree` and `keep-fan` delete no refs. Refs that an older
+tuios wrote stay in the repository. Remove them with
+`git for-each-ref --format='delete %(refname)' refs/tuios/checkpoints | git update-ref --stdin`.
 
 **keep-fan can merge the kept attempt, and confirm_required has a second
 use.** `keep-fan` takes `merge`, `merge_mode` and `into`. With `merge`, the
@@ -1431,7 +1431,6 @@ catalog.
 | `hunk_changed` | `review-stage` did not find the file or the hunk in the diff now. Nothing was changed. Read the diff again with the same `index` and `context`. |
 | `index_changed` | `review-stage` did not undo the call: the index changed after it. Nothing was changed. |
 | `whole_file_only` | `review-stage` stages a rename, a binary file or a file past the diff caps only whole. Nothing was changed. Leave `hunk` and `lines` out. |
-| `no_checkpoint` | The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the numbers it has. |
 | `nothing_to_commit` | `ship-commit` found no change in the work tree. `ship-push` and `ship-pr` raise it for a branch with no commit. Nothing was changed. |
 | `merge_conflict` | `ship-merge` stopped on conflicts and undid the merge. The main checkout is as it was. The hint lists the files in `available`. |
 | `checkout_dirty` | `ship-merge` refused: the main checkout has uncommitted changes to tracked files, a merge or rebase in progress, is not on the branch to merge into, or the branch cannot be fast-forwarded under `ff-only`. Nothing was merged. |
@@ -3896,7 +3895,7 @@ is in it, else the repository holding the pane's directory; none is
 `not_repo`. The working state, committed or not, untracked files included and ignored files
 left out, is written as a git tree through a temporary copy of the worktree's
 index, so its index, its files and what the agent staged are not changed.
-An untracked file larger than `[agents.checkpoints] max_untracked_mb` is left
+An untracked file larger than `[review] max_untracked_mb` is left
 out of the tree and never read; it is listed with status `U`, `skipped` true
 and no counts or hunks. Every git call of one diff together is bounded at 10 seconds (`git_failed`
 past it). [AGENT_STATE.md](AGENT_STATE.md#reviewing-an-agents-changes) has the
@@ -4099,101 +4098,6 @@ It types into the pane, so it is held like `queue-prompt`: a pane needs
 `write`, may send only to a pane that holds nothing it does not and is not on
 `needs_input` unless it holds `respond`, and is checked again when the
 message is typed.
-
-### list-checkpoints
-
-The checkpoints of a pane, oldest first. A checkpoint is the pane's git work
-tree saved as a commit under `refs/tuios/checkpoints/<window id>/<n>`: when
-its agent finishes a turn that changed a file, and before each restore. See
-[Turn checkpoints](AGENT_STATE.md#turn-checkpoints) for when one is taken.
-The repository is found as for `review-diff`: none is `not_repo`.
-
-Params: `session`, `window`.
-
-```json
-{"verb": "list-checkpoints", "params": {"session": "work", "window": "build"}}
-```
-
-```json
-{"result": {"type": "checkpoint_list", "session": "work", "window": "4be1c09a-...",
- "worktree": "/src/api", "enabled": true, "keep": 50, "untrusted": true,
- "checkpoints": [
-  {"n": 1, "ref": "refs/tuios/checkpoints/4be1c09a-.../1", "commit": "e958e3b...", "tree": "9d24e28...",
-   "head": "95f2766...", "kind": "turn", "pane": "4be1c09a-...", "session": "work", "turn": 1,
-   "state": "done", "label": "Add a retry with backoff.", "worktree": "/src/api", "at": 1791102811086683744}]}}
-```
-
-`kind` is `turn` or `safety`. `turn` is the pane's finished-turn count
-(`completion_seq`) when the checkpoint was taken, and `head` is `HEAD` then.
-`label` is the prompt of the turn, else the line it ended with, else the
-state's message, at most 120 bytes. The answer is marked `untrusted`: the
-labels are the agent's text. `enabled` and `keep` are
-`[agents.checkpoints]`. A pane without `admin` needs `read` in its own
-session and fan group.
-
-### checkpoint-diff
-
-What one turn changed: a checkpoint's tree against the pane's checkpoint
-before it, or for the first one against `HEAD` when it was taken (the empty
-tree in a repository with no commit). Nothing in the repository changes.
-
-Params: `session`, `window`, `n` (omit for the newest), `paths` (at most 256,
-relative, each taken literally), `context` (0 to 20, default 3). A number the
-pane has no checkpoint for is `no_checkpoint`, with the numbers it has in
-the hint's `available`.
-
-```json
-{"verb": "checkpoint-diff", "params": {"session": "work", "window": "build", "n": 2}}
-```
-
-```json
-{"result": {"type": "checkpoint_diff", "session": "work", "window": "4be1c09a-...", "worktree": "/src/api",
- "checkpoint": {"n": 2, "kind": "turn", "...": "..."}, "base": "checkpoint 1", "base_tree": "9d24e28...",
- "files": [{"path": "notes.txt", "status": "M", "added": 1, "removed": 0, "hunks": ["..."]}],
- "totals": {"files": 1, "added": 1, "removed": 0}, "truncated": false, "untrusted": true}}
-```
-
-`files`, `totals` and `truncated` are as `review-diff` returns them, with the
-same caps. A file the base does not have is `A`: the checkpoint does not say
-whether git tracked it. A pane without `admin` needs `read`.
-
-### restore-checkpoint
-
-Put a pane's git work tree back to a checkpoint. The daemon first saves the
-work tree as a `safety` checkpoint, labelled "before restoring checkpoint N",
-so restoring that one undoes the restore. Then it writes the files that
-differ between the two trees and removes the files the checkpoint does not
-have, through a temporary index. The index, `HEAD`, the branch and the stash
-do not change, and ignored files are in no checkpoint and are not touched,
-so nothing git can see is lost. `git status` afterwards shows the restored
-files as changes against the index. A submodule that differs is left as it
-is and listed in `skipped`.
-
-The checkpoint can have a file where the disk has one that no checkpoint
-holds, such as an ignored file. Then the restore is `invalid_params`,
-`available` lists those paths, and nothing changes. Writing over such a file
-would lose it.
-
-Params: `session`, `window`, `n` (required), `force`. While the pane's agent
-is `working` or `needs_input` the restore is `not_ready` and changes nothing,
-since the agent would go on writing: wait for the turn to end, or pass
-`force`. A checkpoint taken in another work tree than the one the pane is in
-now is `invalid_params`. Errors: `no_checkpoint`, `git_failed` (when it
-fails after the safety checkpoint, the hint says to restore that one).
-
-```json
-{"verb": "restore-checkpoint", "params": {"session": "work", "window": "build", "n": 1}}
-```
-
-```json
-{"result": {"type": "checkpoint_restored", "session": "work", "window": "4be1c09a-...", "worktree": "/src/api",
- "restored": {"n": 1, "...": "..."}, "safety": {"n": 3, "kind": "safety", "...": "..."},
- "written": ["notes.txt"], "removed": [], "skipped": []}}
-```
-
-A restore writes the files the pane's agent works on, so a pane without
-`admin` needs `write`, and may restore only a pane that holds nothing it does
-not, as `review-note` adds notes.
 
 ### ship-commit
 
@@ -4527,8 +4431,8 @@ person or a pane with `admin` starts a judge.
 Once start-agent made the session and the pane, every attempt's record names
 them by the session's ID and the pane's window ID (`judge_session`,
 `judge_window`), never by a name. That pane alone reaches the attempts, and
-only with these verbs: `compare-fan`, `review-diff`, `list-checkpoints`,
-`checkpoint-diff`, `capture-pane`, `list-windows`, `get-agent-state` and
+only with these verbs: `compare-fan`, `review-diff`, `capture-pane`,
+`list-windows`, `get-agent-state` and
 `set-fan-verdict`. So the judge reads the attempts' screens and scrollback
 as well as their diffs. It cannot type into their panes, run a command in
 their sessions or start an agent there, and it does not read their command
@@ -6044,9 +5948,6 @@ them:
 | `list-queued` | The messages waiting in a pane's queue | `read` | no |
 | `cancel-queued` | Drop queued messages; a pane drops only what it queued | `write` | the person's entries need a live `human_nonce` |
 | `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted`. Built: see [get-approval](#get-approval) | `read`; its `session` is the pane's own unless named | no |
-| `list-checkpoints` | The checkpoints of a pane's work tree, one per turn that changed a file, marked `untrusted`. See [list-checkpoints](#list-checkpoints) | `read`, own session and fan group | no |
-| `checkpoint-diff` | What one turn changed, marked `untrusted` | `read`, own session and fan group | no |
-| `restore-checkpoint` | Put a pane's work tree back to a checkpoint, after a safety checkpoint | `write`, only on a pane the caller could type into | no |
 | `ship-commit` | Commit every change in a pane's work tree on its branch, as the person | `write`, only on a pane the caller could type into | no |
 | `ship-merge` | Merge a worktree's branch into its base in the main checkout, undoing a conflict | `write`, only on a pane the caller could type into | no |
 | `ship-push`, `ship-pr` | Push the branch, and open a pull request with gh, after a `confirm` token | `write`, and the person's `allow` in the Inbox | the person outside every pane on an unrestricted connection goes ahead with the token alone. Every other caller waits for the person in the Inbox |

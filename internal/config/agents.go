@@ -42,9 +42,11 @@ type AgentsConfig struct {
 	// Mail is the [agents.mail] table: how tuios tells an agent that mail
 	// waits for it. See agents_work.go.
 	Mail MailConfig `toml:"mail,omitempty"`
-	// Checkpoints is the [agents.checkpoints] table: the state of a pane's
-	// git work tree saved at the end of each agent turn. See agents_work.go.
-	Checkpoints CheckpointsConfig `toml:"checkpoints,omitempty"`
+	// Checkpoints is the retired [agents.checkpoints] table. tuios takes no
+	// checkpoints, and the table is read only so a file that still has it
+	// loads, validation can say to remove it, and its max_untracked_mb can
+	// carry over to [review]. See RetiredCheckpoints.
+	Checkpoints *RetiredCheckpoints `toml:"checkpoints,omitempty"`
 	// HerdrProtocol says which panes are told about the socket tuios accepts
 	// herdr's pane state protocol on, which Crush and other harnesses report
 	// to by themselves: "always" (the default) for every pane, the way herdr

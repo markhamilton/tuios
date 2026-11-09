@@ -278,9 +278,10 @@ type Daemon struct {
 	// review_notes.go.
 	reviewNotes reviewNoteStore
 
-	// checkpoints saves a pane's work tree when its agent finishes a turn.
-	// Its zero value is on. See checkpoints.go.
-	checkpoints checkpointer
+	// reviewMaxUntracked is [review] max_untracked_mb in bytes, zero for no
+	// limit: the size past which review, review-stage and fan compare leave
+	// an untracked file unread. See SetReviewMaxUntracked.
+	reviewMaxUntracked atomic.Int64
 
 	// shipMu runs one commit, merge or push of the ship verbs at a time,
 	// shipAsks remembers the Inbox questions the outbound ones put, and prs
@@ -876,10 +877,10 @@ type DaemonConfig struct {
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
-	// Checkpoints is [agents.checkpoints]: whether a pane's work tree is
-	// saved when its agent finishes a turn, and how many are kept. The zero
-	// value is on with the default keep. See checkpoints.go.
-	Checkpoints config.CheckpointsConfig
+	// Review is [review], for max_untracked_mb: the size past which review,
+	// review-stage and fan compare leave an untracked file unread. The zero
+	// value is the default, 50 MB.
+	Review config.ReviewConfig
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
@@ -933,7 +934,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
-	d.SetCheckpoints(cfg.Checkpoints)
+	d.SetReviewMaxUntracked(cfg.Review)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
@@ -1150,11 +1151,6 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)
-		// A finished turn in a git work tree gets a checkpoint, taken off
-		// this path. With the agent features off no turn finishes.
-		if !d.agentsOff.Load() {
-			d.noteCheckpointEvent(s, ev)
-		}
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.

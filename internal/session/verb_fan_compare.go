@@ -217,7 +217,7 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	rows := make([]fanCompareRow, len(siblings))
-	maxUntracked := d.checkpoints.maxUntracked.Load()
+	maxUntracked := d.reviewMaxUntracked.Load()
 	var wg sync.WaitGroup
 	for i, s := range siblings {
 		rows[i] = d.fanRow(s)

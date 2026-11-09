@@ -171,10 +171,6 @@ func TestGitRunsNoRepositoryProgram(t *testing.T) {
 		run   func() error
 		lfsed bool
 	}{
-		{"checkpoint", func() error {
-			_, _, err := worktree.SaveCheckpoint(ctx, r.repo, worktree.CheckpointMeta{Pane: "a1b2c3d4", Session: "s", Turn: 1}, 0)
-			return err
-		}, true},
 		{"numstat", func() error { _, err := worktree.WorkingNumstat(ctx, r.repo, "HEAD", 0); return err }, true},
 		{"detail", func() error { _, _, err := worktree.WorkingDetail(ctx, r.repo, "HEAD", 100, 100, 0); return err }, true},
 		{"changes", func() error { _, err := worktree.ChangesCtx(ctx, r.repo); return err }, false},

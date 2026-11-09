@@ -34,7 +34,7 @@ func TestReviewDoesNotReadLargeUntrackedFiles(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[agents.checkpoints]\nmax_untracked_mb = 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[review]\nmax_untracked_mb = 1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	repo := testutil.GitRepo(t)

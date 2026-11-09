@@ -8,7 +8,7 @@ import (
 
 // The record each pretend agent keeps of its run: the conversation as entries
 // in the shape tuios's agent-transcript verb sends, the prompt it waits on,
-// and the checkpoints of its turns. The tour's fleet (internal/learn) reads
+// and how many of its turns changed a file. The tour's fleet (internal/learn) reads
 // it to answer the agents view's verbs in place of a daemon, and answers a
 // prompt or sends a reply by typing into the agent's pane, as a person would.
 
@@ -64,16 +64,6 @@ type AgentPrompt struct {
 	Since int64
 }
 
-// AgentCheckpoint is a checkpoint taken at the end of a turn that changed a
-// file. The JSON is what list-checkpoints sends.
-type AgentCheckpoint struct {
-	N     int    `json:"n"`
-	Kind  string `json:"kind"`
-	Label string `json:"label"`
-	State string `json:"state"`
-	At    int64  `json:"at"`
-}
-
 // Agent is one pretend agent's record.
 type Agent struct {
 	// Window is the pane it runs in, Name the command that started it
@@ -82,16 +72,16 @@ type Agent struct {
 
 	pty *Pty
 
-	mu          sync.Mutex
-	entries     []AgentEntry
-	prompt      *AgentPrompt
-	state       string
-	message     string
-	resting     bool
-	rests       int
-	checkpoints []AgentCheckpoint
-	rev         uint64
-	ids         int
+	mu      sync.Mutex
+	entries []AgentEntry
+	prompt  *AgentPrompt
+	state   string
+	message string
+	resting bool
+	rests   int
+	changed int
+	rev     uint64
+	ids     int
 }
 
 var (
@@ -125,8 +115,9 @@ type AgentView struct {
 	Prompt  *AgentPrompt
 	State   string
 	// Message is the note of the state, such as a turn's summary.
-	Message     string
-	Checkpoints []AgentCheckpoint
+	Message string
+	// Changed counts the turns that changed a file.
+	Changed int
 	// Resting says the agent waits at its input line for the next task, so
 	// a reply typed now starts a turn at once. Rests counts the times it
 	// came to rest, so one rest takes one reply.
@@ -141,13 +132,13 @@ func (a *Agent) View() AgentView {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	v := AgentView{
-		Entries:     append([]AgentEntry(nil), a.entries...),
-		State:       a.state,
-		Message:     a.message,
-		Rests:       a.rests,
-		Checkpoints: append([]AgentCheckpoint(nil), a.checkpoints...),
-		Resting:     a.resting,
-		Rev:         a.rev,
+		Entries: append([]AgentEntry(nil), a.entries...),
+		State:   a.state,
+		Message: a.message,
+		Rests:   a.rests,
+		Changed: a.changed,
+		Resting: a.resting,
+		Rev:     a.rev,
 	}
 	if a.prompt != nil {
 		p := *a.prompt

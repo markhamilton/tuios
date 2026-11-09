@@ -27,18 +27,16 @@ const (
 )
 
 // judgeReadVerbs are the reads a judge makes of the attempts it judges: the
-// comparison, the diffs and checkpoints, the attempts' screens and
+// comparison, the diffs, the attempts' screens and
 // scrollback, their windows and their agents' state. Nothing else of an
 // attempt's session is in its reach: not its command history, mail,
 // environment, stash or approvals.
 var judgeReadVerbs = map[string]bool{
-	"compare-fan":      true,
-	"review-diff":      true,
-	"list-checkpoints": true,
-	"checkpoint-diff":  true,
-	"capture-pane":     true,
-	"list-windows":     true,
-	"get-agent-state":  true,
+	"compare-fan":     true,
+	"review-diff":     true,
+	"capture-pane":    true,
+	"list-windows":    true,
+	"get-agent-state": true,
 }
 
 // fanJudgeGrants are what the judge's pane holds: read alone. Through tuios

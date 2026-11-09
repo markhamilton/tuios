@@ -34,7 +34,7 @@ func TestWorktreeLsMerged(t *testing.T) {
 	testutil.Git(t, repo, "remote", "add", "origin", origin)
 	testutil.Git(t, repo, "push", "-q", "-u", "origin", "main")
 
-	tr := newCheckpointTranscript(t, base, repo)
+	tr := newCLITranscript(t, base, repo)
 	tr.ok("new", "main", "--detach")
 
 	type wt struct{ branch, session, dir string }

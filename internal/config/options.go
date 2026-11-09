@@ -1646,6 +1646,11 @@ var optionSpecs = []Option{
 		Accepted:    ReviewFocuses,
 		Default:     ReviewOpenOnDiff,
 	},
+	{
+		Path: "review.max_untracked_mb", Type: OptionInt, Section: "review",
+		Description: "Megabytes past which review and fan compare do not read an untracked file. 0 is the default, 50. -1 is no limit.",
+		Default:     strconv.Itoa(DefaultReviewMaxUntrackedMB), Min: -1, Max: 1 << 20,
+	},
 	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",

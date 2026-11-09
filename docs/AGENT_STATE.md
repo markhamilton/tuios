@@ -221,7 +221,6 @@ turns into an Inbox question after 30 seconds. See
 - [Harness integrations](#harness-integrations)
 - [Headless agents over a protocol](#headless-agents-over-a-protocol)
 - [Typing a prompt](#typing-a-prompt)
-- [Turn checkpoints](#turn-checkpoints)
 - [Environment](#environment)
 - [Alerts](#alerts)
 - [Who can act as the person](#who-can-act-as-the-person)
@@ -2667,7 +2666,7 @@ stage with no card has no head, and Done starts folded.
 ```
 Todo  2 ──────────────────────────────    split the auth middleware
 ▌ ×  split the auth middleware      4m    Todo · 4m · api t6
-     Blocked  waits on t1           t6    Card   Thread   Checkpoints   Pane
+     Blocked  waits on t1           t6    Card   Thread   Pane
   ○  write the changelog            9m    ────────────────────────────────────
      free                           t3    Blocked waits on t1
 Doing  2 ─────────────────────────────    History
@@ -2714,16 +2713,9 @@ At 170 columns and wider a side column sits beside the focus:
   session, or one that closed, says so, and `ctrl+]` opens it.
 - **Last turn**: each file the last turn changed, with its added and removed
   lines and a bar of their share.
-- **Checkpoints**: the turn checkpoints of the agent's work tree, newest
-  first, with the time and what the turn was. They are read while they are on
-  screen, when you select the agent and when its state changes. One is taken
-  at the end of a turn that changes a file, and none while
-  `[agents.checkpoints]` is off, which the section says.
-  `tuios checkpoint restore N` restores one.
 
-On a narrower screen the same pieces are focus tabs after Thread and
-Changes: Checkpoints, and Live, which shows the live pane at the focus's
-size. The card of a held approval or a question stays under every tab, so a key
+On a narrower screen the live pane is a focus tab after Thread and
+Changes: Pane, which shows the live pane at the focus's size. The card of a held approval or a question stays under every tab, so a key
 never answers a card you cannot see.
 
 The reply area sits at the foot of the focus: who the reply is for, when it
@@ -4883,7 +4875,7 @@ Committed and uncommitted work show together, untracked files included (status
 through a temporary copy of the worktree's index, so the repository's index,
 its files and what the agent staged are never changed; the objects the tree
 needs are loose objects that `git gc` collects. An untracked file larger than
-`[agents.checkpoints] max_untracked_mb` (50 MB by default) is never read: it
+`[review] max_untracked_mb` (50 MB by default) is never read: it
 is listed as not read (`skipped`), with no counts. Reading it would copy it
 into the object store, and through a clean filter such as Git LFS's into that
 store as well, on every review. A diff stops at 400 files,
@@ -4893,7 +4885,7 @@ All the git calls of one diff are bounded at 10 seconds together, and nothing
 runs until a diff is asked for. The repository is read on the machine the
 daemon runs on.
 
-**Programs the repository names.** tuios runs git for checkpoints, reviews,
+**Programs the repository names.** tuios runs git for reviews,
 counts, diffs and new worktrees with no hooks. A filter, textconv or diff
 program that only the repository's own config names does not run. tuios then
 reads those files as they are on disk. A filter that your global config names,
@@ -5048,65 +5040,6 @@ Who acts:
   delivery queue and never types over a prompt, `verify-fan` opens its windows
   with no grants, and `keep-fan` leaves an attempt with uncommitted work in
   place and the dock says which.
-
-## Turn checkpoints
-
-The daemon saves the work tree of an agent's pane at the end of each turn.
-You can read what one turn changed, and you can undo it.
-
-```bash
-tuios checkpoint list -w build            # one row per saved turn
-tuios checkpoint diff -w build 2          # what turn 2 changed
-tuios checkpoint restore -w build 1       # put the files back as turn 1 left them
-```
-
-The verbs are `list-checkpoints`, `checkpoint-diff` and `restore-checkpoint`
-([protocol.md](protocol.md#list-checkpoints)).
-
-**When a checkpoint is taken.** A pane goes from `working` to `done`,
-`idle` or `needs_input`. A pane can also go to `unknown` at the end of a
-counted turn (see [Finished turns](#finished-turns)). The pane's directory
-must be in a git work tree, found as for `review-diff`. The daemon then saves
-the work tree as a commit under `refs/tuios/checkpoints/<window id>/<n>`. A
-turn that changed no file since the last checkpoint gets no checkpoint.
-
-**What a checkpoint holds.** Tracked files as they are on disk, and
-untracked files that git does not ignore. Ignored files are not in it. The
-commit's parent is `HEAD` at that time. The message records the turn number,
-the time, the agent state and a short label. The label is the turn's prompt,
-or the line the turn ended with, or the state's message.
-
-**What does not change.** The daemon writes the tree through a temporary
-index. Your index, `HEAD`, your branch and the stash stay as they are. Git
-does not push `refs/tuios`, because no default refspec names it.
-
-**Restore.** `checkpoint restore N` first saves the work tree as a `safety`
-checkpoint. To undo the restore, restore that checkpoint. Then the daemon
-writes the files that differ and removes the files that checkpoint N does
-not have. It does not touch ignored files, the index or `HEAD`. `git status`
-then shows the restored files as changes. The restore stops while the agent
-is `working` or `needs_input`, because the agent would write over the files.
-Wait for the turn to end, or use `--force`.
-
-**Diff.** `checkpoint diff N` compares checkpoint N with the pane's checkpoint
-before it. The first checkpoint compares with `HEAD` at the time it was
-taken. The caps of `review-diff` apply.
-
-**Cost and limits.** The git commands run off the daemon's event path, one
-at a time, with a limit of 30 seconds each. On a work tree of 50,000 files a
-checkpoint takes about 100 ms. Each pane keeps the newest 50 checkpoints.
-Removing a worktree with `worktree rm` or `fan keep` deletes the checkpoints
-taken in it.
-
-```toml
-[agents.checkpoints]
-enabled = true   # set false to take no checkpoints
-keep = 50        # checkpoints per pane, 1 to 1000
-```
-
-**Grants.** From a pane, `list-checkpoints` and `checkpoint-diff` need
-`read`. `restore-checkpoint` needs `write`. A pane can restore only a pane
-that holds no grant it does not hold.
 
 ## Shipping a worktree
 

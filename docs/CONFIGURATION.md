@@ -1948,7 +1948,16 @@ them to the file list. `[review] focus` picks the side a review opens on:
 [review]
 # Which side has the keys when a review opens: "diff" or "files" (default: "diff")
 focus = "files"
+# Megabytes past which an untracked file is not read (default: 50, -1: no limit)
+max_untracked_mb = 50
 ```
+
+`max_untracked_mb` is the size of the largest untracked file that
+`tuios review`, review-stage, fan compare and `tuios fan diff` read. A larger
+file shows as not read, with no counts. Reading it would copy it into the
+repository's object store, and through a clean filter such as Git LFS's into
+that store too, on every read. `0` is the default, 50. A negative value means
+no limit. The daemon reads it at start and again when the file changes.
 
 It applies to every review that opens, and to an attempt opened from the
 compare view. A review with no changes opens on the diff, which says so. `r`,
@@ -2634,11 +2643,6 @@ max = 8
 
 [agents.mail]
 wake = true
-
-[agents.checkpoints]
-enabled = true
-keep = 50
-max_untracked_mb = 50
 ```
 
 - `hold_plans` also hands a plan an agent in plan mode asks to have approved
@@ -2687,18 +2691,13 @@ max_untracked_mb = 50
   change turns it off at once. Turning it on again waits for `tuios config
   apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
-- `[agents.checkpoints]` saves the git work tree of an agent's pane each time
-  the agent finishes a turn that changed a file (`tuios checkpoint`).
-  `enabled` is true by default. `keep` is how many checkpoints one pane keeps:
-  50 by default, at most 1000. `max_untracked_mb` leaves an untracked file
-  larger than this many megabytes out of a checkpoint: 50 by default, and a
-  negative value means no limit. `tuios checkpoint list` names the files left
-  out, and a restore does not change them. The same limit holds for
-  `tuios review`, review-stage, fan compare and `tuios fan diff`, which never
-  read such a file: review lists it as not read. Reading one would copy it
-  into the repository's object store, and through a clean filter such as Git
-  LFS's into that store too, on every read. The daemon reads these at start
-  and again when the file changes. See [Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
+- `[agents.checkpoints]` is no longer used. This fork takes no turn
+  checkpoints and writes nothing into your repositories. A config that still
+  has the table loads, with a warning to remove it. A `max_untracked_mb` in it
+  applies to `[review]` when `[review]` does not set one. tuios does not delete
+  the `refs/tuios/checkpoints/` refs that an older tuios wrote. To remove them,
+  run `git for-each-ref --format='delete %(refname)' refs/tuios/checkpoints | git update-ref --stdin`
+  in the repository.
 
 One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long
 an agent row rests (idle, unknown, or done and already seen) before the rail
