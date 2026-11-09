@@ -358,7 +358,9 @@ func (m *OS) tileAllWindows() {
 
 // ToggleAutoTiling toggles automatic tiling mode
 func (m *OS) ToggleAutoTiling() {
-	m.SetAutoTiling(!m.AutoTiling)
+	// Toggled from the session's mode: on a narrow client that tiles a
+	// floating session for itself, the toggle tiles the session.
+	m.SetAutoTiling(!m.narrowSessionTiling(m.AutoTiling))
 }
 
 // SetAutoTiling turns tiling on or off.
@@ -375,6 +377,24 @@ func (m *OS) SetAutoTiling(on bool) {
 	if m.InScratchView() && !on {
 		m.ShowNotification("A scratch terminal is always tiled.", "info", m.Settings.NotificationDuration)
 		return
+	}
+	// A narrow client always shows the panes tiled (see narrow_view.go). On
+	// from a narrow client that tiles a floating session for itself is a real
+	// request: the session tiles from now on, and there is nothing left to
+	// keep.
+	if m.narrow.on {
+		if !on {
+			m.ShowNotification("The screen is narrow, so the panes stay tiled. Floating comes back on a wider screen.", "info", m.Settings.NotificationDuration)
+			return
+		}
+		if m.narrow.overriding {
+			m.narrow.overriding = false
+			m.narrow.floatGeom = nil
+			m.narrow.sessionTiling = true
+			m.SyncStateToDaemon()
+			m.FireLayoutChanged()
+			return
+		}
 	}
 	m.settleSizes(func() { m.setAutoTiling(on) })
 }

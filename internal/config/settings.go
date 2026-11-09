@@ -572,6 +572,11 @@ type Settings struct {
 	// Set via appearance.snap_edge config.
 	SnapEdge int
 
+	// NarrowWidth is the column count below which this client is narrow: it
+	// tiles the panes for itself and hides its sidebar. Zero turns it off.
+	// See NarrowWidthDefault. Set via appearance.narrow_width config.
+	NarrowWidth int
+
 	// AutoEnterTerminalOnFocus enters terminal mode when a window-management
 	// keyboard command actually moves focus to another pane. Hover-focus and
 	// click-to-type keep their own policies; this is only those explicit focus
@@ -1059,6 +1064,7 @@ func DefaultSettings() Settings {
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		SnapEdge:                    SnapEdgeDefault,
+		NarrowWidth:                 NarrowWidthDefault,
 		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,
 		KittyPlaceholders:           KittyPlaceholdersAuto,

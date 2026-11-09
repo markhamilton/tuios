@@ -496,6 +496,11 @@ When the session already has a client, `tuios attach` says so and names the
 the client that last had input (window_size latest)." See
 [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).
 
+A client with fewer columns than `appearance.narrow_width` (default `100`), for
+example a phone, shows the panes tiled and hides its sidebar. The session and
+the other clients do not change. See
+[CONFIGURATION.md](CONFIGURATION.md#narrow-screens).
+
 When you attach, each other client of the session detaches. Use `-k` to
 keep them attached. A bare `tuios` and `tuios new` on a session that exists
 also detach the other clients. Set `TUIOS_ATTACH_KEEP_OTHERS=1` to keep the
@@ -2008,6 +2013,7 @@ name alone. Some of them:
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn. On the left, the pill order is close, zoom, minimize, so close sits at the outer corner |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
 | `snap_edge` | `0` to `20` | Depth in cells of the edge zones where a dragged floating pane snaps when you release it (default `1`, `0` is off) |
+| `narrow_width` | `0` to `1000` | A client with fewer columns shows the panes tiled and hides its sidebar. Other clients and the session do not change (default `100`, `0` is off) |
 | `background` | `off`, `theme`, a colour | Background painted on every surface not set on its own: panes, desktop, window chrome, dock and rail (default `off`) |
 | `pane_background` | `off`, `theme`, a colour, or empty | Background behind pane content where the program left the default; empty follows `background` |
 | `desktop_background` | `off`, `theme`, a colour, or empty | Background behind and between panes; empty follows `background` |

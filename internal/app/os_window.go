@@ -825,7 +825,9 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 // Window.Resize), and syncs the flag to the daemon rather than only flipping a
 // local field.
 func (m *OS) applyStartupTiling() {
-	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.AutoTiling {
+	// The session's own mode: a narrow client tiles a floating session for
+	// itself (see narrow_view.go), and that is no reason to skip tiling it.
+	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.narrowSessionTiling(m.AutoTiling) {
 		return
 	}
 	// The first layout is placed, not animated. A pane that slides into its

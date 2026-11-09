@@ -162,7 +162,9 @@ func (m *OS) treeKeysWithEmpty() map[int]string {
 // held it. It reports false when an op could not be sent, and the tree stays
 // marked as unsent so the next sync tries again.
 func (m *OS) sendTreeOps() bool {
-	if !m.AutoTiling {
+	// A narrow client tiling a floating session lays its trees out for its
+	// own screen only. See narrow_view.go.
+	if !m.AutoTiling || m.narrowOverriding() {
 		return true
 	}
 	if m.treeSeen == nil {

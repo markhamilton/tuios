@@ -1176,6 +1176,43 @@ snap_edge = 0   # release a dragged pane anywhere and it stays there
 The option is on the settings page, in the Appearance section.
 `tuios set-config appearance.snap_edge 3` applies it at once.
 
+## Narrow screens
+
+A phone that connects over SSH and runs `tuios attach` has a narrow screen.
+Floating panes are hard to use there, and the sidebar takes too many columns.
+So a client with fewer columns than `appearance.narrow_width` uses the narrow
+view:
+
+- The client shows the panes tiled, also when the session floats.
+- The client hides its sidebar. You can show it again with the sidebar key.
+- Other clients do not change. The session stays floating, and each floating
+  pane keeps its position and size. When the desktop attaches again, its
+  layout is the same as before.
+
+The default is `100` columns. A phone in portrait has 40 to 60 columns, and a
+phone in landscape has 80 to 99 at the usual font sizes. A desktop terminal
+in half of the screen usually has more than 100. `0` turns the narrow view off.
+
+```toml
+[appearance]
+narrow_width = 100
+```
+
+tuios checks the width at each resize. When the client becomes wider than the
+limit, the floating layout and the sidebar come back. When it becomes narrow
+again, the narrow view comes back.
+
+While the view is on, the tiling key cannot turn tiling off. Turn tiling on
+from the narrow client to tile the session for every client.
+
+`tuios attach -k` keeps the desktop attached at the same time. The desktop
+keeps its floating layout. The session size follows `daemon.window_size`, and
+each pane has one size, so the last client to lay out the panes sets the size
+of the program in each pane.
+
+The narrow view applies only to a client of a daemon session. The option is on
+the settings page, in the Behavior section.
+
 ## Drop preview
 
 While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:

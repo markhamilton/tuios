@@ -607,6 +607,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.focus_wrap"),
 			opt("appearance.alt_drag"),
 			opt("appearance.snap_edge"),
+			opt("appearance.narrow_width"),
 			opt("appearance.right_click_opens_menu"),
 			opt("appearance.new_window_inherit_cwd"),
 			opt("appearance.new_window_follow_ssh"),

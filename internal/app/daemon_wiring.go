@@ -390,6 +390,8 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	// from the switcher is empty, and it has to be offered this client's
 	// rail as any other new session is.
 	m.joinSession(state)
+	// A narrow view in force tiles the new session too. See narrow_view.go.
+	m.restartNarrowView()
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays

@@ -64,6 +64,9 @@ tuios detach-client -s work --all-other
 every client of it detaches. `--all-other` keeps the client used last and
 detaches the rest. `tuios attach NAME` attaches and detaches the other
 clients of NAME. `tuios attach -k NAME` keeps them attached. `[daemon] single_client = true` does that on every attach.
+A client with fewer columns than `appearance.narrow_width` (default 100, such
+as a phone) shows the panes tiled and hides its sidebar for itself only. The
+session's tiling mode and floating layout do not change.
 Detaching takes the screen away from the person, so it needs the `admin`
 grant. Do not detach the person's client unless they asked for it.
 

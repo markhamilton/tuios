@@ -47,6 +47,14 @@ type sidebarEdgeState struct {
 func (m *OS) ToggleSidebar() {
 	on := !m.Settings.SidebarEnabled
 	m.setSidebarShown(on)
+	// A narrow client shows or hides its own rail only: not the session's,
+	// and not the config's. Leaving the narrow view puts the rail back as it
+	// was before. See narrow_view.go.
+	if m.narrow.on {
+		m.narrow.railShown = on
+		m.SidebarRevealedForFocus = false
+		return
+	}
 	// The [appearance.sidebar] table, not the legacy flat key: the migration
 	// folds the flat key in only when the table leaves enabled unset, and the
 	// table sets it whenever the file came from a first run, so a toggle
@@ -156,6 +164,11 @@ func (m *OS) seedSidebar() {
 	}
 	m.sidebarSeeded = true
 	on := m.Settings.SidebarEnabled && !m.SidebarRevealedForFocus
+	if m.narrow.on {
+		// The narrow view's hidden rail is this client's alone. The session
+		// is offered the rail this client had before it.
+		on = m.narrow.sidebarPrev
+	}
 	if err := m.DaemonClient.SendSidebarVisibility(on, true); err != nil {
 		m.LogError("Failed to offer the sidebar state: %v", err)
 	}
@@ -167,7 +180,8 @@ func (m *OS) seedSidebar() {
 // is this client's own and is not sent, and neither is a rail too narrow to
 // draw, which changes the rail's width and not whether it is shown.
 func (m *OS) syncSidebarToSession() {
-	if !m.sidebarOpsOn() || m.sidebarSession == "" || m.SidebarRevealedForFocus {
+	// A narrow client's rail is its own. See narrow_view.go.
+	if !m.sidebarOpsOn() || m.sidebarSession == "" || m.SidebarRevealedForFocus || m.narrow.on {
 		return
 	}
 	v := sidebarVisibility(m.Settings.SidebarEnabled)
@@ -187,6 +201,12 @@ func (m *OS) syncSidebarToSession() {
 // passes changed, and settleChrome sends that change to the session.
 func (m *OS) keepSessionSidebar(changed bool) {
 	if changed || !m.sidebarOpsOn() || m.sidebarSession == "" {
+		return
+	}
+	if m.narrow.on {
+		// The narrow view keeps the rail this client shows; the session's
+		// goes back on when the view ends.
+		m.Settings.SidebarEnabled = m.narrow.railShown
 		return
 	}
 	m.Settings.SidebarEnabled = m.sidebarSession == session.SidebarShown || m.SidebarRevealedForFocus
@@ -228,6 +248,12 @@ func (m *OS) adoptSidebarVisibility(state *session.SessionState) bool {
 	}
 	m.sidebarSession = v
 	on := v == session.SidebarShown
+	if m.narrow.on {
+		// Another client showed or hid the session's rail. The narrow view
+		// keeps its own, and goes back to this one when it ends.
+		m.narrow.sidebarPrev = on
+		return false
+	}
 	if on {
 		// Shown for the session now, so leaving the scope keeps it.
 		m.SidebarRevealedForFocus = false

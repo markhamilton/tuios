@@ -2034,6 +2034,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.announceRestart()
 		}
 
+		// A terminal that went narrow, or wide again, switches the narrow view
+		// before anything below lays the panes out: the floating rectangles
+		// are kept before a clamp or a scale to this size could touch them,
+		// and the reserve sent next leaves out a rail the view hides.
+		m.updateNarrowView()
+
 		// Notify daemon of our terminal size for multi-client size calculation
 		// This allows the daemon to compute effective size = min(all clients)
 		//

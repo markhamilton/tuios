@@ -825,6 +825,17 @@ const (
 	SnapEdgeMax     = 20
 )
 
+// NarrowWidth is the column count below which a client attached to a daemon
+// session is narrow: it shows the panes tiled whatever the session's layout,
+// and hides its sidebar, for itself only. 100 catches a phone over SSH in
+// portrait (40-60 columns) and in landscape at the usual font sizes (80-99),
+// and misses a half-screen split on a desktop monitor (110 and up). Zero
+// turns narrow mode off.
+const (
+	NarrowWidthDefault = 100
+	NarrowWidthMax     = 1000
+)
+
 // DimUnfocusedMax caps it. The cap is not a legibility floor (content is the
 // user's own text and they may quiet it as far as they like). It only stops a
 // pane from being erased outright, where there is nothing left to show the

@@ -26,6 +26,10 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	if m.InScratchView() {
 		currentWorkspace, autoTiling = max(m.scratchBase, 1), m.scratchBaseTiling
 	}
+	// A narrow client that tiles a floating session reports the session's
+	// mode and floating rectangles, not its own view. See narrow_view.go.
+	autoTiling = m.narrowSessionTiling(autoTiling)
+	treesTravel := m.AutoTiling && !m.narrowOverriding()
 	state := &session.SessionState{
 		Name:             m.SessionName,
 		CurrentWorkspace: currentWorkspace,
@@ -65,6 +69,9 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			y = anim.EndY
 			width = anim.EndWidth
 			height = anim.EndHeight
+		}
+		if g, ok := m.narrowPushRect(w.ID); ok {
+			x, y, width, height = g.X, g.Y, g.W, g.H
 		}
 
 		state.Windows[i] = session.WindowState{
@@ -129,7 +136,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	}
 
 	// Serialize BSP trees for each workspace
-	if m.WorkspaceTrees != nil && m.AutoTiling {
+	if m.WorkspaceTrees != nil && treesTravel {
 		state.WorkspaceTrees = make(map[int]*session.SerializedBSPTree)
 		for ws, tree := range m.WorkspaceTrees {
 			if tree != nil {
@@ -148,7 +155,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// session switch rebuilds from this state, and without them a widened column
 	// came back at the default width. Not under the trees' check, because a
 	// workspace only ever laid out as a strip has no tree.
-	if m.AutoTiling {
+	if treesTravel {
 		state.WorkspaceScrollColumns = m.scrollColumnsState()
 	}
 
@@ -496,6 +503,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// the asked-for size are the session's, the box is this client's.
 	m.applyPopupRects(false)
 
+	m.restartNarrowView()
+
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
 
@@ -755,6 +764,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.MasterRatio = state.MasterRatio
 	tilingWasOn := m.AutoTiling
 	m.AutoTiling = state.AutoTiling
+	// A narrow client keeps the session's mode and tiles for itself. Before
+	// the scratch view below, which keeps this client's mode as it leaves it.
+	m.adoptNarrowTiling(state)
 	// A scratch group on the screen stays while the session is still on the
 	// workspace it was shown over. The tiling mode the push carries is that
 	// workspace's. See BuildSessionState.
@@ -1277,6 +1289,11 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// either: it can lag this client's own layout, and the slot the drop uses
 	// is the one the layout pass records (noteDragSlot).
 	if adoptGeometry && w == m.LiveWindowDrag() {
+		adoptGeometry = false
+	}
+	// A narrow client tiling a floating session keeps the floating rectangle
+	// for its pushes and draws its own tile. See narrow_view.go.
+	if adoptGeometry && m.narrowKeepsRect(ws) {
 		adoptGeometry = false
 	}
 
@@ -2515,6 +2532,9 @@ func (m *OS) AnnounceLayoutReserve() {
 // fill their box, and tells the daemon. A move that came with a new viewport
 // is left to the resize path, which lays out and announces for itself.
 func (m *OS) settleChrome() {
+	// A config reload or set-config can move appearance.narrow_width across
+	// this client's width. A resize is caught earlier, in its own handler.
+	m.updateNarrowView()
 	m.syncSidebarToSession()
 	r := m.OwnLayoutReserve()
 	w, h := m.GetRenderWidth(), m.GetRenderHeight()

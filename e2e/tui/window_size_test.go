@@ -605,7 +605,9 @@ func TestWindowSizeLegacyClient(t *testing.T) {
 // bottom of the screen. With the mark back at the top of the pane area, row
 // 0 carries it and the rule does not.
 func TestWindowSizeRailStaysWhole(t *testing.T) {
-	_, small, base := windowSizePair(t, "largest", "[appearance.sidebar]\nenabled = true\n", nil)
+	// narrow_width = 0: the small client is below the narrow line, and the
+	// narrow view would hide the rail this test draws.
+	_, small, base := windowSizePair(t, "largest", "[appearance]\nnarrow_width = 0\n\n[appearance.sidebar]\nenabled = true\n", nil)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest with the rail")
 	waitMark(t, small, true, "the small client with the rail")
 	// The rail heads the screen and ends with its footer (the fold control,

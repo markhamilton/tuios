@@ -283,6 +283,11 @@ var optionSpecs = []Option{
 		Default:     strconv.Itoa(SnapEdgeDefault), Min: 0, Max: SnapEdgeMax,
 	},
 	{
+		Path: "appearance.narrow_width", Type: OptionInt, Section: "appearance",
+		Description: "A client with fewer columns than this shows the panes tiled and hides its sidebar. Other clients do not change. 0 is off.",
+		Default:     strconv.Itoa(NarrowWidthDefault), Min: 0, Max: NarrowWidthMax,
+	},
+	{
 		Path: "appearance.right_click_opens_menu", Type: OptionBool, Section: "appearance",
 		Description: "A plain right-click on a pane in terminal mode opens the pane menu, for pasting without selecting first",
 		Default:     "false",

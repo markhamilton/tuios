@@ -1981,6 +1981,9 @@ type OS struct {
 	// always tiles. scratchViewName is the group's name. See scratch.go.
 	scratchBase       int
 	scratchBaseTiling bool
+	// narrow is this client's narrow-screen view: the panes tiled and the
+	// rail hidden for this client alone. See narrow_view.go.
+	narrow            narrowView
 	scratchViewName   string
 	scratchReturnMode Mode
 	// forceTerminalMode is OSOptions.StartInTerminalMode: applyStartupPreferences
