@@ -57,8 +57,7 @@ jobs:
 
       # The build succeeding is not the assertion. The bug this file exists for
       # was a binary that was never built rather than a build that failed, so
-      # both commands have to be in the image and able to say what they are.
-      - name: Both commands are in the image
+      # the command has to be in the image and able to say what it is.
+      - name: The command is in the image
         run: |
           docker run --rm --entrypoint /tuios tuios:ci --version
-          docker run --rm --entrypoint /tuios-web tuios:ci --version

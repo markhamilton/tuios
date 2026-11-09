@@ -1,7 +1,7 @@
 # Dev commands for working on tuios. Run `just` or `just --list` for the list.
 #
 # Most recipes never touch the daemon you work in. The ones that do (install,
-# install-ghostty, deploy, deploy-hosts, restart) say so in their comment.
+# install-ghostty, restart) say so in their comment.
 # The others run against a scratch daemon whose sockets, state and config live
 # under the scratch directory below, or against none at all.
 #
@@ -22,8 +22,7 @@ TASKSET := `n=$(nproc 2>/dev/null || echo 1); if command -v taskset >/dev/null &
 PREFIX := env("TUIOS_PREFIX", home_directory() / ".local/bin")
 
 # An absolute path to a config.toml to copy into the scratch daemon's config.
-# Empty means the defaults. A [hosts] table in the file links the scratch
-# daemon to those machines.
+# Empty means the defaults.
 CONFIG := ""
 
 # The golangci-lint that lint runs: the version in .github/workflows/lint.yml,
@@ -68,7 +67,7 @@ default:
 
 # ---------------------------------------------------------------- build
 
-# Build tuios and tuios-web into .dev/bin as dev+COMMIT
+# Build tuios into .dev/bin as dev+COMMIT
 [group('build')]
 build:
     #!/usr/bin/env bash
@@ -87,11 +86,10 @@ build:
     ldflags="$ldflags -X main.version=$version"
     mkdir -p {{ quote(bin) }}
     {{ NICE }} {{ TASKSET }} go build -trimpath -ldflags "$ldflags" -o {{ quote(bin / "tuios") }} ./cmd/tuios
-    {{ NICE }} {{ TASKSET }} go build -trimpath -ldflags "$ldflags" -o {{ quote(bin / "tuios-web") }} ./cmd/tuios-web
     {{ quote(bin / "tuios") }} --version | head -1
 
 # The live daemon keeps the old build until `just restart`.
-# Install tuios and tuios-web to ~/.local/bin, keep a .bak
+# Install tuios to ~/.local/bin, keep a .bak
 [group('build')]
 install: _backup
     {{ quote(root / "scripts/install.sh") }} --prefix {{ quote(PREFIX) }} --keep-server
@@ -106,28 +104,14 @@ install-ghostty: _backup
 _backup:
     #!/usr/bin/env bash
     set -euo pipefail
-    for name in tuios tuios-web; do
-        if [ -f {{ quote(PREFIX) }}/"$name" ]; then
-            cp -p {{ quote(PREFIX) }}/"$name" {{ quote(PREFIX) }}/"$name.bak"
-            echo "kept {{ PREFIX }}/$name.bak"
-        fi
-    done
-
-# Uses `tuios hosts sync`. With no names it syncs every host in the [hosts]
-# table. A restart ends the programs in the panes of that daemon.
-# Install here and on hosts, restart old daemons (ends pane programs)
-[group('deploy')]
-deploy *hosts: build
-    {{ quote(bin / "tuios") }} hosts sync --dev --src {{ quote(root) }} --local --restart --yes "$@"
-
-# Install on hosts only, restart old daemons (ends pane programs)
-[group('deploy')]
-deploy-hosts *hosts: build
-    {{ quote(bin / "tuios") }} hosts sync --dev --src {{ quote(root) }} --restart --yes "$@"
+    if [ -f {{ quote(PREFIX) }}/tuios ]; then
+        cp -p {{ quote(PREFIX) }}/tuios {{ quote(PREFIX) }}/tuios.bak
+        echo "kept {{ PREFIX }}/tuios.bak"
+    fi
 
 # Layouts come back with new shells.
 # Restart the live daemon (ends the programs in every pane)
-[group('deploy')]
+[group('daemon')]
 restart:
     tuios kill-server || true
     tuios start-server
@@ -194,23 +178,6 @@ sandbox-stop:
         [ -S "$dir/run/tuios/tuios.sock" ] || continue
         ( isolate "${dir%/}" && "$tuios" kill-server && echo "stopped ${dir%/}" )
     done
-
-# Serve tuios-web on 127.0.0.1 against a scratch daemon
-[group('daemon')]
-web port="7681" *args: build
-    #!/usr/bin/env bash
-    set -euo pipefail
-    {{ _isolate }}
-    CONFIG={{ quote(CONFIG) }} isolate {{ quote(scratch / "web") }}
-    port=$1
-    shift
-    exec {{ quote(bin / "tuios-web") }} --host 127.0.0.1 --port "$port" "$@"
-
-# Build Learn tuios (wasm) and serve it on 127.0.0.1
-[group('daemon')]
-learn port="8765":
-    {{ quote(root / "cmd/tuios-wasm/build.sh") }} {{ quote(out / "learn") }}
-    node {{ quote(root / "cmd/tuios-wasm/serve.mjs") }} {{ quote(out / "learn") }} "$1"
 
 # Args go to the launcher. Its --live mode uses the live daemon.
 # Launch tuios-gui on its own empty daemon
@@ -409,29 +376,6 @@ _tidy mode:
 pins *args:
     {{ quote(root / "scripts/library-pins.sh") }} check "$@"
 
-# Needs node and Chromium. TUIOS_CHROMIUM names the browser.
-# Run the Playwright tests of the web client
-[group('check')]
-clienttests *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd {{ quote(root) }}
-    mkdir -p {{ quote(bin) }}
-    go build -o {{ quote(bin / "tuios-web") }} ./cmd/tuios-web
-    cd clienttests
-    [ -d node_modules ] || npm ci
-    if [ -z "${TUIOS_CHROMIUM:-}" ]; then
-        TUIOS_CHROMIUM=$(command -v chromium || command -v google-chrome || command -v google-chrome-stable || true)
-        [ -n "$TUIOS_CHROMIUM" ] && export TUIOS_CHROMIUM
-    fi
-    TUIOS_WEB_BIN={{ quote(bin / "tuios-web") }} {{ NICE }} {{ TASKSET }} npx playwright test "$@"
-
-# Build the wasm build and test its Go side
-[group('check')]
-wasm-check:
-    {{ NICE }} {{ TASKSET }} go test -count=1 ./internal/webshell/ ./internal/learn/
-    {{ NICE }} {{ TASKSET }} {{ quote(root / "cmd/tuios-wasm/build.sh") }} {{ quote(out / "learn") }}
-
 # The deterministic checks in one gate: fmt, vet, lint, vulns, modernizers,
 # gopls, tidy, cross builds, dead code. --changed limits it to the packages
 # this branch changed against origin/main. Run `just check --changed` before
@@ -450,4 +394,4 @@ ci: fmt-check tidy-check lint test size
 # Stop scratch daemons, remove build output and scratch dirs
 [group('clean')]
 clean: sandbox-stop
-    rm -rf {{ quote(out) }} {{ quote(root / ".wasm-build") }} {{ quote(scratch) }}
+    rm -rf {{ quote(out) }} {{ quote(scratch) }}
