@@ -19,6 +19,61 @@ import (
 //   - A tuios feature vanishes because the preset took its key and put it
 //     nowhere: TestEveryDisplacedFeatureMoves.
 
+// TestNoPresetMeansTmux: a config that names no preset runs the tmux keys,
+// the same keys as preset = "tmux", and "tuios" still names the tuios keys.
+//
+// Negative control: make ResolvePreset return its argument unchanged and
+// every no-preset row fails, with c on prefix_new_window.
+func TestNoPresetMeansTmux(t *testing.T) {
+	if DefaultPreset != "tmux" {
+		t.Fatalf("DefaultPreset = %q, want tmux", DefaultPreset)
+	}
+	empty, err := ParseUserConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaderOnly, err := ParseUserConfig([]byte("[keybindings]\nleader_key = \"ctrl+b\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, cfg := range map[string]*UserConfig{
+		"an empty file":           empty,
+		"a file with the leader":  leaderOnly,
+		"the loaded default":      LoadedDefaultConfig(),
+		"preset = \"tmux\" named": presetConfig(t, "tmux", ""),
+	} {
+		r := NewKeybindRegistry(cfg)
+		for key, want := range map[string]string{"c": "new_workspace", "n": "next_workspace", "%": "prefix_split_vertical", ",": "rename_workspace"} {
+			if got := r.GetPrefixAction(key); got != want {
+				t.Errorf("%s: leader %s runs %q, want tmux's %q", name, key, got, want)
+			}
+		}
+		if cfg.Keybindings.LeaderKey != "ctrl+b" {
+			t.Errorf("%s: leader is %q, want ctrl+b", name, cfg.Keybindings.LeaderKey)
+		}
+		if got := r.GetTuiosPrefixAction("c"); got != "prefix_new_window" {
+			t.Errorf("%s: the tuios menu c runs %q, want prefix_new_window", name, got)
+		}
+	}
+
+	tuios := NewKeybindRegistry(presetConfig(t, PresetTuios, ""))
+	for key, want := range map[string]string{"c": "prefix_new_window", ",": "prefix_settings", "L": "prefix_layout"} {
+		if got := tuios.GetPrefixAction(key); got != want {
+			t.Errorf("preset tuios: leader %s runs %q, want %q", key, got, want)
+		}
+	}
+
+	if got, want := DefaultKeybindingsFor(""), DefaultKeybindingsFor("tmux"); !slices.Equal(got.PrefixMode["new_workspace"], want.PrefixMode["new_workspace"]) || got.LeaderKey != want.LeaderKey {
+		t.Errorf("the defaults for no preset differ from tmux's: %v / %v", got.PrefixMode["new_workspace"], want.PrefixMode["new_workspace"])
+	}
+	if about, err := PresetInfo(""); err != nil || about.Name != "tmux" {
+		t.Errorf("PresetInfo(\"\") = %q, %v, want tmux", about.Name, err)
+	}
+	if ResolvePreset("") != "tmux" || ResolvePreset(PresetTuios) != PresetTuios || ResolvePreset("screen") != "screen" {
+		t.Error("ResolvePreset does not map only the empty name to tmux")
+	}
+}
+
 // presetConfig parses a config that names preset and adds body.
 func presetConfig(t *testing.T, preset, body string) *UserConfig {
 	t.Helper()

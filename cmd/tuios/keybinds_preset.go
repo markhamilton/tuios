@@ -17,10 +17,7 @@ func keybindsPreset(name string) error {
 	if err != nil {
 		return err
 	}
-	current := cfg.Keybindings.Preset
-	if current == "" {
-		current = config.PresetTuios
-	}
+	current := config.ResolvePreset(cfg.Keybindings.Preset)
 	if name == "" {
 		fmt.Printf("%s (leader %s)\n", current, cfg.Keybindings.LeaderKey)
 		return nil
@@ -35,10 +32,8 @@ func keybindsPreset(name string) error {
 		fmt.Printf("The %s keys are in use already.\n", name)
 		return nil
 	}
+	// Written by name, tuios too: an empty preset is config.DefaultPreset.
 	cfg.Keybindings.Preset = name
-	if name == config.PresetTuios {
-		cfg.Keybindings.Preset = ""
-	}
 	cfg.Keybindings.LeaderKey = ""
 	note, err := config.SaveUserConfig(cfg)
 	if err != nil {
@@ -89,9 +84,9 @@ func keybindsCheatSheet(name string, asJSON bool) error {
 		if err != nil {
 			return err
 		}
-		name = cfg.Keybindings.Preset
+		name = config.ResolvePreset(cfg.Keybindings.Preset)
 	}
-	if name == "" || name == config.PresetTuios {
+	if name == config.PresetTuios {
 		return &diagnosticError{
 			What: "The tuios keys are in use, so there is no cheat sheet to show.",
 			Fix:  "Run `tuios keybinds cheatsheet tmux` to see the tmux preset.",

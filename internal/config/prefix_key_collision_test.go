@@ -27,12 +27,12 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 	}{
 		{
 			name: "before prefix_settings existed",
-			src: "[keybindings]\nleader_key = \"ctrl+b\"\n\n" +
+			src: "[keybindings]\npreset = \"tuios\"\nleader_key = \"ctrl+b\"\n\n" +
 				"[keybindings.prefix_mode]\nprefix_rename_window = [\",\", \"r\"]\n",
 		},
 		{
 			name: "saved back with the filled default",
-			src: "[keybindings]\nleader_key = \"ctrl+b\"\n\n" +
+			src: "[keybindings]\npreset = \"tuios\"\nleader_key = \"ctrl+b\"\n\n" +
 				"[keybindings.prefix_mode]\nprefix_rename_window = [\",\", \"r\"]\nprefix_settings = [\",\"]\n",
 		},
 	}
@@ -62,7 +62,7 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 // no default claims is the user's own arrangement, and rewriting it would be
 // the config editing itself. It still has to resolve the same way every time.
 func TestUserOwnedDuplicateKeyIsLeftAlone(t *testing.T) {
-	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n"+
+	cfg := writeConfig(t, "[keybindings]\npreset = \"tuios\"\nleader_key = \"ctrl+b\"\n\n"+
 		"[keybindings.prefix_mode]\nprefix_help = [\"g\"]\nprefix_scrollback = [\"g\"]\n")
 
 	for _, action := range []string{"prefix_help", "prefix_scrollback"} {

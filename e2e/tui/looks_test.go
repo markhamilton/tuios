@@ -48,6 +48,14 @@ var preV080Pins = []lookPin{
 	{table: "appearance", key: "modal_dim", value: `0`},
 }
 
+// keyPins are pinned for every test, the shipped looks included: the fork
+// made tmux the default preset, and the chords these tests press are the
+// tuios keys. A test that names a preset of its own keeps it, as with every
+// pin.
+var keyPins = []lookPin{
+	{table: "keybindings", key: "preset", value: `"tuios"`},
+}
+
 // shippedLooksBases holds the isolation roots whose tests asked for the
 // shipped looks, so no tuios started against them gets the pins, whichever
 // helper starts it.
@@ -100,8 +108,9 @@ func writtenByTuios(data []byte) bool {
 // just hidden it.
 func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	t.Helper()
+	pins := append(slices.Clip(preV080Pins), keyPins...)
 	if _, ok := shippedLooksBases.Load(base); ok {
-		return
+		pins = keyPins
 	}
 	path := filepath.Join(configHome, "tuios", "config.toml")
 	data, err := os.ReadFile(path)
@@ -121,7 +130,7 @@ func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	if err != nil {
 		t.Fatalf("pin looks: read %s: %v", path, err)
 	}
-	out := withPreV080Pins(string(data), replace)
+	out := withPins(string(data), replace, pins)
 	if out != string(data) {
 		writeConfigAtomically(t, path, []byte(out))
 	}
@@ -176,10 +185,15 @@ func firstRunConfig(t *testing.T, base, configHome, path string) ([]byte, error)
 // keys src already sets are dropped first, so every pin lands; that is for a
 // first-run file, whose values are the defaults rather than a test's choice.
 func withPreV080Pins(src string, replace bool) string {
+	return withPins(src, replace, preV080Pins)
+}
+
+// withPins is withPreV080Pins for any list of pins.
+func withPins(src string, replace bool, pins []lookPin) string {
 	lines := strings.Split(src, "\n")
 	if replace {
 		pinned := map[string]bool{}
-		for _, p := range preV080Pins {
+		for _, p := range pins {
 			pinned[p.table+"."+p.key] = true
 		}
 		kept := lines[:0:0]
@@ -235,7 +249,7 @@ func withPreV080Pins(src string, replace bool) string {
 
 	missing := map[string][]string{}
 	var order []string
-	for _, p := range preV080Pins {
+	for _, p := range pins {
 		if set[p.table+"."+p.key] || (p.legacy != "" && set["appearance."+p.legacy]) || inline(p.table) {
 			continue
 		}

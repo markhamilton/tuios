@@ -233,8 +233,8 @@ func take(o *app.OS) Snapshot {
 		PiP:       o.PiPWindowID(),
 	}
 	s.Agents.Selected, s.Agents.Tab = o.CockpitSelection()
-	if o.UserConfig != nil && o.UserConfig.Keybindings.Preset != "" {
-		s.Keys.Preset = o.UserConfig.Keybindings.Preset
+	if o.UserConfig != nil {
+		s.Keys.Preset = config.ResolvePreset(o.UserConfig.Keybindings.Preset)
 	}
 	if s.Glyphs == "" {
 		s.Glyphs = "default"

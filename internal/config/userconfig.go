@@ -2264,7 +2264,14 @@ var seedTables = sync.OnceValues(func() (map[string]any, [][]string) {
 		return nil, nil
 	}
 	ed, _ := MarshalUserConfig(empty)
-	dd, _ := MarshalUserConfig(DefaultConfig())
+	// The keys are filled by fillMissingKeybinds, never seeded. DefaultConfig
+	// holds the tuios keys, while an empty file runs DefaultPreset, so the
+	// keys are compared as the empty file loads them: equal, so no keybinding
+	// path is seeded. Seeding the tuios keys would read as an old full file
+	// to dropPresetShadows and move the leader.
+	defaults := DefaultConfig()
+	defaults.Keybindings = empty.Keybindings
+	dd, _ := MarshalUserConfig(defaults)
 	e, err1 := parseLayer(ed)
 	d, err2 := parseLayer(dd)
 	if err1 != nil || err2 != nil {
@@ -3542,7 +3549,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		fillMapDefaults(target, defaults)
 		return nil
 	}
-	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
+	if p := ResolvePreset(cfg.Keybindings.Preset); p != PresetTuios {
 		kb := defaultCfg.Keybindings
 		if applyPreset(&kb, p) == nil {
 			shadows := dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode) +

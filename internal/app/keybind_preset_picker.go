@@ -103,10 +103,8 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 	}
 	kb := &m.UserConfig.Keybindings
 	prevPreset, prevLeader := kb.Preset, kb.LeaderKey
+	// Written by name, tuios too: an empty preset is config.DefaultPreset.
 	kb.Preset = name
-	if name == config.PresetTuios {
-		kb.Preset = ""
-	}
 	// The leader goes with the preset, unless the person's tmux.conf names
 	// another one: see presetSuggestion.
 	kb.LeaderKey = ""
@@ -150,12 +148,14 @@ func (m *OS) handleKeybindPresetSaved(msg keybindPresetSavedMsg) tea.Cmd {
 	return cmd
 }
 
-// currentPreset is the preset in use, tuios when none is named.
+// currentPreset is the preset in use, config.DefaultPreset when the config
+// names none. With no config at all the keys are DefaultConfig's own, which
+// are the tuios keys.
 func (m *OS) currentPreset() string {
-	if m.UserConfig == nil || m.UserConfig.Keybindings.Preset == "" {
+	if m.UserConfig == nil {
 		return config.PresetTuios
 	}
-	return m.UserConfig.Keybindings.Preset
+	return config.ResolvePreset(m.UserConfig.Keybindings.Preset)
 }
 
 // presetLosses is, for each preset, the keys a pane loses to it that it does

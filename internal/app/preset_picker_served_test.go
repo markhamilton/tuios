@@ -29,10 +29,12 @@ func TestServedPresetPickerDoesNotWrite(t *testing.T) {
 				t.Error("a served client was offered a preset from the operator's home folder")
 			}
 			m.OpenKeybindPresets()
-			m.presetPicker.selected = slices.Index(config.Presets(), "tmux")
+			// screen, not tmux: with no preset named the keys are tmux's
+			// already, and picking the preset in use writes nothing.
+			m.presetPicker.selected = slices.Index(config.Presets(), "screen")
 			cmd := m.PresetPickerApply()
-			if wrote := cmd != nil || m.UserConfig.Keybindings.Preset == "tmux"; wrote != tc.writes {
-				t.Errorf("applying tmux: wrote = %v, want %v", wrote, tc.writes)
+			if wrote := cmd != nil || m.UserConfig.Keybindings.Preset == "screen"; wrote != tc.writes {
+				t.Errorf("applying screen: wrote = %v, want %v", wrote, tc.writes)
 			}
 		})
 	}

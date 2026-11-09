@@ -23,7 +23,7 @@ func loadAndApplyConfig() *config.UserConfig {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
+		userConfig = config.LoadedDefaultConfig()
 		// The log line above is wiped by the first frame. LoadWarnings reach
 		// the TUI, so the person learns why none of the file applies.
 		userConfig.LoadWarnings = append(userConfig.LoadWarnings,

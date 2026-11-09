@@ -165,7 +165,7 @@ func sendOptions(out *frameWriter, req int64) {
 		ev := &OptionList{}
 		cfg, err := config.LoadUserConfig()
 		if err != nil || cfg == nil {
-			cfg = config.DefaultConfig()
+			cfg = config.LoadedDefaultConfig()
 		}
 		seen := map[string]bool{}
 		for _, o := range config.Options() {

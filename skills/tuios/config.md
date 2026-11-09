@@ -577,6 +577,11 @@ tuios keybinds preset zellij      # leader ctrl+g, then p t s o for the modes
 tuios keybinds cheatsheet tmux    # same keys, moved keys, keys tuios does not have
 ```
 
+This fork uses the tmux preset by default: a config with no
+`keybindings.preset` gets the tmux keys. `tuios keybinds preset tuios` gives the
+tuios keys. Run `tuios keybinds preset` to see which preset is in use before
+you name a chord to the person.
+
 A tmux window is a tuios workspace. A tmux pane is a tuios window. The preset
 changes only the leader, the keys after the leader and terminal-mode keys. The
 tuios keys it moved are under `ctrl+b ctrl+t`, on the key they had. Bindings in

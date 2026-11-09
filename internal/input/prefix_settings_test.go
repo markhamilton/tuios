@@ -76,7 +76,7 @@ func pressLeaderThen(t *testing.T, cfg *config.UserConfig, mode app.Mode, key st
 
 // legacyRenameConfig is a config from before "," moved from prefix_rename_window
 // to prefix_settings, which is what a long-lived config still holds.
-const legacyRenameConfig = "[keybindings]\nleader_key = \"ctrl+b\"\n\n" +
+const legacyRenameConfig = "[keybindings]\npreset = \"tuios\"\nleader_key = \"ctrl+b\"\n\n" +
 	"[keybindings.prefix_mode]\nprefix_rename_window = [\",\", \"r\"]\nprefix_settings = [\",\"]\n"
 
 // TestLeaderSettingsOpensInBothModes is the reported bug: leader "," did not

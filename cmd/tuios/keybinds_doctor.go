@@ -231,7 +231,7 @@ func printKeybindReport(rep config.KeybindReport) {
 func keybindsExplain(key string, asJSON bool, guest string) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
-		userConfig = config.DefaultConfig()
+		userConfig = config.LoadedDefaultConfig()
 	}
 	registry := config.NewKeybindRegistry(userConfig)
 	fate := registry.Fate(key, config.PaneFacts{Command: guest})

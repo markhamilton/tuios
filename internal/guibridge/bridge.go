@@ -516,7 +516,7 @@ func newModel(opts app.OSOptions) *app.OS {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
+		userConfig = config.LoadedDefaultConfig()
 	}
 	app.SetInputHandler(input.HandleInput)
 	seed := config.AppearanceFrom(userConfig, chromeOverrides)

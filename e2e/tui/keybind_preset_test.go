@@ -209,7 +209,9 @@ func TestWelcomeSuggestsThePresetAndWaits(t *testing.T) {
 		t.Fatalf("the welcome screen did not offer the tmux keys: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(time.Second)
-	if data, _ := os.ReadFile(configPathIn(base)); strings.Contains(string(data), "preset") {
+	// The suite pins preset = "tuios" (keyPins), which is why there is an
+	// offer at all now that tmux is the default. It must still say tuios.
+	if data, _ := os.ReadFile(configPathIn(base)); !strings.Contains(string(data), "preset = \"tuios\"") || strings.Contains(string(data), "tmux") {
 		t.Fatalf("the offer wrote a preset before anyone chose it:\n%s", data)
 	}
 

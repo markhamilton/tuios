@@ -207,9 +207,12 @@ says so instead of reporting a success.`,
 func newKeybindsPresetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "preset [name]",
-		Short: "Show or set the keybind preset: tuios, or the keys of tmux",
+		Short: "Show or set the keybind preset: tmux (the default), tuios, screen or zellij",
 		Long: `With no name, print the preset in use and its leader. With a name, use that
 preset and write it to config.toml.
+
+The default is tmux. A config without keybindings.preset uses the tmux keys.
+To use the tuios keys, run tuios keybinds preset tuios.
 
 A preset changes the leader, the keys after the leader and the terminal-mode
 keys. Window mode, the sidebar, copy mode and the Inbox keep the tuios keys.
@@ -276,7 +279,7 @@ func listKeybindings(asJSON bool) error {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		fmt.Fprintln(os.Stderr, "Using default keybindings...")
-		userConfig = config.DefaultConfig()
+		userConfig = config.LoadedDefaultConfig()
 	}
 	rows := keybindRows(userConfig)
 	if asJSON {
@@ -288,7 +291,7 @@ func listKeybindings(asJSON bool) error {
 	if leader == "" {
 		leader = config.DefaultLeaderKey
 	}
-	if p := userConfig.Keybindings.Preset; p != "" && p != config.PresetTuios {
+	if p := config.ResolvePreset(userConfig.Keybindings.Preset); p != config.PresetTuios {
 		fmt.Printf("Preset: %s. Run `tuios keybinds cheatsheet` to see what it changed.\n\n", p)
 	}
 	printKeybindingsTable(rows, leader)
@@ -528,19 +531,19 @@ func formatActionName(action string) string {
 func loadKeybindConfig() *config.UserConfig {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return config.DefaultConfig()
+		return config.LoadedDefaultConfig()
 	}
 	lc, err := config.LoadLayered(path)
 	if err != nil {
-		return config.DefaultConfig()
+		return config.LoadedDefaultConfig()
 	}
 	data, err := lc.Bytes()
 	if err != nil {
-		return config.DefaultConfig()
+		return config.LoadedDefaultConfig()
 	}
 	cfg, err := config.ParseUserConfig(data)
 	if err != nil {
-		return config.DefaultConfig()
+		return config.LoadedDefaultConfig()
 	}
 	config.DropUnreadableKeys(cfg, lc)
 	return cfg

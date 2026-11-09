@@ -164,10 +164,8 @@ func (m *OS) LearnApplyPreset(name string) tea.Cmd {
 	if name == m.currentPreset() {
 		return nil
 	}
-	src := "[keybindings]\n"
-	if name != config.PresetTuios {
-		src += "preset = " + strconv.Quote(name) + "\n"
-	}
+	// Named even for tuios: an empty preset is config.DefaultPreset.
+	src := "[keybindings]\npreset = " + strconv.Quote(name) + "\n"
 	parsed, err := config.ParseUserConfig([]byte(src))
 	if err != nil {
 		m.ShowNotification("Keys not changed: "+err.Error(), "error", 0)

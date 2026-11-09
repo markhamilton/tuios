@@ -23,11 +23,17 @@ To inspect your own effective bindings, use the binary rather than any document:
 ## Keys of another multiplexer
 
 `keybindings.preset` gives the keys of tmux, GNU screen or zellij after the
-leader:
+leader. The default is `tmux`. A config without `preset` uses the tmux keys.
+The chord tables in this document show the tuios keys. With the tmux preset,
+a tuios key that tmux uses moves to the tuios menu. For example,
+`Ctrl+B L` is `Ctrl+B Ctrl+T L`. Run `tuios keybinds cheatsheet` to see each
+moved key.
+
+To use the tuios keys, set the preset to `tuios`:
 
 ```toml
 [keybindings]
-preset = "tmux"
+preset = "tuios"
 ```
 
 Or press `U` in window mode, or pick "Keybind preset" in the command palette.
@@ -43,8 +49,8 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 
 | Preset | Leader | What it does |
 |---|---|---|
-| `tuios` | `ctrl+b` | The tuios keys. This is the default |
-| `tmux` | `ctrl+b` | tmux 3.8's keys after the leader |
+| `tuios` | `ctrl+b` | The tuios keys |
+| `tmux` | `ctrl+b` | tmux 3.8's keys after the leader. This is the default |
 | `screen` | `ctrl+a` | GNU screen's keys after the leader, also on the control variant (`ctrl+a ctrl+n`). `ctrl+a ctrl+a` goes to the last workspace. `ctrl+a a` sends `ctrl+a` to the pane |
 | `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next. It turns on [lock mode](#lock-mode) |
 

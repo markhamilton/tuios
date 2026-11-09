@@ -41,7 +41,7 @@ func runTapeInteractive(tapeFile string) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
+		userConfig = config.LoadedDefaultConfig()
 	}
 
 	// LoadUserConfig no longer applies globals; apply the config appearance so

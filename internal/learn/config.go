@@ -9,6 +9,9 @@ import "github.com/Gaurav-Gosain/tuios/internal/config"
 // which closes the rail, so a step that opens it opens it.
 func Config() *config.UserConfig {
 	cfg := config.DefaultConfig()
+	// The lessons are worded for the tuios keys, which DefaultConfig holds.
+	// Named, because an empty preset is config.DefaultPreset (tmux).
+	cfg.Keybindings.Preset = config.PresetTuios
 	// A browser tab has no desktop notifications. Left on, the default warns
 	// about it at startup, which is noise in a tutorial.
 	cfg.Notifications.Agent.Notify = new(false)

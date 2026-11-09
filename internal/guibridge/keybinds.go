@@ -96,7 +96,7 @@ func exportKeybinds(o *app.OS) *Keybinds {
 	reg := o.KeybindRegistry
 	cfg := o.UserConfig
 	if reg == nil || cfg == nil {
-		cfg = config.DefaultConfig()
+		cfg = config.LoadedDefaultConfig()
 		reg = config.NewKeybindRegistry(cfg)
 	} else {
 		cfg = reg.GetConfig()

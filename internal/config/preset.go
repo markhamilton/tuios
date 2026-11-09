@@ -34,6 +34,33 @@ import (
 // PresetTuios is the preset of the tuios defaults themselves.
 const PresetTuios = "tuios"
 
+// DefaultPreset is the preset a config that names none runs. The fork ships
+// tmux's keys: DefaultConfig still holds the tuios keys, as the base every
+// preset is a delta over, and the load path applies this preset to them.
+// "tuios" names the tuios keys.
+const DefaultPreset = "tmux"
+
+// ResolvePreset is the preset a keybindings.preset value runs: the value, or
+// DefaultPreset when it is empty.
+func ResolvePreset(name string) string {
+	if name == "" {
+		return DefaultPreset
+	}
+	return name
+}
+
+// LoadedDefaultConfig is the config an empty config file loads as: the
+// defaults with DefaultPreset applied. A caller that falls back to the
+// defaults after a config fails to load wants this rather than DefaultConfig,
+// whose keys are the tuios keys every preset is a delta over.
+func LoadedDefaultConfig() *UserConfig {
+	cfg, err := ParseUserConfig(nil)
+	if err != nil {
+		return DefaultConfig()
+	}
+	return cfg
+}
+
 //go:embed presets/*.toml
 var presetFiles embed.FS
 
@@ -102,7 +129,8 @@ func loadPreset(name string) (*keybindPreset, error) {
 // PresetInfo is what a preset says about itself. The tuios preset has a name
 // and a summary only.
 func PresetInfo(name string) (PresetAbout, error) {
-	if name == "" || name == PresetTuios {
+	name = ResolvePreset(name)
+	if name == PresetTuios {
 		return PresetAbout{Name: PresetTuios, Summary: "the tuios keys", Samples: []string{"n", "t", "w"}}, nil
 	}
 	p, err := loadPreset(name)
@@ -115,7 +143,8 @@ func PresetInfo(name string) (PresetAbout, error) {
 // PresetSource returns a preset file as tuios ships it, for tuios keybinds
 // preset show.
 func PresetSource(name string) ([]byte, error) {
-	if name == "" || name == PresetTuios {
+	name = ResolvePreset(name)
+	if name == PresetTuios {
 		return nil, fmt.Errorf("the tuios preset is the defaults themselves. Run tuios keybinds list")
 	}
 	if _, err := loadPreset(name); err != nil {
@@ -125,9 +154,10 @@ func PresetSource(name string) ([]byte, error) {
 }
 
 // applyPreset writes a preset over the default keybindings kb. An unknown
-// name leaves kb as it is and says so.
+// name leaves kb as it is and says so. An empty name is DefaultPreset.
 func applyPreset(kb *KeybindingsConfig, name string) error {
-	if name == "" || name == PresetTuios {
+	name = ResolvePreset(name)
+	if name == PresetTuios {
 		return nil
 	}
 	p, err := loadPreset(name)
