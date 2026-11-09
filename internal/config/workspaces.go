@@ -1,5 +1,16 @@
 package config
 
+// MaxWorkspaces is how many ordinary workspaces a session has: the bound of
+// every workspace range check, on the client and in the daemon.
+//
+// tmux puts no cap on its windows. tuios keeps a fixed bound because its
+// workspaces are numbered densely from 1 (the daemon closes the gaps), several
+// paths walk 1..bound, and scratch groups take the numbers from
+// session.ScratchWorkspaceBase (1000) up. 99 is far past what a person keeps
+// open, keeps the index prompt to two digits, and is one constant rather than
+// a setting, so two attached clients can never disagree on the range.
+const MaxWorkspaces = 99
+
 // WorkspacesConfig is the [workspaces] section. The daemon reads
 // return_when_empty: it owns the window set, so it is the side that sees a
 // workspace lose its last pane. The client reads new_window_when_empty: it

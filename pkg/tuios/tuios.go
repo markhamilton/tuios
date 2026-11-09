@@ -83,7 +83,8 @@ type Options struct {
 	// ASCIIOnly uses ASCII characters instead of Nerd Font icons.
 	ASCIIOnly bool
 
-	// Workspaces is the number of workspaces (1-9). Default is 9.
+	// Workspaces is the number of workspaces (1-99). Default is 99
+	// (config.MaxWorkspaces).
 	Workspaces int
 
 	// BorderStyle sets the window border style.
@@ -153,13 +154,13 @@ func WithASCIIOnly(enabled bool) Option {
 	}
 }
 
-// WithWorkspaces sets the number of workspaces (1-9).
+// WithWorkspaces sets the number of workspaces (1-99).
 func WithWorkspaces(n int) Option {
 	return func(o *Options) {
 		if n < 1 {
 			n = 1
-		} else if n > 9 {
-			n = 9
+		} else if n > config.MaxWorkspaces {
+			n = config.MaxWorkspaces
 		}
 		o.Workspaces = n
 	}
@@ -240,7 +241,7 @@ func WithUserConfig(cfg *config.UserConfig) Option {
 func DefaultOptions() Options {
 	return Options{
 		Animations:      true,
-		Workspaces:      9,
+		Workspaces:      config.MaxWorkspaces,
 		ScrollbackLines: 10000,
 	}
 }

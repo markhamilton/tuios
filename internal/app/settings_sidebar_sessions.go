@@ -6,6 +6,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
+// sessionWorkspaceOptions are the values of an edge's session_workspace
+// cycler: all, then every workspace number.
+func sessionWorkspaceOptions() []string {
+	out := make([]string, 0, config.MaxWorkspaces+1)
+	out = append(out, "all")
+	for ws := 1; ws <= config.MaxWorkspaces; ws++ {
+		out = append(out, strconv.Itoa(ws))
+	}
+	return out
+}
+
 // editableSidebarEdge creates a file-backed edge table without changing the
 // original rail's shared appearance options or any other edge's assignment.
 func (m *OS) editableSidebarEdge(edge sidebarEdge) *config.SidebarEdgeConfig {
@@ -110,7 +121,7 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 			},
 			settingItem{
 				Label: name + " workspaces", Desc: "Show the assigned session on every center workspace, or only on the numbered workspace.",
-				Control: controlEnum, Options: []string{"all", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
+				Control: controlEnum, Options: sessionWorkspaceOptions(),
 				value: func(m *OS) string {
 					if cfg := m.sidebarSessionConfig(edge); cfg != nil && cfg.SessionWorkspace > 0 {
 						return strconv.Itoa(cfg.SessionWorkspace)
@@ -119,7 +130,9 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 				},
 				adjust: func(m *OS, dir int) {
 					cfg := m.editableSidebarEdge(edge)
-					cfg.SessionWorkspace = (cfg.SessionWorkspace + dir + 10) % 10
+					// 0 (all) then 1..MaxWorkspaces, wrapping both ways.
+					n := config.MaxWorkspaces + 1
+					cfg.SessionWorkspace = ((cfg.SessionWorkspace+dir)%n + n) % n
 					m.MarkAllDirty()
 				},
 			},

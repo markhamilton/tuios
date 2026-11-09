@@ -187,7 +187,8 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 	}
 }
 
-// parseWorkspaceArg extracts a 1-9 workspace number from a command's args.
+// parseWorkspaceArg extracts a workspace number from a command's args. The
+// range check is the caller's, against the session's workspaceBound.
 func parseWorkspaceArg(args []string) (int, error) {
 	if len(args) < 1 {
 		return 0, fmt.Errorf("workspace number required")

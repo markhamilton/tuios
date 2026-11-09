@@ -1524,7 +1524,7 @@ client re-tiles from it.
 `layout_mode` and `num_workspaces` are both additive and both mean "unstated"
 when absent: a client that receives a state without `layout_mode` leaves its own
 layout alone rather than resetting to a default, and the daemon falls back to
-nine workspaces when no client has told it otherwise. Before `layout_mode`
+99 workspaces (`config.MaxWorkspaces`) when no client has told it otherwise. Before `layout_mode`
 existed the BSP tree survived a reattach but the mode selecting between layouts
 did not, so a scrolling session came back as a BSP one.
 

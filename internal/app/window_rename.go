@@ -31,6 +31,12 @@ const (
 	// RenameNote edits a session's return note, which the daemon owns. The
 	// same one-line editor, and an empty note clears it.
 	RenameNote
+	// PromptGotoWorkspace asks for a workspace number and switches to it:
+	// tmux's prefix ' (select-window by index). See workspace_prompt.go.
+	PromptGotoWorkspace
+	// PromptMoveToWorkspace asks for a workspace number and moves the pane
+	// named by RenameTargetID there, following it.
+	PromptMoveToWorkspace
 )
 
 // Renaming reports whether a rename editor is open, whatever it targets.
@@ -91,6 +97,10 @@ func (m *OS) BeginRenameWorkspace(ws int) {
 // take a codepoint that would vanish or tofu the moment the name was shown.
 func (m *OS) RenameAppend(text string) {
 	if !m.Renaming() || text == "" {
+		return
+	}
+	if m.workspacePromptOpen() {
+		m.workspacePromptAppend(text)
 		return
 	}
 	add := printableRunes(text)
@@ -205,6 +215,8 @@ func (m *OS) RenameDialogTitle() string {
 		return "rename workspace " + m.RenameTargetID
 	case RenameNote:
 		return "note for " + m.SessionLabel(m.RenameTargetID)
+	case PromptGotoWorkspace, PromptMoveToWorkspace:
+		return m.workspacePromptTitle()
 	default:
 		return "rename"
 	}
@@ -219,6 +231,10 @@ func (m *OS) CommitRename() tea.Cmd {
 	label := strings.TrimSpace(m.RenameBuffer)
 	defer m.EndRename()
 
+	if kind == PromptGotoWorkspace || kind == PromptMoveToWorkspace {
+		m.commitWorkspacePrompt(kind, target, label)
+		return nil
+	}
 	if kind == RenameWindow {
 		if w := m.RenameTarget(); w != nil {
 			_ = m.RenameWindowByID(w.ID, m.RenameBuffer)

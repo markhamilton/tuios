@@ -42,6 +42,8 @@ missing = [
 notes = [
   "Press the leader twice to send ctrl+b to a tmux on a remote host.",
   "Copy mode uses vi keys. [[keybindings.copy_pipe]] does what tmux copy-pipe does.",
+  "Press ' to go to a workspace by its number, as in tmux. Workspaces go up to 99.",
+  "Press . to move the focused pane to a workspace by its number. In tmux, . moves the whole window.",
 ]
 
 [prefix_mode]
@@ -62,6 +64,11 @@ switch_workspace_6 = ["6"]
 switch_workspace_7 = ["7"]
 switch_workspace_8 = ["8"]
 switch_workspace_9 = ["9"]
+# tmux's ' asks for a window index. Its . asks for an index to move the window
+# to; here it moves the focused pane, which is what the digit keys cannot reach
+# past 9.
+goto_workspace_prompt = ["'"]
+move_to_workspace_prompt = ["."]
 break_pane = ["!"]
 # Panes, the tmux panes.
 prefix_split_horizontal = ["\"", "-"]
@@ -111,6 +118,7 @@ prefix_screenshot = []
 prefix_file_search = []
 prefix_next_attention = []
 edit_scrollback = []
+pick_path = []
 
 [tuios_prefix]
 prefix_new_window = ["c"]
@@ -138,3 +146,4 @@ prefix_settings = [","]
 prefix_rename_window = ["r"]
 prefix_prev_window = ["p"]
 edit_scrollback = ["E"]
+pick_path = ["."]

@@ -403,6 +403,18 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 		}
 	}
 
+	// The number prompts reach the workspaces past the nine digit keys.
+	for _, p := range []struct{ action, desc string }{
+		{"goto_workspace_prompt", "Go to a workspace by its number"},
+		{"move_to_workspace_prompt", "Move the focused pane to a workspace by its number"},
+	} {
+		if keys := presses[p.action]; len(keys) > 0 {
+			bindings = append(bindings, HelpBinding{
+				Action: p.action, Keys: keys, Description: p.desc, Category: "Workspaces",
+			})
+		}
+	}
+
 	// Renaming a workspace is a chord rather than a plain key, so its row is
 	// built from the same whole-chord hint the pill menu shows.
 	if chord := contextMenuHint(registry, "workspace_prefix_rename", s); chord != "" {

@@ -58,11 +58,16 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 		overlay.Style(pal.Canvas).Foreground(pal.Fg).Render(field) +
 		overlay.Cursor(" ", pal.Canvas, pal.Fg)
 
+	hints := renameHints()
+	if m.workspacePromptOpen() {
+		// The workspace prompt goes somewhere; it saves nothing.
+		hints[0].Label = "go"
+	}
 	content, geo := overlay.Dialog{
 		Title: m.RenameDialogTitle(),
 		Width: inner,
 		Body:  body,
-		Hints: renameHints(),
+		Hints: hints,
 	}.Render(pal)
 
 	x, y := m.centerOrigin(geo.Width, geo.Height)

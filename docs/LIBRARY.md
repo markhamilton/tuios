@@ -102,7 +102,7 @@ tuios.WithASCIIOnly(true)
 
 ### WithWorkspaces(n int)
 
-Set the number of workspaces (1-9).
+Set the number of workspaces (1-99). The default is 99.
 
 ```go
 tuios.WithWorkspaces(4)
@@ -325,7 +325,7 @@ The TUIOS model provides several public methods:
 
 ### Workspace Management
 
-- `SwitchWorkspace(n int)`: Switch to workspace n (1-9)
+- `SwitchWorkspace(n int)`: Switch to workspace n (1-99)
 - `MoveWindowToWorkspace(windowIndex, workspace int)`: Move a window
 
 ### Layout

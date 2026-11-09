@@ -31,8 +31,8 @@ is on is a separate choice, made from the command palette:
 Choosing a mode turns tiling on if it was off. The mode is per-session and is
 carried in daemon session state, so a scrolling session comes back as a
 scrolling session on reattach, and turning tiling off does not forget it. The
-layout data itself (the BSP tree, the column strip) is per workspace: each of
-the nine workspaces keeps its own.
+layout data itself (the BSP tree, the column strip) is per workspace: each
+workspace keeps its own.
 
 ### Settings
 

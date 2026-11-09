@@ -2628,8 +2628,8 @@ func runCommandCatalog() []runCommandEntry {
 		{"FocusMaster", "Focus the master pane", "tuios run-command FocusMaster"},
 
 		// Workspace
-		{"SwitchWorkspace 1-9", "Switch to workspace N", "tuios run-command SwitchWorkspace 2"},
-		{"MoveToWorkspace 1-9", "Move focused window to workspace N", "tuios run-command MoveToWorkspace 3"},
+		{"SwitchWorkspace 1-99", "Switch to workspace N", "tuios run-command SwitchWorkspace 12"},
+		{"MoveToWorkspace 1-99", "Move focused window to workspace N", "tuios run-command MoveToWorkspace 3"},
 
 		// Animations
 		{"EnableAnimations", "Enable UI animations", "tuios run-command EnableAnimations"},

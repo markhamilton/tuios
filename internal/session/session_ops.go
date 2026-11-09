@@ -15,8 +15,9 @@ import (
 // defaultWorkspaces bounds the workspace indices the daemon-side state
 // operations accept when the session state does not say how many it has. State
 // written by a client that reports its workspace count uses that instead, so the
-// bound is the session's own rather than a number this package guesses.
-const defaultWorkspaces = 9
+// bound is the session's own rather than a number this package guesses. Every
+// client reports config.MaxWorkspaces, so the fallback is that too.
+const defaultWorkspaces = config.MaxWorkspaces
 
 // workspaceBound returns how many workspaces this state has, for the range check
 // on the operations that take a workspace index.

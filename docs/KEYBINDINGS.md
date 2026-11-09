@@ -55,7 +55,8 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 | `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next. It turns on [lock mode](#lock-mode) |
 
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
-  `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
+  `n`, `p`, `l`, `1` to `9`, `'`, `w`, `,` and `&` act on workspaces. See
+  [Workspaces past 9](#workspaces-past-9).
 - A preset changes the leader, the keys after the leader and the
   terminal-mode keys. Window mode, the sidebar, copy mode and the agents view keep
   the tuios keys.
@@ -740,7 +741,9 @@ The key was `b` in earlier versions.
 ## Pick a path
 
 `Alt+;` in terminal mode opens the path picker at the cursor of the focused
-pane. `Ctrl+B .` opens it too. The picker lists the folder that the shell in
+pane. `Ctrl+B .` opens it too with the tuios preset. With the tmux preset,
+`Ctrl+B .` moves a pane to a workspace by number, so the picker key is
+`Ctrl+B Ctrl+T .`. The picker lists the folder that the shell in
 the pane is in. Folders come first, then files. Type to filter the names.
 Press `Enter` to type the path of the selected name at the cursor.
 tuios quotes the path for the shell in the pane, by the same rules as a drag
@@ -1131,6 +1134,29 @@ mode. Then that binding keeps the key, and `send_to_workspace_N` has none.
 
 Windows sends AltGr as Ctrl+Alt. A character typed with AltGr, such as `€` on a
 UK keyboard, still reaches the pane and does not move it.
+
+## Workspaces past 9
+
+A session has up to 99 workspaces. The digit keys go to workspaces 1 to 9.
+To go to a workspace past 9, use one of these:
+
+| Keys (tmux preset) | Keys (tuios preset) | Action | What it does |
+| --- | --- | --- | --- |
+| `Ctrl+B '` | `Ctrl+B w '` | `goto_workspace_prompt` | Asks for a workspace number, then shows that workspace. |
+| `Ctrl+B .` | `Ctrl+B w .` | `move_to_workspace_prompt` | Asks for a workspace number, then moves the focused pane there and shows that workspace. |
+| `Ctrl+B w` | `Ctrl+B W` | `prefix_workspace_switcher` | Opens the workspace list. Each row shows the number, the name and the pane count. Type to filter, then press `Enter`. |
+
+The prompt accepts digits only. Press `Enter` to go, or `Esc` to cancel. A
+number out of range shows the range and changes nothing.
+
+tuios numbers the workspaces without gaps. A number past the last workspace
+in use goes to the next empty workspace, as the digit keys do.
+
+`next_workspace` and `prev_workspace` go to every workspace that has panes,
+also the workspaces past 9.
+
+In the tmux preset, `.` moves the focused pane. In tmux, `.` moves the whole
+window. The path picker moves to `Ctrl+B Ctrl+T .`.
 
 ## Cycle through workspaces
 

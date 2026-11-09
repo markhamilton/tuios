@@ -75,7 +75,8 @@ type OSOptions struct {
 	// daemon_restart.go.
 	AfterRestart bool
 
-	// NumWorkspaces sets the number of workspaces (default: 9).
+	// NumWorkspaces sets the number of workspaces (default:
+	// config.MaxWorkspaces). Only tests set it lower.
 	NumWorkspaces int
 
 	// Width and Height set the initial terminal size.
@@ -162,8 +163,8 @@ func NewOS(opts OSOptions) *OS {
 	config.StartMacLayoutDetection()
 
 	numWorkspaces := opts.NumWorkspaces
-	if numWorkspaces <= 0 {
-		numWorkspaces = 9
+	if numWorkspaces <= 0 || numWorkspaces > config.MaxWorkspaces {
+		numWorkspaces = config.MaxWorkspaces
 	}
 
 	// Snapshot the terminal this connection is on, once. Everything downstream

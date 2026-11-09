@@ -46,6 +46,16 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		o.BreakPane()
 		return o, nil
 	})
+	// The workspaces past the nine digit keys: tmux's prefix ' asks for an
+	// index, and the move prompt takes the focused pane to one.
+	d.Register("goto_workspace_prompt", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.BeginGotoWorkspacePrompt()
+		return o, nil
+	})
+	d.Register("move_to_workspace_prompt", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.BeginMoveToWorkspacePrompt()
+		return o, nil
+	})
 	d.Register("last_session", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.LastSession()
 		return o, nil

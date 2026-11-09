@@ -213,7 +213,9 @@ func recordableAction(action string) bool {
 	switch action {
 	case "toggle_tape_manager", "stop_recording", "script_pause",
 		"enter_terminal_mode", "enter_window_mode", "terminal_exit_mode", "prefix_exit_mode", "hold_window_mode",
-		"prefix_workspace", "prefix_minimize", "prefix_window", "prefix_debug", "prefix_tape", "prefix_layout":
+		"prefix_workspace", "prefix_minimize", "prefix_window", "prefix_debug", "prefix_tape", "prefix_layout",
+		// A prompt only opens a dialog; the switch it ends in is recorded.
+		"goto_workspace_prompt", "move_to_workspace_prompt":
 		return false
 	}
 	for _, prefix := range []string{"tape_prefix_", "switch_workspace_"} {

@@ -943,6 +943,8 @@ var ActionDescriptions = map[string]string{
 	"new_workspace":             "Go to the first empty workspace",
 	"last_workspace":            "Go back to the last workspace",
 	"break_pane":                "Move the focused pane to the first empty workspace, and follow it",
+	"goto_workspace_prompt":     "Type a workspace number and go to it",
+	"move_to_workspace_prompt":  "Type a workspace number, move the focused pane there, and follow it",
 	"last_session":              "Go back to the last session",
 	"send_prefix":               "Send the leader key to the focused pane",
 	"nest":                      "Send every key to the pane, the leader too, until nest_exit_key",

@@ -3,6 +3,8 @@ package session
 import (
 	"slices"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // close-workspace closes every pane on its workspace and nothing else: the
@@ -51,9 +53,10 @@ func TestCloseWorkspaceClosesOnlyItsWorkspace(t *testing.T) {
 	if got := WindowsToCloseOnWorkspace([]WindowState{{ID: "s", Workspace: ScratchWorkspaceBase, Scratch: true}}, ScratchWorkspaceBase); len(got) != 1 {
 		t.Fatalf("a targeted scratch workspace closes %v", got)
 	}
-	resp := callP(c, t, "close-workspace", map[string]any{"session": "w", "workspace": 42})
+	past := config.MaxWorkspaces + 1
+	resp := callP(c, t, "close-workspace", map[string]any{"session": "w", "workspace": past})
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
-		t.Fatalf("workspace 42 answered %s", code)
+		t.Fatalf("workspace %d answered %s", past, code)
 	}
 }
 

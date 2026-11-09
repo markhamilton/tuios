@@ -1919,8 +1919,8 @@ exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 | `ArrangePanes` | `<layout> [workspace [window...]]` | Lay out the panes of the workspace again as `tiled`, `even-horizontal` or `even-vertical`. The named windows come first, then the other panes in window order. With a workspace, the command fails when that workspace is not showing. Needs the bsp layout |
 | `SetMultifocus` | `[window...]` | Put exactly these windows in multifocus. Each window must be on the showing workspace and not minimized. From a pane, each window must be one that the pane can type into. With no window, clear multifocus |
 | `Screenshot` | | Save the focused window as an image |
-| `SwitchWorkspace` | `<1-9>` | Switch to workspace |
-| `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
+| `SwitchWorkspace` | `<1-99>` | Switch to workspace |
+| `MoveToWorkspace` | `<1-99>` | Move focused window to workspace |
 | `EnableAnimations`, `DisableAnimations`, `ToggleAnimations` | | Turn UI animations on or off |
 | `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/hidden) |
 | `SetBorderStyle` | `<style>` | Change window border style |

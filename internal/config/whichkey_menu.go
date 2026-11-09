@@ -70,6 +70,8 @@ type menuSection struct {
 var workspaceMenuRows = []menuRow{
 	{parts: []menuPart{{"workspace_prefix_switch_1", "Switch to workspace"}, {"workspace_prefix_switch_2", "Switch to workspace"}, {"workspace_prefix_switch_3", "Switch to workspace"}, {"workspace_prefix_switch_4", "Switch to workspace"}, {"workspace_prefix_switch_5", "Switch to workspace"}, {"workspace_prefix_switch_6", "Switch to workspace"}, {"workspace_prefix_switch_7", "Switch to workspace"}, {"workspace_prefix_switch_8", "Switch to workspace"}, {"workspace_prefix_switch_9", "Switch to workspace"}}, desc: "Switch to workspace", numbered: true},
 	{parts: []menuPart{{"workspace_prefix_move_1", "Move window to workspace"}, {"workspace_prefix_move_2", "Move window to workspace"}, {"workspace_prefix_move_3", "Move window to workspace"}, {"workspace_prefix_move_4", "Move window to workspace"}, {"workspace_prefix_move_5", "Move window to workspace"}, {"workspace_prefix_move_6", "Move window to workspace"}, {"workspace_prefix_move_7", "Move window to workspace"}, {"workspace_prefix_move_8", "Move window to workspace"}, {"workspace_prefix_move_9", "Move window to workspace"}}, desc: "Move window to workspace", numbered: true},
+	{parts: []menuPart{{"goto_workspace_prompt", "Go to workspace by number"}}, desc: "Go to workspace by number"},
+	{parts: []menuPart{{"move_to_workspace_prompt", "Move window by number"}}, desc: "Move window by number"},
 	{parts: []menuPart{{"workspace_prefix_rename", "Rename workspace"}}, desc: "Rename workspace"},
 	{parts: []menuPart{{"new_workspace", "New workspace"}}, desc: "New workspace"},
 	{parts: []menuPart{{"close_workspace", "Close workspace"}}, desc: "Close workspace"},
@@ -142,11 +144,13 @@ var layoutMenuRows = []menuRow{
 var leaderWorkspaceRows = []menuRow{
 	{parts: []menuPart{{"new_workspace", "New workspace"}}, desc: "New workspace"},
 	{parts: []menuPart{{"next_workspace", "Next workspace"}, {"prev_workspace", "Previous workspace"}}, desc: "Next/prev workspace"},
-	{parts: []menuPart{{"last_workspace", "Last workspace"}}, desc: "Last workspace"},
+	// The number prompts share rows: a row more pushes the leader's menu
+	// off an 80x24 screen.
+	{parts: []menuPart{{"last_workspace", "Last workspace"}, {"goto_workspace_prompt", "Go to workspace by number"}}, desc: "Last/by number"},
 	{parts: []menuPart{{"switch_workspace_1", "Go to workspace"}, {"switch_workspace_2", "Go to workspace"}, {"switch_workspace_3", "Go to workspace"}, {"switch_workspace_4", "Go to workspace"}, {"switch_workspace_5", "Go to workspace"}, {"switch_workspace_6", "Go to workspace"}, {"switch_workspace_7", "Go to workspace"}, {"switch_workspace_8", "Go to workspace"}, {"switch_workspace_9", "Go to workspace"}}, desc: "Go to workspace", numbered: true},
 	{parts: []menuPart{{"rename_workspace", "Rename workspace"}}, desc: "Rename workspace"},
 	{parts: []menuPart{{"close_workspace", "Close workspace"}}, desc: "Close workspace"},
-	{parts: []menuPart{{"break_pane", "Pane to a new workspace"}}, desc: "Pane to a new workspace"},
+	{parts: []menuPart{{"break_pane", "Pane to a new workspace"}, {"move_to_workspace_prompt", "Pane to workspace by number"}}, desc: "Pane to new/by number"},
 }
 
 // leaderWindowRows is the leader menu's Windows section.

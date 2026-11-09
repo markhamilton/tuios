@@ -704,6 +704,24 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Go to workspace by number",
+			Bind:     "goto_workspace_prompt",
+			Category: "Navigation",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.BeginGotoWorkspacePrompt()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Move pane to workspace by number",
+			Bind:     "move_to_workspace_prompt",
+			Category: "Navigation",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.BeginMoveToWorkspacePrompt()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Next workspace",
 			Category: "Navigation",
 			Action: func(m *OS) (*OS, tea.Cmd) {

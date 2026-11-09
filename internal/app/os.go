@@ -402,7 +402,7 @@ type OS struct {
 	// helpBackToAgents says the help was opened from the agents view, which
 	// opens again when the help closes. See HelpClosed.
 	helpBackToAgents       bool
-	CurrentWorkspace       int                           // Current active workspace (1-9)
+	CurrentWorkspace       int                           // Current active workspace (1..NumWorkspaces, or a scratch workspace)
 	NumWorkspaces          int                           // Total number of workspaces
 	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace
 	FocusHistory           map[int][]string              // Newest-first focus history per workspace

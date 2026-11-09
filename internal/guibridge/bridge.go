@@ -980,7 +980,7 @@ func (m *model) export() {
 			Repo: repo, Branch: branch, StartedBy: startedByRef(w.StartedBySession, w.StartedByWindow),
 		})
 	}
-	for ws := 1; ws <= max(o.NumWorkspaces, 9); ws++ {
+	for ws := 1; ws <= max(o.NumWorkspaces, config.MaxWorkspaces); ws++ {
 		if occupied[ws] {
 			st.Occupied = append(st.Occupied, ws)
 		}

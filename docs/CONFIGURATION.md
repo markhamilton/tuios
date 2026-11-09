@@ -1823,7 +1823,7 @@ An empty session name restores that rail's ordinary sections (including
 `sections` and `custom`). While a daemon session occupies the rail, its
 ordinary custom-section command does not run. `session_workspace = 0` or an omitted value shows
 the rail on every central workspace; set `session_workspace = 2` on one
-edge to show it only on workspace 2 (or use `1`–`9`). This controls
+edge to show it only on workspace 2 (or use `1`–`99`). This controls
 *visibility*, not the assigned session's own workspace. Each
 edge is independent, so one can follow while the other is pinned.
 

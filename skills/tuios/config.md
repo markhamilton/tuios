@@ -138,8 +138,8 @@ on each pane of the workspace, and a typed label focuses that pane.
 `panes.label_keys` sets the keys (default `1234567890`). It is for the person
 at the keyboard: to focus a pane, use `focus-window`.
 
-The path picker (`Alt+;` in terminal mode or `Ctrl+B .`, the `pick_path`
-action) lists the folder of the focused pane's shell at its cursor, and
+The path picker (`Alt+;` in terminal mode, or `Ctrl+B Ctrl+T .` with the
+default tmux keys, the `pick_path` action) lists the folder of the focused pane's shell at its cursor, and
 `Enter` types the chosen path there. `path_picker.show_hidden` shows the
 names that start with a dot. It is for the person at the keyboard: to type
 into a pane, use `send-text`.
@@ -629,6 +629,12 @@ It is for a tmux in the pane with the same leader. The dock pill shows
 last_workspace = ["l"]
 break_pane = ["!"]
 ```
+
+A session has up to 99 workspaces. The digit keys reach 1 to 9. With the
+tmux keys, `Ctrl+B '` (`goto_workspace_prompt`) asks for a number and goes
+there, `Ctrl+B .` (`move_to_workspace_prompt`) moves the focused pane there,
+and `Ctrl+B w` lists the workspaces. From a script, `tuios select-workspace`
+takes any number up to 99.
 
 ### Copy mode for a tmux user
 

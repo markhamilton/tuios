@@ -1533,6 +1533,10 @@ func DefaultConfig() *UserConfig {
 				"workspace_prefix_move_9":   {"("},
 				"workspace_prefix_rename":   {"r"},
 				"workspace_prefix_cancel":   {"esc"},
+				// The workspaces past 9, by number: ' as in tmux's
+				// select-window prompt, . as in its move-window prompt.
+				"goto_workspace_prompt":    {"'"},
+				"move_to_workspace_prompt": {"."},
 			},
 			DebugPrefix: map[string][]string{
 				"debug_prefix_logs":       {"l"},
@@ -3805,6 +3809,10 @@ var yieldingDefaults = map[string]bool{
 	"toggle_scratch": true,
 	// alt+; and prefix ., new in the release after v0.10.1.
 	"pick_path": true,
+	// ' and . in the workspace menu (and after the tmux leader), new with
+	// workspaces past 9.
+	"goto_workspace_prompt":    true,
+	"move_to_workspace_prompt": true,
 	// Z after the prefix, new with calm mode.
 	"toggle_calm": true,
 	// Q after the prefix, new in the release after v0.8.5.
