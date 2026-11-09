@@ -145,7 +145,7 @@ func Detect(f Facts) Provenance {
 	return Provenance{
 		Origin: OriginUnknown,
 		What:   "an unknown build",
-		Fix:    "reinstall with: curl -fsSL https://raw.githubusercontent.com/" + Repo + "/main/install.sh | bash",
+		Fix:    "build it again from a checkout with ./scripts/install.sh",
 	}
 }
 

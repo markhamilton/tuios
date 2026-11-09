@@ -1,13 +1,5 @@
 #!/bin/sh
-# Build tuios from this checkout and install it on your PATH as `tuios` and
-# `tuios-web`.
-#
-# Both are installed together and stamped with the same commit, because they are
-# two halves of one thing: tuios-web is a client of the same daemon, and a
-# tuios-web left behind by an upgrade is a client running last month's code
-# against this month's daemon. The two builds are compared at the handshake and
-# the window reports a mismatch, but the better answer is that it does not
-# happen.
+# Build tuios from this checkout and install it on your PATH as `tuios`.
 #
 # Usage: scripts/install.sh [pure|ghostty] [options]
 #
@@ -142,14 +134,12 @@ mkdir -p "$prefix" || die "cannot create $prefix"
 # Checked up front so a system prefix fails here rather than after the build.
 [ -w "$prefix" ] || die "$prefix is not writable. Pick a prefix you own, or re-run under sudo."
 dest=$prefix/tuios
-webdest=$prefix/tuios-web
 
 # The commit is stamped in rather than left to the stamps the go command
 # embeds by itself: in a linked worktree those come back naming the main
 # checkout's HEAD, so a build made on a branch would report the wrong commit.
 #
-# It is stamped into the version string as well, and both binaries get the same
-# one. The version is what a client announces to the daemon at the handshake, so
+# It is stamped into the version string as well. The version is what a client announces to the daemon at the handshake, so
 # "dev" on its own says nothing: two builds months apart both announce "dev" and
 # a mismatch that matters reads as a match. With the commit in it the daemon and
 # the client can tell whether they are the same build, and say so when they are
@@ -173,29 +163,18 @@ ldflags="$ldflags -X main.version=$buildversion"
 # writing over the destination in place would fail with ETXTBSY while a daemon
 # is running it.
 tmp=$prefix/.tuios.install.$$
-webtmp=$prefix/.tuios-web.install.$$
-trap 'rm -f "$tmp" "$webtmp"' EXIT HUP INT TERM
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
 
 say "==> tuios ($backend backend)"
 (cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
     -ldflags "$ldflags" -o "$tmp" ./cmd/tuios)
 chmod 755 "$tmp"
 
-# Built before either is moved into place, so a compile error in one does not
-# leave the pair half installed and mismatched, the state this is here to
-# prevent.
-say "==> tuios-web ($backend backend)"
-(cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
-    -ldflags "$ldflags" -o "$webtmp" ./cmd/tuios-web)
-chmod 755 "$webtmp"
-
 mv -f "$tmp" "$dest"
-mv -f "$webtmp" "$webdest"
 trap - EXIT HUP INT TERM
 
 say ""
 say "installed $dest"
-say "installed $webdest"
 "$dest" --version
 
 case ":$PATH:" in
