@@ -1,12 +1,14 @@
-// Package learn runs tuios as the guided tour at tuios.dev/learn. It
-// wraps the real app model, reports what the person did as a stream of
-// events a lesson can check steps against, and takes commands from the page
-// that set the scene for a step.
+// Package learn runs tuios as the guided tour behind tuios tutor
+// (internal/tutor). It wraps the real app model, reports what the person did
+// as a stream of events a lesson can check steps against, and takes commands
+// that set the scene for a step. "The page" in this package's comments is
+// whoever drives the tour; in this fork that is the terminal tutor (the web
+// build at tuios.dev/learn was removed).
 //
 // It is plain Go with no build tags, so the whole contract is tested natively
-// against a real app.OS with the fake shell in its panes. cmd/tuios-wasm only
-// carries it across to JavaScript. The contract is documented in
-// cmd/tuios-wasm/README.md.
+// against a real app.OS with the fake shell in its panes. The contract is the
+// lists in contract.go (EventTypes, OverlayNames, SettingNames) and Commands
+// in commands.go; the lesson lint in internal/lint checks lessons against them.
 package learn
 
 import (
@@ -21,7 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// Event types. See cmd/tuios-wasm/README.md for each one's data.
+// Event types. EventTypes in contract.go lists them.
 const (
 	EventReady           = "ready"
 	EventKey             = "key"

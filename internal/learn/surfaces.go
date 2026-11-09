@@ -32,7 +32,7 @@ import (
 // webshell.SetSurfaceHost. A surface opening, changing and closing is
 // reported to the page as tml.open, tml.input, tml.place and tml.close.
 
-// The tml events. See cmd/tuios-wasm/README.md.
+// The tml events. EventTypes in contract.go lists them.
 const (
 	EventTMLOpen  = "tml.open"
 	EventTMLInput = "tml.input"

@@ -1,8 +1,8 @@
-// Package tutor runs tuios tutor: the tour of tuios.dev/learn, in the
-// person's own terminal.
+// Package tutor runs tuios tutor: the guided tour of tuios, in the person's
+// own terminal. (Upstream also served it on the web at tuios.dev/learn; this
+// fork removed that build.)
 //
-// It runs the same stack as the browser build, natively and in this one
-// process: the real app.OS in Learn mode, with the internal/webshell fake
+// It runs natively and in this one process: the real app.OS in Learn mode, with the internal/webshell fake
 // shell in every pane, and internal/learn running the lessons. There is no
 // daemon and no socket, and no real process starts. The tutor reads none of
 // the person's config. It moves the home, the XDG folders, TMPDIR and PATH

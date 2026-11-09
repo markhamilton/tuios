@@ -1,8 +1,12 @@
 package learn
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -288,23 +292,64 @@ func TestEventContract(t *testing.T) {
 	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayCommandPalette })
 }
 
-func TestCommandsListMatchesRunCommand(t *testing.T) {
-	src, err := os.ReadFile("commands.go")
+// runCommandCases reads the names RunCommand's top-level switch handles from
+// commands.go, so the test compares Commands with the code and not with a
+// copy of it.
+func runCommandCases(t *testing.T) []string {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), "commands.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var cases []string
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "RunCommand" {
+			continue
+		}
+		for _, stmt := range fn.Body.List {
+			sw, ok := stmt.(*ast.SwitchStmt)
+			if !ok {
+				continue
+			}
+			if tag, ok := sw.Tag.(*ast.Ident); !ok || tag.Name != "name" {
+				continue
+			}
+			for _, c := range sw.Body.List {
+				for _, e := range c.(*ast.CaseClause).List {
+					if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						v, _ := strconv.Unquote(lit.Value)
+						cases = append(cases, v)
+					}
+				}
+			}
+		}
+	}
+	if len(cases) == 0 {
+		t.Fatal("read no cases from RunCommand's switch")
+	}
+	return cases
+}
+
+// TestCommandsListMatchesRunCommand keeps learn.Commands, which the lesson
+// lint checks every setup command against, in step with what RunCommand
+// handles: no listed command without a case, and no case left off the list.
+func TestCommandsListMatchesRunCommand(t *testing.T) {
+	cases := runCommandCases(t)
 	for _, name := range Commands {
-		if !strings.Contains(string(src), `case "`+name+`"`) {
+		if !slices.Contains(cases, name) {
 			t.Errorf("Commands lists %q but RunCommand has no case for it", name)
 		}
 	}
-	readme, err := os.ReadFile("../../cmd/tuios-wasm/README.md")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range cases {
+		if !slices.Contains(Commands, name) {
+			t.Errorf("RunCommand handles %q but Commands does not list it", name)
+		}
 	}
-	for _, name := range Commands {
-		if !strings.Contains(string(readme), "`"+name+"`") {
-			t.Errorf("README does not document the %q command", name)
+	// The lesson engine sends these itself (a step's needs).
+	for _, name := range []string{"newWindow", "mode"} {
+		if !slices.Contains(Commands, name) {
+			t.Errorf("the lesson engine sends %q but Commands does not list it", name)
 		}
 	}
 	for _, typ := range []string{
@@ -314,8 +359,8 @@ func TestCommandsListMatchesRunCommand(t *testing.T) {
 		EventAgent, EventTapeStart, EventTapeFinish, EventShellStart, EventShellCommand, EventShellCwd,
 		EventWindowMove, EventWindowFloat, EventSetting, EventAgentsSelect, EventAgentsTab,
 	} {
-		if !strings.Contains(string(readme), "`"+typ+"`") {
-			t.Errorf("README does not document the %q event", typ)
+		if !slices.Contains(EventTypes, typ) {
+			t.Errorf("EventTypes does not list the %q event", typ)
 		}
 	}
 }

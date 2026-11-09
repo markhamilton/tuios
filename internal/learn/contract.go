@@ -1,6 +1,7 @@
 package learn
 
-// The names the page contract (cmd/tuios-wasm/README.md) promises, as lists.
+// The names the tour's contract promises, as lists. This file is the source
+// of truth for them now that the web build and its README are gone.
 // The lint in internal/lint checks every lesson against them, so a lesson
 // cannot wait on an event, an overlay or a setting that never comes.
 

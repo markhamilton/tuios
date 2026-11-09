@@ -19,8 +19,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
-// Commands lists the names RunCommand accepts, for the README and for a test
-// that keeps the two in step.
+// Commands lists the names RunCommand accepts, for the lesson lint and for a
+// test that keeps the two in step.
 var Commands = []string{
 	"action", "agent", "cascade", "celebrate", "closeWindow", "layout", "mode",
 	"newWindow", "notify", "reset", "set", "tape", "theme", "themeJSON", "tiling", "type", "workspace",
@@ -29,7 +29,7 @@ var Commands = []string{
 // RunCommand lets the page set the scene for a step or play a step for the
 // person. It runs on the program's goroutine. An unknown command or a bad
 // argument does nothing, since the page cannot do anything useful with an
-// error. See cmd/tuios-wasm/README.md for each command.
+// error. The cases below are the reference for each command's arguments.
 func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 	o := m.OS
 	arg := func(i int) string { return argAt(args, i) }

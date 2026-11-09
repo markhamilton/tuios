@@ -11,8 +11,8 @@ import (
 // progressVersion is the format of tutor.json.
 const progressVersion = 1
 
-// Progress is what the person has done, by track. It is the shape the page
-// at tuios.dev/learn keeps in its localStorage, under a version.
+// Progress is what the person has done, by track, under a version. It is the
+// shape upstream's web tour kept in its localStorage.
 type Progress struct {
 	Version int                       `json:"version"`
 	Tracks  map[string]*TrackProgress `json:"tracks"`

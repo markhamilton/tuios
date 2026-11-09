@@ -12,8 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 )
 
-// Lesson events: what the lesson engine tells the page. See
-// cmd/tuios-wasm/README.md for each one's data.
+// Lesson events: what the lesson engine tells the page (the tutor).
 const (
 	EventLessonStart  = "lesson.start"
 	EventLessonStep   = "lesson.step"

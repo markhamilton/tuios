@@ -5,15 +5,15 @@
 // tracks.json lists the tracks in order, the groups the hub shows them under,
 // and the coach's shared lines. tracks/<id>.json is one track: its steps, the
 // keys of each, a hint, and a rule that says when the step is done (see
-// Rule). Every surface reads these same files: the page at tuios.dev/learn
-// through the wasm build's tuios.lessons(), and later the terminal tutor.
+// Rule). The terminal tutor (tuios tutor) reads these files. The web build
+// at tuios.dev/learn that also read them was removed from this fork.
 //
 // A step's words may name one surface, such as a click in the browser. Its
 // "web" or "terminal" object then holds that surface's title, note or hint,
-// and Step.For puts them in place.
+// and Step.For puts them in place. Only the terminal surface runs now.
 //
-// The engine (Lesson) is the only one. The page renders the lesson.* events
-// the wasm build sends from it, and keeps no step logic of its own.
+// The engine (Lesson) is the only one. The tutor renders the lesson.* events
+// it sends, and keeps no step logic of its own.
 package lessons
 
 import (
@@ -48,7 +48,7 @@ const (
 	SurfaceTerminal = "terminal"
 )
 
-// File is every lesson, as tuios.lessons() returns it.
+// File is every lesson, as Load returns it.
 type File struct {
 	Version int      `json:"version"`
 	Groups  []Group  `json:"groups"`
@@ -243,8 +243,8 @@ func Load() (*File, error) {
 }
 
 // JSON is every lesson as one document: tracks.json with each track's file
-// in place of its id, compacted. tuios.lessons() returns it and build.sh
-// writes it as lessons.json, so the page and the hub read the same bytes.
+// in place of its id, compacted. Upstream's web build served it as
+// lessons.json.
 func JSON() ([]byte, error) {
 	if _, err := Load(); err != nil {
 		return nil, err
