@@ -1059,7 +1059,7 @@ func DefaultSettings() Settings {
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		SnapEdge:                    SnapEdgeDefault,
-		ClickToType:                ClickToTypeDouble,
+		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,
 		KittyPlaceholders:           KittyPlaceholdersAuto,
 		ImageSymbols:                ImageSymbolsAuto,

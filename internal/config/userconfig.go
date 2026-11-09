@@ -1144,7 +1144,7 @@ func DefaultConfig() *UserConfig {
 			ModalDim:                 new(ModalDimDefault),
 			PopupDim:                 new(PopupDimDefault),
 			SnapEdge:                 new(SnapEdgeDefault),
-			PanelPadding:            overlay.DefaultPanelPadding,
+			PanelPadding:             overlay.DefaultPanelPadding,
 			ClockFormat:              DefaultClockFormat,
 			TilingScheme:             TilingSchemeSpiral,
 			MasterRatio:              MasterRatioDefault,
