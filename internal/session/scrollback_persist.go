@@ -123,6 +123,19 @@ type savedHistory struct {
 	// everything else a running program set are left out: the history comes
 	// back as something to read, under a new shell that sets its own.
 	State *TerminalState
+	// AltScreen is the screen a full-screen program showed when the pane was
+	// on the alternate screen at the save (snapshot.History.AltState), packed,
+	// and nil otherwise. A restore lays it under State's rows as a frozen
+	// block with a dim label above it. Claude Code and other full-screen
+	// programs draw only there, so without it their pane came back as the
+	// shell prompt they were started from.
+	//
+	// Added without a new historyVersion, on purpose. gob skips a field the
+	// reading struct does not have, so a build from before it reads the file
+	// as before and shows the history without the block; and a file from
+	// before it decodes here with this nil. A new version would have made an
+	// older build skip the whole file instead.
+	AltScreen *TerminalState
 }
 
 // restoreSpec marks a pane being made for a restored window. A nil one is a
@@ -301,8 +314,10 @@ func historyWanted(w WindowState) bool {
 // position the capture was taken at. The pane's lock is held only while its
 // rows are read; packing, encoding and compression happen after. The file is
 // kept within the pane's bound and the session's: a capture that compresses
-// too big is packed again from fewer of the rows already read, and one that
-// still does not fit is not written.
+// too big is packed again from fewer of the rows already read, the oldest
+// going first, and one that still does not fit is not written. The screen of
+// a full-screen program (savedHistory.AltScreen) is the last thing to go: it
+// is dropped only when the screen and no history row still do not fit.
 //
 // savedAt is the time the file records, which the divider shows on restore.
 func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol HistoryPolicy, savedAt time.Time) (int64, error) {
@@ -312,24 +327,36 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 		return seq, nil
 	}
 	lines := rows.Len()
+	alt := rows.AltState()
 	var data []byte
-	for range 4 {
+	for try := 0; ; try++ {
 		var err error
-		data, err = encodeHistory(&savedHistory{Version: historyVersion, SavedAt: savedAt, State: rows.State(lines)})
+		data, err = encodeHistory(&savedHistory{Version: historyVersion, SavedAt: savedAt, State: rows.State(lines), AltScreen: alt})
 		if err != nil {
 			return seq, err
 		}
-		if int64(len(data)) <= budget {
+		size := len(data)
+		if int64(size) <= budget {
 			break
 		}
+		data = nil
 		if lines == 0 {
-			data = nil
-			break
+			if alt == nil {
+				break
+			}
+			alt = nil
+			continue
+		}
+		if try >= 3 {
+			// Scaling has not found a fit: the screens alone, which take
+			// what they take whatever the rows. A program's screen is such a
+			// part, which a scale by the whole file never reaches zero past.
+			lines = 0
+			continue
 		}
 		// Scale the rows to the budget with a margin, since compression is not
 		// linear in the rows kept.
-		lines = int(float64(lines) * float64(budget) / float64(len(data)) * 0.8)
-		data = nil
+		lines = max(int(float64(lines)*float64(budget)/float64(size)*0.8), 0)
 	}
 	path, err := historyPath(sessionName, windowID)
 	if err != nil {
@@ -505,6 +532,12 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 		st.Width > maxHistoryDim || st.Height > maxHistoryDim || st.Width*st.Height > maxHistoryCells {
 		return nil, fmt.Errorf("history screen size is out of bounds")
 	}
+	// The program's screen was read with the main one, at its size. One that
+	// says another size, or is not packed, is not that, and is dropped
+	// without the history it came with.
+	if a := h.AltScreen; a != nil && (a.Width != h.State.Width || a.Height != h.State.Height || !a.Packed()) {
+		h.AltScreen = nil
+	}
 	return &h, nil
 }
 
@@ -560,10 +593,16 @@ func historyBanner(cwd string, savedAt time.Time) string {
 	return "\x1b[2m" + msg + "\x1b[0m\r\n"
 }
 
-// restoreHistory lays a saved history into a new pane's emulator. See
-// snapshot.ApplyHistory.
+// altScreenLabel is the dim line a restored pane shows above the screen a
+// full-screen program showed at the save.
+func altScreenLabel(savedAt time.Time) string {
+	return "-- tuios: the program screen as it was at " + savedAt.Local().Format("Jan 2 15:04") + " --"
+}
+
+// restoreHistory lays a saved history into a new pane's emulator, with the
+// program's screen under it when it has one. See snapshot.ApplyHistoryWith.
 func restoreHistory(t vt.Terminal, h *savedHistory) {
-	if err := snapshot.ApplyHistory(t, h.State); err != nil {
+	if err := snapshot.ApplyHistoryWith(t, h.State, h.AltScreen, altScreenLabel(h.SavedAt)); err != nil {
 		debugLog("[DEBUG] saved history does not unpack: %v", err)
 	}
 }

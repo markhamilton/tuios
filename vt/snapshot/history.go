@@ -22,15 +22,23 @@ type History struct {
 	screen      []uv.Line
 	screenFlags []rowFlags
 	history     *vt.ScrollbackCopy
+	// alt is the alternate screen's rows, cut to their used cells, when the
+	// pane was on it at the read, and altFlags their wrap flags. Nil when the
+	// pane was on the main screen. See AltState.
+	alt      []uv.Line
+	altFlags []rowFlags
 }
 
 // CaptureHistory reads the main screen and up to lines history rows, for a
 // history saved to disk. The caller holds the emulator's lock for this call
 // only. See History.State for the rest.
 //
-// A full-screen program on the alternate screen at the moment of the save is
-// left out. Its screen is gone the moment the program is, and what the user
-// had before it, the shell's screen, is the main one.
+// A full-screen program on the alternate screen at the moment of the save
+// keeps its screen apart from the history: the history is the shell's, the
+// main screen and what scrolled off it, and the program's screen is read as
+// well, as a picture of what the pane showed (AltState). A restore lays it
+// under the history as a block of frozen rows, since the program that drew it
+// does not come back.
 func CaptureHistory(t vt.Terminal, lines int) *History {
 	w, h := t.Width(), t.Height()
 	r := &History{width: w, height: h, cursorY: t.CursorPosition().Y}
@@ -41,6 +49,21 @@ func CaptureHistory(t vt.Terminal, lines int) *History {
 		// hidden. No flag is the safe answer: a wrongly joined row glues two
 		// lines into one.
 		r.cursorY = -1
+		r.alt = make([]uv.Line, h)
+		r.altFlags = make([]rowFlags, h)
+		for y := range h {
+			row := make(uv.Line, w)
+			for x := range w {
+				if c := t.CellAt(x, y); c != nil {
+					row[x] = *c
+					vt.BlankSixelCell(&row[x])
+				} else {
+					row[x] = uv.Cell{Content: " ", Width: 1}
+				}
+			}
+			r.alt[y] = row[:usedCells(row)]
+			r.altFlags[y] = screenRowFlags(t, y)
+		}
 	} else {
 		r.screenFlags = make([]rowFlags, h)
 		for y := range h {
@@ -135,6 +158,43 @@ func (r *History) State(lines int) *State {
 	return st
 }
 
+// AltState packs the alternate screen read with the history, the screen a
+// full-screen program showed at the save, as a packed State whose Screen is
+// that screen's rows. It is nil when the pane was on the main screen, or when
+// the alternate screen showed nothing. Like State it reads nothing from the
+// emulator. ApplyHistoryWith lays it under the history.
+func (r *History) AltState() *State {
+	shown := false
+	for _, line := range r.alt {
+		if len(line) > 0 {
+			shown = true
+			break
+		}
+	}
+	if !shown {
+		return nil
+	}
+	st := &State{Width: r.width, Height: r.height, CursorY: -1}
+	st.ScreenWraps, st.ScreenPads = rowFlagBits(r.altFlags)
+	colors := colorWireCache{}
+	p := newRowPacker()
+	b := newPackedRows(len(r.alt) * 32)
+	var row []CellState
+	for _, line := range r.alt {
+		row = row[:0]
+		for x := range line {
+			row = append(row, colors.cellState(&line[x]))
+		}
+		for len(row) < r.width {
+			row = append(row, blankCellState)
+		}
+		b.add(p, row)
+	}
+	st.PackedScreen = b.blob()
+	st.Styles = p.styles
+	return st
+}
+
 // ApplyHistory lays a saved history (History.State) into a new emulator: the
 // saved history rows go into its history, the saved screen's used rows onto
 // its screen, and the cursor under them, where the caller writes a divider.
@@ -146,6 +206,20 @@ func (r *History) State(lines int) *State {
 // the restored screen through the emulator's own reflow rather than being
 // cut. The pure emulator keeps the older history at its saved width.
 func ApplyHistory(t vt.Terminal, st *State) error {
+	return ApplyHistoryWith(t, st, nil, "")
+}
+
+// ApplyHistoryWith is ApplyHistory with the screen a full-screen program
+// showed at the save (History.AltState) laid under the saved rows: label as a
+// dim row, then the screen's rows down to its last one that shows anything,
+// then the cursor, where the caller writes its divider. The screen's rows go
+// through the same placement as the rest, so they keep their cells, styles
+// and width, and reflow with the rest at the caller's resize.
+//
+// label is plain text of one column a character. A screen that does not
+// unpack, or that shows nothing, is left out and the history still comes
+// back.
+func ApplyHistoryWith(t vt.Terminal, st *State, alt *State, label string) error {
 	if err := st.Unpack(); err != nil {
 		return err
 	}
@@ -166,6 +240,21 @@ func ApplyHistory(t vt.Terminal, st *State) error {
 	rows = append(rows[:len(rows):len(rows)], st.Screen[:used+1]...)
 	wraps = append(wraps, screenWraps[:used+1]...)
 	pads = append(pads, wrapFlags(st.ScreenPads, len(st.Screen))[:used+1]...)
+	if altRows, altWraps, altPads := frozenScreen(alt); len(altRows) > 0 {
+		if len(wraps) > 0 {
+			// The block starts a row of its own.
+			wraps[len(wraps)-1] = false
+		}
+		if label != "" {
+			lr, lw := labelRows(label, st.Width)
+			rows = append(rows, lr...)
+			wraps = append(wraps, lw...)
+			pads = append(pads, make([]bool, len(lr))...)
+		}
+		rows = append(rows, altRows...)
+		wraps = append(wraps, altWraps...)
+		pads = append(pads, altPads...)
+	}
 	if len(wraps) > 0 {
 		// The divider goes on the next row, so the last saved row does not
 		// carry on into it.
@@ -199,6 +288,51 @@ func ApplyHistory(t vt.Terminal, st *State) error {
 	out.ScrollbackPads = wrapBits(pads[:split])
 	out.ScreenPads = wrapBits(pads[split:])
 	return Apply(t, out)
+}
+
+// frozenScreen is the rows of a saved alternate screen (History.AltState)
+// down to the last one that shows anything, with their wrap and pad flags.
+// None for a nil screen, one that does not unpack, or one that shows nothing.
+// The state is copied, so the caller's stays packed.
+func frozenScreen(alt *State) (rows [][]CellState, wraps, pads []bool) {
+	if alt == nil {
+		return nil, nil, nil
+	}
+	cp := *alt
+	if err := cp.Unpack(); err != nil {
+		return nil, nil, nil
+	}
+	used := -1
+	for y, row := range cp.Screen {
+		if !blankRow(row) {
+			used = y
+		}
+	}
+	if used < 0 {
+		return nil, nil, nil
+	}
+	n := used + 1
+	return cp.Screen[:n], wrapFlags(cp.ScreenWraps, len(cp.Screen))[:n], wrapFlags(cp.ScreenPads, len(cp.Screen))[:n]
+}
+
+// labelRows is text as dim rows of width cells, one cell a character. Text
+// longer than a row wraps onto the next, with the row's wrap flag set, as the
+// emulator would have wrapped it.
+func labelRows(text string, width int) (rows [][]CellState, wraps []bool) {
+	width = max(width, 1)
+	dim := StyleState{Attrs: uv.AttrFaint}
+	var row []CellState
+	for _, r := range text {
+		if len(row) == width {
+			rows, wraps = append(rows, row), append(wraps, true)
+			row = nil
+		}
+		row = append(row, CellState{Content: string(r), Width: 1, StyleState: dim})
+	}
+	for len(row) < width {
+		row = append(row, blankCellState)
+	}
+	return append(rows, row), append(wraps, false)
 }
 
 // rowExtent is the number of columns a row needs to show everything it

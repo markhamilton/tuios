@@ -14,6 +14,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 // These run on whichever emulator the build links: the pure one by default and
@@ -63,7 +64,8 @@ func allRows(t vt.Terminal) []string {
 func throughDisk(t *testing.T, term vt.Terminal, lines int) *savedHistory {
 	t.Helper()
 	at := time.Date(2026, 9, 30, 14, 2, 0, 0, time.Local)
-	data, err := encodeHistory(&savedHistory{Version: historyVersion, SavedAt: at, State: historyStateOf(term, lines)})
+	r := snapshot.CaptureHistory(term, lines)
+	data, err := encodeHistory(&savedHistory{Version: historyVersion, SavedAt: at, State: r.State(r.Len()), AltScreen: r.AltState()})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -215,8 +217,9 @@ func TestHistoryRestoreAtAnotherWidth(t *testing.T) {
 	}
 }
 
-// A full-screen program up at the save is not what comes back: the shell's
-// screen under it and the history are.
+// A full-screen program up at the save keeps the shell's screen under it as
+// the history, and its own screen comes back under that as frozen rows, not
+// as an alternate screen. See scrollback_altscreen_test.go for the rest.
 func TestHistorySavesTheMainScreenUnderAnAlternateOne(t *testing.T) {
 	src := vt.NewWithScrollback(40, 6, 1000)
 	_, _ = src.Write([]byte("SHELL-BEFORE\r\n$ vim\r\n\x1b[?1049h\x1b[HALT-SCREEN-TEXT"))
@@ -230,11 +233,12 @@ func TestHistorySavesTheMainScreenUnderAnAlternateOne(t *testing.T) {
 	}
 	rows := allRows(dst)
 	joined := strings.Join(rows, "\n")
-	if strings.Contains(joined, "ALT-SCREEN-TEXT") {
-		t.Errorf("the alternate screen was saved:\n%s", joined)
-	}
-	if indexOf(rows, "SHELL-BEFORE") < 0 || indexOf(rows, "$ vim") < 0 {
+	shell, vim, alt := indexOf(rows, "SHELL-BEFORE"), indexOf(rows, "$ vim"), indexOf(rows, "ALT-SCREEN-TEXT")
+	if shell < 0 || vim < 0 {
 		t.Errorf("the main screen was not saved:\n%s", joined)
+	}
+	if alt < 0 || alt < vim {
+		t.Errorf("the program's screen is not under the shell's:\n%s", joined)
 	}
 }
 

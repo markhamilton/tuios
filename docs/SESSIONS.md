@@ -642,14 +642,29 @@ What comes back:
 - The pane's scrollback, up to 1000 lines by default, and the screen it
   showed. Colors, bold and other styles, wide characters and wrapped lines
   come back as they were.
-- The shell's screen when a full-screen program such as `vim` or `htop` was
-  open. The program's own screen does not come back.
+- The shell's screen when a full-screen program such as Claude Code, `vim`
+  or `htop` was open, and under it the last screen of that program. The
+  program's screen comes back as a block of text above the divider, with a
+  dim label above it:
+
+  ```
+  $ claude
+  -- tuios: the program screen as it was at Sep 30 14:02 --
+  ...the rows the program showed...
+  -- tuios: restored from Sep 30 14:02, fresh shell in /home/you/project --
+  $ _
+  ```
+
+  The program does not run again. The block keeps the colors and styles of
+  the program's screen. Images in it come back blank.
 - The scratch terminal's history. Other popups do not come back, so their
   history is not saved.
 
 Copy mode, search and hints reach the restored lines like any other history.
 An agent pane keeps its resume offer. The resumed agent starts under the
-divider.
+divider. A resumed agent that uses the full screen, such as Claude Code,
+covers the restored block while it runs. When it stops, the restored block
+shows again above it, one time.
 
 When the history is saved:
 
@@ -668,14 +683,16 @@ Where it goes and how big it gets:
   `$XDG_STATE_HOME/tuios/sessions/scrollback/<session>/`. The directory is
   mode 0700 and each file is mode 0600.
 - Each file is compressed. It is at most 2 MiB by default. A pane with more
-  saves fewer lines.
+  saves fewer lines. The oldest lines go first. The screen of a full-screen
+  program goes only if it does not fit when no lines are left.
 - All the files of one session are at most 16 MiB together. A pane that does
   not fit saves fewer lines.
 - The daemon deletes a pane's file when the pane closes, and a session's
   files when the session is killed. A renamed session keeps its files.
 - When the daemon starts, it deletes history that has no saved session.
 
-> **Privacy.** The history files hold what your panes printed, which can
+> **Privacy.** The history files hold what your panes printed, and the last
+> screen of each full-screen program that was open at the save. This can
 > include passwords, tokens and other secrets. They stay on your disk until
 > the pane or the session goes. To stop this, set `persist_scrollback = false`
 > in `[daemon]`. The next time the daemon starts, it deletes the history it
