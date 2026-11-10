@@ -591,6 +591,16 @@ type Settings struct {
 	// Set via appearance.auto_enter_terminal_on_focus config.
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy
 
+	// ReturnToWindowMode keeps upstream's mode handling: renaming, restoring
+	// or dragging a pane, and closing the last pane or switching to a
+	// workspace with none, leave the client in window management mode until
+	// the user enters terminal mode again. Off (the default), terminal mode is the
+	// home mode: window mode is entered only on purpose (leader esc, alt+esc,
+	// enter_window_mode, the hold key) and stays until the user leaves it,
+	// and a window mode that nothing chose ends once a pane has the focus.
+	// Set via appearance.return_to_window_mode config.
+	ReturnToWindowMode bool
+
 	// ClickToType decides what a left click on a pane's content does while the
 	// keyboard is driving the window manager. "single" enters terminal mode on the
 	// release, which is what a newcomer expects a click to do (the default before

@@ -381,7 +381,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if !focusedSet {
 		m.FocusedWindow = -1
 		m.LogInfo("No visible windows in workspace %d", workspace)
-		// Exit terminal mode when switching to empty workspace
+		// Exit terminal mode when switching to empty workspace. Not a mode the
+		// user chose: the next pane here takes the keyboard back
+		// (settleHomeMode) unless return_to_window_mode is on.
 		if m.Mode == TerminalMode {
 			// Record mode switch for tape recording
 			if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {

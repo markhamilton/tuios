@@ -52,8 +52,15 @@ var preV080Pins = []lookPin{
 // made tmux the default preset, and the chords these tests press are the
 // tuios keys. A test that names a preset of its own keeps it, as with every
 // pin.
+//
+// The fork also made terminal mode the home mode. The suite was written
+// against upstream's modal flow, where a new pane, a closed pane or a rename
+// leaves the client in window mode and the next bare key is a window-manager
+// command, so every test keeps return_to_window_mode on. home_mode_test.go
+// turns it off and drives the fork's default.
 var keyPins = []lookPin{
 	{table: "keybindings", key: "preset", value: `"tuios"`},
+	{table: "appearance", key: "return_to_window_mode", value: `true`},
 }
 
 // shippedLooksBases holds the isolation roots whose tests asked for the

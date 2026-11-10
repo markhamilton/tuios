@@ -864,8 +864,13 @@ type foreignSessionsChangedMsg struct{}
 // one somebody writes. One comparison, once, is the whole cost, and it answers
 // nil without allocating for a client whose rail has no files section.
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Nest mode does not outlive a window mode a message left the client in.
-	defer m.settleNest()
+	// Terminal mode is the home mode: a window mode nobody chose ends once a
+	// pane has the focus (see settleHomeMode). Nest mode does not outlive a
+	// window mode a message left the client in.
+	defer func() {
+		m.settleHomeMode()
+		m.settleNest()
+	}()
 	// The frame the last View composed is stored now: write it. Nothing
 	// else changes, so the View after this message serves the same frame.
 	if _, ok := msg.(flushMsg); ok {
@@ -1703,7 +1708,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				break
 			}
 		}
-		// Ensure we're in window management mode if no windows remain
+		// Ensure we're in window management mode if no windows remain. It is
+		// not a mode the user chose, so the next pane takes the keyboard back
+		// (settleHomeMode) unless return_to_window_mode is on.
 		if len(m.Windows) == 0 {
 			m.Mode = WindowManagementMode
 		}

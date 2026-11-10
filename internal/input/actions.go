@@ -1059,8 +1059,15 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LogInfo("Entering window management mode")
-	// Exit terminal mode to window management mode
-	cmd := o.ExitTerminalMode()
+	// Exit terminal mode to window management mode. ExitTerminalMode makes
+	// the mode stay until the user leaves it. The one exception is esc in a
+	// window mode with no pane to type into (the splash, an empty
+	// workspace): there esc is no request to keep window mode for the next
+	// pane, so the next pane still takes the keyboard (settleHomeMode).
+	var cmd tea.Cmd
+	if o.Mode != app.WindowManagementMode || o.GetFocusedWindow() != nil {
+		cmd = o.ExitTerminalMode()
+	}
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 		focusedWindow.InvalidateCache()

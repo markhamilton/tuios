@@ -528,7 +528,8 @@ func (m *OS) SetMode(mode string) error {
 			}
 		}
 	case "window", "Window", "WindowManagementMode":
-		m.Mode = WindowManagementMode
+		// Asked for by name, so it stays until a tape or the user leaves it.
+		m.ChooseWindowMode()
 	}
 	return nil
 }

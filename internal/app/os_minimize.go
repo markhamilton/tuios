@@ -124,8 +124,10 @@ func (m *OS) RestoreWindow(i int) {
 
 		// Bring the window to front and focus it
 		m.FocusWindow(i)
-		// Enter window management mode to interact with the restored window
-		m.Mode = WindowManagementMode
+		// Upstream enters window management mode to interact with the restored
+		// window. By default the mode stays, so a restore from terminal mode
+		// leaves the user typing in the restored pane. See AutoWindowMode.
+		m.AutoWindowMode()
 	}
 }
 

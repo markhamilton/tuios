@@ -1910,6 +1910,14 @@ type OS struct {
 	// pointerGestureWasTerminal is the same bargain for a resize or an alt-drag
 	// move: see BeginPointerGesture.
 	pointerGestureWasTerminal bool
+	// windowModeChosen records that the user asked for window management
+	// mode (leader esc, alt+esc, enter_window_mode, a tape or the CLI), as
+	// opposed to landing there because a pane closed or a gesture borrowed
+	// it. Terminal mode is the home mode unless
+	// appearance.return_to_window_mode is on: a window mode nobody chose
+	// goes back to terminal mode once a pane has the focus. See
+	// settleHomeMode.
+	windowModeChosen bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the
@@ -1968,8 +1976,10 @@ type OS struct {
 	scratchPending   string
 	scratchPendingAt time.Time
 	// scratchReturnID and scratchReturnMode are the pane and the mode the
-	// focus goes back to when the scratch terminal hides.
-	scratchReturnID string
+	// focus goes back to when the scratch terminal hides. scratchReturnChosen
+	// is whether that mode was a window mode the user chose.
+	scratchReturnID     string
+	scratchReturnChosen bool
 	// scratchStarted is when each local scratch pane started, by window id,
 	// so a command that exits at once is reported. See noteLocalScratchExit.
 	scratchStarted map[string]time.Time

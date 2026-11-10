@@ -164,6 +164,7 @@ var settingLabels = map[string]string{
 	"appearance.narrow_width":                   "Narrow screen width (columns)",
 	"appearance.focus_wrap":                     "Focus wraps at the edge",
 	"appearance.auto_enter_terminal_on_focus":   "Type in a pane when focus moves to it",
+	"appearance.return_to_window_mode":          "Go back to window mode after pane actions",
 	"appearance.focus_follows_mouse_pause":      "Key that pauses focus follows mouse",
 	"startup.tiled":                             "Start tiled",
 	"startup.daemon":                            "Daemon by default",

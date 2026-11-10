@@ -260,7 +260,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				// The editor is a centred dialog, so hidden titles are no reason
 				// for the palette to offer a row that does nothing.
 				if focused := m.GetFocusedWindow(); focused != nil {
-					m.Mode = WindowManagementMode
+					m.AutoWindowMode()
 					m.BeginRenameWindow(focused)
 				}
 				return m, nil
@@ -1313,7 +1313,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Bind:     "prefix_exit_mode",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.Mode = WindowManagementMode
+				m.ChooseWindowMode()
 				m.ShowNotification("Window management mode", "info", s.NotificationDuration)
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.InvalidateCache()

@@ -15,5 +15,9 @@ func Config() *config.UserConfig {
 	// A browser tab has no desktop notifications. Left on, the default warns
 	// about it at startup, which is noise in a tutorial.
 	cfg.Notifications.Agent.Notify = new(false)
+	// The lessons teach window mode and the i that leaves it, step by step
+	// after each new window, so they keep upstream's mode handling rather
+	// than the fork's terminal home mode.
+	cfg.Appearance.ReturnToWindowMode = new(true)
 	return cfg
 }

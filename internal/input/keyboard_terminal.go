@@ -318,7 +318,10 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 				o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 			}
 			if err := focusedWindow.SendInput(rawInput); err != nil {
-				// Terminal unavailable, switch back to window mode
+				// Terminal unavailable, switch back to window mode. Not a mode
+				// the user chose: unless return_to_window_mode is on, the
+				// focused pane takes the keyboard back after this message
+				// (settleHomeMode), and the pane's exit closes it.
 				o.Mode = app.WindowManagementMode
 				focusedWindow.InvalidateCache()
 			}
@@ -335,7 +338,9 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 			}
 		}
 	} else {
-		// No focused window, switch back to window mode
+		// No focused window, switch back to window mode, where the splash
+		// keys work. Not a mode the user chose: the next pane that takes the
+		// focus gets the keyboard (settleHomeMode).
 		o.Mode = app.WindowManagementMode
 	}
 	return o, nil

@@ -323,6 +323,11 @@ var optionSpecs = []Option{
 		Accepted:    AutoEnterTerminalModes, Default: string(AutoEnterTerminalOff),
 	},
 	{
+		Path: "appearance.return_to_window_mode", Type: OptionBool, Section: "appearance",
+		Description: "Go to window mode when you rename, restore or drag a pane, or when no pane has the focus. Off keeps you in terminal mode. Press the leader, then esc, to go to window mode",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.word_characters", Type: OptionString, Section: "appearance",
 		Description: "Punctuation that counts as part of a word for double-click selection",
 		Default:     `@-./_~?&=%+#`,

@@ -274,6 +274,7 @@ func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 // scratch group hides.
 func (m *OS) rememberScratchReturn() {
 	m.scratchReturnMode = m.Mode
+	m.scratchReturnChosen = m.WindowModeChosen()
 	m.scratchReturnID = ""
 	if w := m.GetFocusedWindow(); w != nil && !isScratch(w) {
 		m.scratchReturnID = w.ID
@@ -315,15 +316,26 @@ func (m *OS) leaveScratchView() {
 		}
 	}
 	m.switchToWorkspace(base, back)
-	if !m.hasFocusedWindow() {
-		if m.Mode == TerminalMode {
-			m.ExitTerminalMode()
-		}
-	} else if m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode {
-		m.ExitTerminalMode()
-	}
+	m.restoreScratchReturnMode(!m.hasFocusedWindow())
 	m.scratchReturnID = ""
 	m.MarkAllDirty()
+}
+
+// restoreScratchReturnMode gives back the mode the scratch group was shown
+// from. With no pane to type into it falls to window mode, which nobody chose,
+// so the next pane takes the keyboard (settleHomeMode). A window mode the user
+// had chosen before the show is chosen again.
+func (m *OS) restoreScratchReturnMode(nothingToType bool) {
+	switch {
+	case nothingToType:
+		if m.Mode == TerminalMode {
+			m.ExitTerminalMode()
+			m.windowModeChosen = false
+		}
+	case m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode:
+		m.ExitTerminalMode()
+		m.windowModeChosen = m.scratchReturnChosen || m.ReturnsToWindowMode()
+	}
 }
 
 // enterScratchWorkspace is the bookkeeping of a switch from an ordinary

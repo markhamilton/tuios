@@ -918,7 +918,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_window":             "Enter window prefix",
 	"prefix_detach":             "Detach, leave running",
 	"prefix_close_session":      "Close session and panes",
-	"prefix_exit_mode":          "Leave terminal mode",
+	"prefix_exit_mode":          "Go to window mode and stay there",
 	"prefix_selection":          "Enter copy/scrollback mode",
 	"prefix_help":               "Toggle help",
 	"prefix_debug":              "Enter debug prefix",
@@ -1008,7 +1008,7 @@ var ActionDescriptions = map[string]string{
 	// Terminal Mode (direct keybinds, no prefix required)
 	"terminal_next_window":      "Next window (terminal mode)",
 	"terminal_prev_window":      "Previous window (terminal mode)",
-	"terminal_exit_mode":        "Exit terminal mode (to window mode)",
+	"terminal_exit_mode":        "Go to window mode and stay there",
 	"terminal_focus_left":       "Focus the pane to the left",
 	"terminal_focus_right":      "Focus the pane to the right",
 	"terminal_focus_up":         "Focus the pane above",

@@ -392,6 +392,7 @@ type AppearanceConfig struct {
 	NewWindowInheritCwd      *bool                   `toml:"new_window_inherit_cwd"`       // A new window starts in the focused pane's working directory (default: true)
 	NewWindowFollowSSH       *bool                   `toml:"new_window_follow_ssh"`        // A split or new window of a pane that runs ssh runs the same ssh (default: false)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
+	ReturnToWindowMode       *bool                   `toml:"return_to_window_mode"`        // Go back to window mode after pane actions, as upstream tuios does; off keeps terminal mode as the home mode (default: false)
 	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: double)
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden (default: top)
@@ -1172,8 +1173,9 @@ func DefaultConfig() *UserConfig {
 				MultiFormat: MultiCopyFormatPlain, CopyEntry: CopyEntryCursor,
 				OSC52Write: OSC52WriteFocused,
 			},
-			NvimNavigation: new(false),
-			FocusWrap:      new(false),
+			NvimNavigation:     new(false),
+			FocusWrap:          new(false),
+			ReturnToWindowMode: new(false),
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
 				// cannot change the next DefaultConfig.
@@ -3068,6 +3070,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.FocusWrap != nil {
 		s.FocusWrap = *cfg.Appearance.FocusWrap
+	}
+	if cfg.Appearance.ReturnToWindowMode != nil {
+		s.ReturnToWindowMode = *cfg.Appearance.ReturnToWindowMode
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the

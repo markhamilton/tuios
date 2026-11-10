@@ -55,6 +55,10 @@ const configHeaderRest = "# Documentation: https://github.com/Gaurav-Gosain/tuio
 	"# auto_enter_terminal_on_focus: off (Tab keeps cycling windows),\n" +
 	"#               targeted (numbered select and arrows start typing),\n" +
 	"#               all (every covered focus command, including Tab)\n" +
+	"# return_to_window_mode: false (terminal mode is the home mode; press the\n" +
+	"#               leader, then esc, to go to window mode), true (go to\n" +
+	"#               window mode when you rename, restore or drag a pane, or\n" +
+	"#               when no pane has the focus, and stay there)\n" +
 	"# [appearance.scrollbar]: style = thin, track; thumb/track = a one-cell glyph\n" +
 	"#               (track also takes \"none\"); tint = border, muted, #RRGGBB\n" +
 	"# background: off (your terminal shows through), theme (the theme's\n" +

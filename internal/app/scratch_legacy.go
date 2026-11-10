@@ -99,15 +99,11 @@ func (m *OS) legacyHideScratch(i int) {
 	} else {
 		m.FocusNextVisibleWindow()
 	}
-	switch {
-	case !m.hasFocusedWindow() || isScratch(m.GetFocusedWindow()):
+	nothingToType := !m.hasFocusedWindow() || isScratch(m.GetFocusedWindow())
+	if nothingToType {
 		m.FocusedWindow = -1
-		if m.Mode == TerminalMode {
-			m.ExitTerminalMode()
-		}
-	case m.scratchReturnMode != TerminalMode && m.Mode == TerminalMode:
-		m.ExitTerminalMode()
 	}
+	m.restoreScratchReturnMode(nothingToType)
 	m.scratchReturnID = ""
 	m.MarkAllDirty()
 	m.SyncStateToDaemon()

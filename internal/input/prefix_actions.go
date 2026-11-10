@@ -221,15 +221,18 @@ func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 {
 		refreshFocusedWindow(o)
 	} else if o.Mode == app.TerminalMode {
-		// Nothing left to type into.
+		// Nothing left to type into. Not a window mode the user chose: the
+		// next pane takes the keyboard back (settleHomeMode) unless
+		// return_to_window_mode is on.
 		o.Mode = app.WindowManagementMode
 	}
 	return o, nil
 }
 
-// startRename puts the focused window into rename mode. Renaming is a
-// window-management activity, so terminal mode is left first; the caller in
-// window-management mode is already there.
+// startRename puts the focused window into rename mode. The editor owns every
+// key while it is up, in either mode, so the mode is left alone and the user
+// is back where they were when it closes. With return_to_window_mode on,
+// renaming leaves terminal mode first, as upstream does.
 //
 // Hidden titles are no longer a reason to refuse. The editor is a centred
 // dialog with its own frame, so it has somewhere to draw whatever the title bar
@@ -243,7 +246,7 @@ func startRename(o *app.OS) {
 	if focused == nil {
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.AutoWindowMode()
 	o.BeginRenameWindow(focused)
 }
 
@@ -266,9 +269,9 @@ func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 // handleWorkspaceRename opens the one rename editor on a workspace. It is
 // reached from the chord and from a dock pill's menu, and the target follows
 // from which: the pill the menu was opened on, or the workspace in view.
-// Renaming is a window-management activity, like renaming a pane.
+// The mode is handled as for renaming a pane (see startRename).
 func handleWorkspaceRename(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.Mode = app.WindowManagementMode
+	o.AutoWindowMode()
 	o.BeginRenameCurrentWorkspace()
 	return o, nil
 }
@@ -471,13 +474,16 @@ func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	return o, nil
 }
 
-// leaveTerminalMode returns to window-management mode and says so. No-op when
-// already there.
+// leaveTerminalMode returns to window-management mode and says so. It is the
+// user's own request (leader esc, alt+esc), so the mode stays until they enter
+// terminal mode again. Already in window mode, with no pane to type into, it
+// only makes that mode stay when the next pane opens.
 func leaveTerminalMode(o *app.OS) {
 	if o.Mode != app.TerminalMode {
+		o.ChooseWindowMode()
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.ChooseWindowMode()
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	refreshFocusedWindow(o)
 }

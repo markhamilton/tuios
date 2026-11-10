@@ -1042,7 +1042,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 {
 		m.FocusedWindow = -1
 		m.LogInfo("No windows remaining, switching to window management mode")
-		// Reset to window management mode when no windows are left
+		// Reset to window management mode when no windows are left, where
+		// the splash keys work. Not a mode the user chose: the next pane
+		// takes the keyboard back (settleHomeMode).
 		m.Mode = WindowManagementMode
 	} else if i < m.FocusedWindow {
 		m.FocusedWindow--

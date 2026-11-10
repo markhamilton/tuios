@@ -550,9 +550,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.BeginPointerGesture()
 	}
 	o.FocusWindowFromClick(clickedWindowIndex, X, Y)
-	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
-	}
+	pressLeavesTerminalMode(o)
 
 	// A left press on the content area in window-management mode arms
 	// click-to-type: released without a drag it enters terminal mode
@@ -662,6 +660,25 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// pressLeavesTerminalMode takes a pointer press on a pane's frame out of
+// terminal mode, so the motion and the release that follow manage the window
+// instead of going to a mouse-mode app in the pane.
+//
+// By default the press borrows window mode (BeginPointerGesture): the release
+// gives terminal mode back, because moving, resizing or clicking a pane's
+// frame is not a request to stop typing. With return_to_window_mode on it
+// switches for good, as upstream does.
+func pressLeavesTerminalMode(o *app.OS) {
+	if o.Mode != app.TerminalMode {
+		return
+	}
+	if o.ReturnsToWindowMode() {
+		o.Mode = app.WindowManagementMode
+		return
+	}
+	o.BeginPointerGesture()
+}
+
 // beginWindowDrag puts a window into the move gesture the title-bar drag uses:
 // it focuses and grabs the pane at (x, y) and, in tiling mode, records the slot
 // to swap back into. Untiling a borderless pane for free rendering waits for
@@ -673,9 +690,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
 	o.FocusWindowFromClick(idx, x, y)
-	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
-	}
+	pressLeavesTerminalMode(o)
 	o.SetPointerShape(app.PointerGrabbing)
 	o.InteractionMode = true
 	o.Dragging = true
