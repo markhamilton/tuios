@@ -24,3 +24,6 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
+
+// Fork: resolve sibling modules from the tree, never through tuios.dev.
+replace tuios.dev/progstatus => ../progstatus

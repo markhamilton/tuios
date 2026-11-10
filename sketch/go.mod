@@ -17,3 +17,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
+
+// Fork: resolve sibling modules from the tree, never through tuios.dev.
+replace tuios.dev/plot => ../plot

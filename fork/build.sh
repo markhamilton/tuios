@@ -3,9 +3,11 @@
 #   fork/build.sh            -> dist/tuios (darwin/arm64)
 #   fork/build.sh test PKG.. -> go test in the container (default ./internal/...)
 #   fork/build.sh vet        -> go vet ./cmd/... ./internal/...
+#   fork/build.sh test-mod DIR [pkgs] -> go test in an in-repo module (vt, e2e/tui, ...)
 # Module downloads go through proxy.golang.org; tuios.dev is never contacted
-# (GOWORK=off plus the replace block in go.mod, and GONOSUMDB keeps the sumdb
-# from being asked about tuios.dev paths).
+# (GOWORK=off plus the replace blocks in every go.mod, and GONOSUMDB keeps the
+# sumdb from being asked about tuios.dev paths). tuios.dev resolves to nowhere
+# in the container, so a missing replace fails instead of fetching.
 set -e
 cd "$(dirname "$0")/.."
 mode="${1:-build}"
@@ -18,6 +20,7 @@ run() {
 		-v tuios-fork-gocache:/root/.cache/go-build \
 		-e GOWORK=off -e GOTOOLCHAIN=auto \
 		-e GONOSUMDB=tuios.dev -e GOPRIVATE=tuios.dev \
+		--add-host tuios.dev:0.0.0.0 \
 		"$@"
 }
 case "$mode" in
@@ -34,8 +37,13 @@ test)
 vet)
 	run "$img" go vet ./cmd/... ./internal/...
 	;;
+test-mod)
+	dir="${1:?usage: $0 test-mod DIR [pkgs]}"
+	shift
+	run -w "/src/$dir" "$img" go test "${@:-./...}"
+	;;
 *)
-	echo "usage: $0 [build|test [pkgs]|vet]" >&2
+	echo "usage: $0 [build|test [pkgs]|vet|test-mod DIR [pkgs]]" >&2
 	exit 2
 	;;
 esac

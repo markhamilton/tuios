@@ -66,3 +66,15 @@ require (
 )
 
 replace github.com/Gaurav-Gosain/tuios => ../..
+
+// Fork: resolve the tuios.dev modules from the tree, never through tuios.dev.
+replace (
+	tuios.dev/loom => ../../loom
+	tuios.dev/plot => ../../plot
+	tuios.dev/progstatus => ../../progstatus
+	tuios.dev/shot => ../../shot
+	tuios.dev/sketch => ../../sketch
+	tuios.dev/swatch => ../../swatch
+	tuios.dev/tml => ../../tml
+	tuios.dev/vt => ../../vt
+)
