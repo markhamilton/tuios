@@ -44,6 +44,7 @@ notes = [
   "Copy mode uses vi keys. [[keybindings.copy_pipe]] does what tmux copy-pipe does.",
   "Press ' to go to a workspace by its number, as in tmux. Workspaces go up to 99.",
   "Press . to move the focused pane to a workspace by its number. In tmux, . moves the whole window.",
+  "Keys go to the pane, as in tmux. Press ctrl+b esc to go to window mode, and i to go back.",
 ]
 
 [prefix_mode]

@@ -608,6 +608,14 @@ resize_pane_down_5 = ["alt+down"]
 next_workspace = ["n"]          # runs once
 ```
 
+Terminal mode is the home mode. Leader actions, renames, restores and mouse
+drags leave the user in terminal mode, and `esc` goes to the pane. The way
+into window mode is the leader, then `esc` (`prefix_exit_mode`), or
+`alt+esc` (`terminal_exit_mode`). Window mode then stays until `i` or
+`enter`. With no pane focused, tuios uses window mode, and the next pane that
+opens takes the keys. `appearance.return_to_window_mode = true` restores the
+upstream behavior, where those actions leave the user in window mode.
+
 `keybindings.lock = true` is zellij's locked mode. In terminal mode every key
 but the leader goes to the pane. The zellij preset turns it on. With lock on,
 a repeatable action keeps its menu open until `esc`, with no time limit. That

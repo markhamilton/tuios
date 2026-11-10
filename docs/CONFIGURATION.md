@@ -218,6 +218,21 @@ option_glyphs = "auto"   # auto, alt, bind, type
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).
 
+## Go back to window mode
+
+```toml
+[appearance]
+return_to_window_mode = false
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `return_to_window_mode` | `false` | `false` keeps terminal mode as the home mode. You go to window mode only when you ask for it: press the leader, then `esc`. Window mode then stays until you press `i` or `enter`. `true` is the upstream tuios behavior. tuios then goes to window mode when you rename, restore or drag a pane, and when no pane has the focus. It stays in window mode until you press `i`, also after a new pane opens. |
+
+With `false`, `startup.start_in_terminal_mode` has no effect, because tuios
+always starts in terminal mode when a pane has the focus. See
+[Terminal mode is the home mode](KEYBINDINGS.md#terminal-mode-is-the-home-mode).
+
 ## Lock mode
 
 ```toml

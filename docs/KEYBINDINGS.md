@@ -87,6 +87,41 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 work as in tmux, the tuios keys that moved, and what tmux has that tuios does
 not. `tuios keybinds preset show tmux` prints the preset file.
 
+## Terminal mode is the home mode
+
+tuios has two input modes. In terminal mode, keys go to the program in the
+focused pane. In window mode, single keys act on panes. For example, `w`
+closes the focused pane.
+
+Terminal mode is the home mode:
+
+- tuios starts in terminal mode when a pane has the focus.
+- tuios stays in terminal mode after a leader action, for example a split, a
+  close, a zoom or a workspace switch.
+- tuios stays in terminal mode after you rename, restore, move or resize a
+  pane. A drag with the mouse does not change the mode.
+- `esc` goes to the program in the pane, so vim and Claude Code get it.
+
+To go to window mode, press the leader, then `esc` (`ctrl+b esc`). `alt+esc`
+also goes to window mode. Window mode then stays. `w`, `tab` and the move keys
+do not end it, and a pane that closes or opens does not end it. To go back to
+terminal mode, press `i` or `enter`. A click on a pane also goes back, as
+`appearance.click_to_type` sets.
+
+When no pane has the focus, tuios uses window mode. This occurs when the last
+pane closes and on an empty workspace. The keys on the splash screen then
+work, for example `n` for a new pane. The leader works in every mode. The next
+pane that opens gets the keys, so you do not press `i`.
+
+The hold key (`hold_window_mode`) gives window mode only while you hold it.
+
+The leader key binding is `prefix_exit_mode` in `[keybindings.prefix_mode]`.
+The `enter_window_mode` key in `[keybindings.mode_control]` (`esc`) is a
+window-mode key. It does not take `esc` from the pane in terminal mode.
+
+To get the upstream behavior back, set `appearance.return_to_window_mode =
+true`. See [Go back to window mode](CONFIGURATION.md#go-back-to-window-mode).
+
 ## Lock mode
 
 Lock mode gives every key to the program in the pane. It is the locked mode of
