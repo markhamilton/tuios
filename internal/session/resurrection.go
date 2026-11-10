@@ -312,6 +312,8 @@ func LoadResurrectionState(sessionName string) (*SessionState, error) {
 		return nil, fmt.Errorf("saved state for session %q was written by a newer TUIOS (state version %d, this build reads up to %d) and cannot be restored (%s)",
 			sessionName, state.ResurrectionVersion, ResurrectionVersion, archivedNote(dest))
 	}
+	// Names of workspaces that hold no pane, which older builds left behind.
+	state.dropNamesOfEmptyWorkspaces()
 
 	return &state, nil
 }

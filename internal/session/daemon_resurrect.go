@@ -290,6 +290,12 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		kept = append(kept, *w)
 	}
 	restored.Windows = kept
+	// Every pane that comes back has its shell by now (the respawns above run
+	// one after another, before the session sees the state), so a workspace
+	// that holds none of them holds no pane: a name saved for it goes. That
+	// includes a workspace whose panes were all dropped above, as a popup or
+	// as a shell that would not start. See dropNamesOfEmptyWorkspaces.
+	restored.dropNamesOfEmptyWorkspaces()
 
 	// Focus must not name a window that was just dropped, or the client restores
 	// a focus onto a pane that is not there.

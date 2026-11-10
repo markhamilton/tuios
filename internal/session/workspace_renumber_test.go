@@ -16,6 +16,8 @@ func TestSavedDisplayOrderRestoresAsNumbering(t *testing.T) {
 	sess := makeSessionWithWindow(t, d, "legacy")
 	st := sess.ResurrectionState()
 	st.Windows[0].Workspace = 3
+	// A pane on 1 too: a restore drops the name of a workspace with none.
+	st.Windows = append(st.Windows, WindowState{ID: "win-edit", Width: 40, Height: 20, Workspace: 1})
 	st.CurrentWorkspace = 3
 	st.WorkspaceNames = map[int]string{1: "EDIT", 3: "DPLY"}
 	st.WorkspaceOrder = []int{3, 1}
@@ -45,8 +47,20 @@ func TestSavedDisplayOrderRestoresAsNumbering(t *testing.T) {
 	if got.WorkspaceNames[1] != "DPLY" || got.WorkspaceNames[2] != "EDIT" {
 		t.Errorf("names are %v, want DPLY on 1 and EDIT on 2, the order the pills were shown in", got.WorkspaceNames)
 	}
-	if len(got.Windows) != 1 || got.Windows[0].Workspace != 1 || got.CurrentWorkspace != 1 {
-		t.Errorf("the pane is on workspace %d and the session shows %d, want both on 1", got.Windows[0].Workspace, got.CurrentWorkspace)
+	if len(got.Windows) != 2 {
+		t.Fatalf("%d panes came back, want 2", len(got.Windows))
+	}
+	for _, w := range got.Windows {
+		want := 1
+		if w.ID == "win-edit" {
+			want = 2
+		}
+		if w.Workspace != want {
+			t.Errorf("pane %s is on workspace %d, want %d", w.ID, w.Workspace, want)
+		}
+	}
+	if got.CurrentWorkspace != 1 {
+		t.Errorf("the session shows %d, want 1", got.CurrentWorkspace)
 	}
 	// The tab that was workspace 3 keeps its herdr tab id, now as workspace 1.
 	if got.WorkspaceTabKey(1) != 3 {

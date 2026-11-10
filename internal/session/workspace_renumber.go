@@ -327,6 +327,47 @@ func (s *Session) dropEmptiedNamesLocked(heldBefore map[int]bool, now map[string
 	s.namesDropped = true
 }
 
+// dropNamesOfEmptyWorkspaces takes the name off every workspace that holds no
+// pane, for a state read back from disk. dropEmptiedNamesLocked clears a name
+// when the last pane leaves, but a build from before it saved names of
+// workspaces that had already emptied, and a saved state never comes back
+// through that transition: those names stayed on for good, and a pane put at
+// that number later took a name it was never given.
+//
+// It runs where a saved state is read (LoadResurrectionState) and again in the
+// restore once the respawns are done, against the panes that came back. So a
+// workspace whose only pane did not respawn loses its name too, as it would
+// have if that pane had closed. A name given to an empty workspace inside a
+// session is not touched by this: that runs through the session's own
+// transition rule. A scratch pane holds its own workspace as any pane does.
+func (st *SessionState) dropNamesOfEmptyWorkspaces() {
+	if len(st.WorkspaceNames) == 0 {
+		return
+	}
+	held := make(map[int]bool, len(st.Windows))
+	for i := range st.Windows {
+		held[max(st.Windows[i].Workspace, 1)] = true
+	}
+	var names map[int]string
+	for ws, name := range st.WorkspaceNames {
+		if held[ws] && name != "" {
+			continue
+		}
+		if names == nil {
+			// Cloned: a state's maps are never written in place.
+			names = maps.Clone(st.WorkspaceNames)
+		}
+		delete(names, ws)
+	}
+	if names == nil {
+		return
+	}
+	if len(names) == 0 {
+		names = nil
+	}
+	st.WorkspaceNames = names
+}
+
 // noteWorkspacesLocked runs after every change to the state, a client's push
 // included, and keeps a workspace's number its position:
 //

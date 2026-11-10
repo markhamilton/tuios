@@ -948,7 +948,9 @@ dock, renumbers it. A workspace exists while it holds a pane or is on screen.
 When the last pane of a workspace closes, exits or moves away, the workspace
 loses its name. This is also true for the workspace on screen. A new pane
 there starts an unnamed workspace. A name that you give to an empty
-workspace stays when you open its first pane.
+workspace stays when you open its first pane. When the daemon restores a
+session, each workspace that has no pane loses its name. A workspace whose
+panes do not start again also has no pane, so it loses its name too.
 
 The numbers close up only when you change something: close a pane, move a
 pane to another workspace, close a workspace or move one. Then every

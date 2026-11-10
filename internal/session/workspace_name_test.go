@@ -74,6 +74,9 @@ func TestWorkspaceNameSurvivesResurrection(t *testing.T) {
 	}
 	state := sess.GetState()
 	state.Name = "work"
+	// A pane on the workspace: the name of a workspace with none is dropped
+	// on load (TestRestoreDropsNamesOfEmptyWorkspaces).
+	state.Windows = append(state.Windows, WindowState{ID: "win-3", Workspace: 3})
 	if err := SaveSessionForResurrection(state); err != nil {
 		t.Fatalf("SaveSessionForResurrection: %v", err)
 	}
