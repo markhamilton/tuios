@@ -97,7 +97,12 @@ func armTiledBorderResize(x, y int, o *app.OS) bool {
 	// A floating or zoomed pane drawn over the cell owns the press: the
 	// divider under it is hidden, and grabbing it would resize panes the user
 	// cannot see.
-	if paneOver(x, y, o) {
+	//
+	// Nor while a pane is zoomed. A zoom of part of the screen leaves its
+	// neighbours a strip at the edge, mostly border and divider, and a click on
+	// that strip is how you move the zoom to that pane. Arming a resize there
+	// made the release read the camera's rectangles back into the layout.
+	if o.HasZoom() || paneOver(x, y, o) {
 		return false
 	}
 	contentLeft, contentTop := o.PaneLeft(), o.PaneTop()

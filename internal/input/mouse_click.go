@@ -599,7 +599,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Zoomed windows are immune to drag/resize: skip interaction state setup.
 	// The click still focuses the window (already done above) but no drag/resize starts.
-	if clickedWindow.Zoomed {
+	// So is every tiled pane while one of them is zoomed: the rectangles on
+	// screen are the zoom's, and a resize released over them is read back into
+	// the layout. A floating pane is not in the layout and keeps its gestures.
+	if clickedWindow.Zoomed || (o.HasZoom() && o.ResizesWithTiling(clickedWindow)) {
 		return o, nil
 	}
 

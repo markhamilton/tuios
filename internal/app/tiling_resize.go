@@ -476,6 +476,11 @@ func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRi
 // AdjustTilingNeighbors adjusts ALL windows on affected split lines with constraint-based positioning.
 // This is the core tiling resize algorithm used by both mouse and keyboard resize operations.
 func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
+	// A zoomed workspace shows the zoom's rectangles, not the layout's, so
+	// there is no divider on screen to move. See SyncBSPTreeFromGeometry.
+	if m.zoomedWindow() != nil {
+		return
+	}
 	if !m.applyBSPResize(resized, newX, newY, newWidth, newHeight, resizeImmediate) {
 		finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeImmediate)
 		m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
@@ -501,6 +506,10 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 // windows followed, so re-deriving ratios from geometry would be work at best
 // and would undo the divider that was just moved at worst.
 func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, newWidth, newHeight int) (treeInSync bool) {
+	// Nothing moves under a zoom, so the tree still describes the layout.
+	if m.zoomedWindow() != nil {
+		return true
+	}
 	if m.applyBSPResize(resized, newX, newY, newWidth, newHeight, resizeVisual) {
 		return true
 	}

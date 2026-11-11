@@ -543,8 +543,18 @@ func (m *OS) FlushPendingBSPSync() {
 
 // SyncBSPTreeFromGeometry updates the BSP tree's split ratios to match current window positions.
 // This should be called after mouse resize operations complete.
+//
+// Not while a pane on the workspace is zoomed, the same rule
+// SyncMasterStackFromGeometry keeps. The rectangles are then the zoom's, not
+// the layout's: a box over the whole region, or a camera panned over a box
+// larger than the screen. Read against the screen, a camera zoomed on a pane
+// to the right put the root divider a few columns from the left edge, and
+// the left pane came out of the zoom almost no columns wide.
 func (m *OS) SyncBSPTreeFromGeometry() {
 	m.pendingBSPSync = false
+	if m.zoomedWindow() != nil {
+		return
+	}
 
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {

@@ -253,6 +253,11 @@ func (m *OS) zoomedWindow() *terminal.Window {
 	return nil
 }
 
+// HasZoom reports whether a pane on the workspace this client shows is zoomed.
+func (m *OS) HasZoom() bool {
+	return m.zoomedWindow() != nil
+}
+
 // zoomRect is the box a zoomed pane fills on this client: the content region,
 // which is the box the session agreed the panes go in, beside a reserved
 // sidebar band and clear of the dock rows. The margins come from the negotiated
